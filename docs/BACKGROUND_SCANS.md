@@ -9,8 +9,8 @@ continues while the Streamlit server remains running.
 - States: `queued`, `running`, `completed`, `failed`, `cancelled`.
 - The worker captures combined stdout/stderr and retains only the latest
   2,000 lines in memory.
-- The sidebar shows the latest job output and offers manual status refresh
-  and cancellation.
+- The sidebar refreshes job status once per second and offers cancellation.
+- Progress is derived from the existing discovery stage and target-count output.
 - Cancellation terminates the scan subprocess. A cancelled scan may have
   already written partial output files; existing collectors are not yet
   transactional as a whole.
@@ -27,8 +27,8 @@ change host, worker, or timeout limits and does not run a scan in CI.
 
 ## Current limitations
 
-This is a single-process job manager, not a distributed queue. It supports
-one or more concurrent jobs but does not yet enforce a global single-scan
-lock. Do not start overlapping scans against the same local data directory.
-Progress is currently based on captured console output; structured per-stage
-progress and cooperative cancellation inside collectors are future work.
+This is a single-process job manager, not a distributed queue. It enforces
+one active scan at a time because collectors share local CSV files.
+Progress is inferred from the existing discovery console messages. Other
+analysis modules do not yet report structured progress, and cancellation
+terminates the scan process rather than stopping each collector cooperatively.
