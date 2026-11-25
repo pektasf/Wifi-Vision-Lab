@@ -23,6 +23,26 @@ def find_col(df, candidates):
     return None
 
 
+def assign_identity_keys(combined, ip_col, mac_col):
+    """Create stable grouping keys without mismatched boolean-index assignment."""
+    result = combined.copy()
+    result["_ip_key"] = result[ip_col].astype(str).str.strip()
+    result["_mac_key"] = result[mac_col].astype(str).str.strip().str.upper()
+    result["_identity"] = result["_ip_key"]
+
+    missing_ip = result["_identity"].eq("")
+    result.loc[missing_ip, "_identity"] = result.loc[missing_ip, "_mac_key"]
+
+    missing_identity = result["_identity"].eq("")
+    fallback = pd.Series(
+        [f"kayit-{index}" for index in result.index[missing_identity]],
+        index=result.index[missing_identity],
+        dtype="object",
+    )
+    result.loc[missing_identity, "_identity"] = fallback
+    return result
+
+
 def render():
     inventory = read_data("device_inventory.csv")
     nodes = read_data("topology_nodes.csv")
@@ -79,13 +99,7 @@ def render():
         class_col = "_classification"
 
     # Bir IP/MAC icin birden fazla kayit varsa dolu alanlari koru.
-    combined["_ip_key"] = combined[ip_col].astype(str).str.strip()
-    combined["_mac_key"] = combined[mac_col].astype(str).str.strip().str.upper()
-    combined["_identity"] = combined["_ip_key"]
-    combined.loc[combined["_identity"] == "", "_identity"] = combined["_mac_key"]
-    combined.loc[combined["_identity"] == "", "_identity"] = (
-        "kayit-" + combined.index.astype(str)
-    )
+    combined = assign_identity_keys(combined, ip_col, mac_col)
 
     rows = []
     for identity, group in combined.groupby("_identity", sort=False):
