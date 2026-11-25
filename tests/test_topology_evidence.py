@@ -104,7 +104,7 @@ def test_hostname_based_network_role_remains_an_inference():
     inventory = pd.DataFrame([{
         "timestamp": "2026-01-01",
         "ip": "192.168.1.2", "mac": "AA:BB:CC:DD:EE:02",
-        "hostname": "access-point-01", "status": "responding",
+        "hostname": "access point 01", "status": "responding",
         "subnet": "192.168.1.0/24",
     }])
 
