@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import subprocess
 import sys
 
@@ -314,31 +315,62 @@ def run_scan():
         st.error("main.py bulunamadı. Tarama başlatılamadı.")
         return
 
-    with st.spinner("A\u011f taramas\u0131 ve analiz çalışıyor..."):
+    custom_cidr = str(st.session_state.get("scan_cidr", "")).strip()
+    approved = bool(st.session_state.get("scan_approved", False))
+    confirmation = str(st.session_state.get("scan_confirmation", "")).strip()
+
+    if custom_cidr and not approved:
+        st.error("Özel ağ taraması için yetki onayını işaretlemelisiniz.")
+        return
+    if custom_cidr and confirmation != custom_cidr:
+        st.error("Onay alanına özel CIDR değerini aynen tekrar yazmalısınız.")
+        return
+
+    scan_env = os.environ.copy()
+    for key in (
+        "WIFI_VISION_SCAN_CIDR",
+        "WIFI_VISION_SCAN_APPROVED",
+        "WIFI_VISION_SCAN_CONFIRMATION",
+    ):
+        scan_env.pop(key, None)
+
+    if custom_cidr:
+        scan_env["WIFI_VISION_SCAN_CIDR"] = custom_cidr
+        scan_env["WIFI_VISION_SCAN_APPROVED"] = "1"
+        scan_env["WIFI_VISION_SCAN_CONFIRMATION"] = confirmation
+
+    with st.spinner("Ağ taraması ve analiz çalışıyor..."):
         try:
             result = subprocess.run(
                 [sys.executable, str(main_file)],
                 cwd=ROOT,
+                env=scan_env,
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
                 errors="replace"
             )
-        except Exception as exc:
-            st.error(f"Tarama baslatilamadi: {exc}")
+        except FileNotFoundError:
+            st.error("Python çalıştırıcısı bulunamadı. Uygulama ortamını kontrol edin.")
+            return
+        except subprocess.TimeoutExpired:
+            st.error("Tarama işlemi zaman aşımına uğradı.")
+            return
+        except OSError as exc:
+            st.error(f"Tarama işlemi başlatılamadı: {exc}")
             return
 
     if result.returncode == 0:
         st.success("Tarama ve analiz tamamlandı.")
     else:
-        st.error("Tarama sırasında hata oluştu.")
+        st.error("Tarama sırasında hata oluştu. Ayrıntılar aşağıda.")
 
     if result.stdout:
-        with st.expander("Islem ciktilari"):
+        with st.expander("İşlem çıktıları"):
             st.code(result.stdout)
 
     if result.stderr:
-        with st.expander("Hata ayrintilari"):
+        with st.expander("Hata ayrıntıları"):
             st.code(result.stderr)
 
     st.rerun()
@@ -1414,6 +1446,22 @@ with st.sidebar:
     page = st.session_state.active_page
 
     st.divider()
+    with st.expander("Tarama kapsamı", expanded=False):
+        st.caption("Boş bırakılırsa yalnızca bağlı olduğunuz aktif özel ağ taranır.")
+        st.text_input(
+            "Özel IPv4 CIDR (isteğe bağlı)",
+            key="scan_cidr",
+            placeholder="Örn. 192.168.10.0/24"
+        )
+        st.checkbox(
+            "Bu özel ağı taramaya yetkili olduğumu onaylıyorum",
+            key="scan_approved"
+        )
+        st.text_input(
+            "Onay için CIDR değerini tekrar yazın",
+            key="scan_confirmation",
+            placeholder="CIDR ile birebir aynı olmalı"
+        )
     if st.button("A\u011f taramas\u0131n\u0131 ba\u015flat", key="fixed_nav_scan", width="stretch"):
         run_scan()
 
