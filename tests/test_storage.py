@@ -199,3 +199,28 @@ def test_existing_schema_v1_upgrades_without_losing_rows(tmp_path):
         }
     assert row["current_ip"] == "192.168.1.5"
     assert {"dataset_snapshots", "dataset_rows"} <= tables
+
+
+
+def test_common_collector_writes_update_sqlite_and_csv(tmp_path, monkeypatch):
+    from scripts import common, storage
+
+    monkeypatch.setattr(common, "DATA", tmp_path)
+    monkeypatch.setattr(storage, "DEFAULT_DB_PATH", tmp_path / "wifi.db")
+    csv_path = tmp_path / "device_inventory.csv"
+    fields = ["ip", "hostname"]
+
+    common.overwrite_rows(
+        csv_path, [{"ip": "192.168.1.2", "hostname": "router"}], fields
+    )
+    common.write_rows(
+        csv_path, [{"ip": "192.168.1.3", "hostname": "laptop"}], fields
+    )
+
+    expected = [
+        {"ip": "192.168.1.2", "hostname": "router"},
+        {"ip": "192.168.1.3", "hostname": "laptop"},
+    ]
+    assert read_dataset("device_inventory.csv") == expected
+    with csv_path.open("r", newline="", encoding="utf-8-sig") as handle:
+        assert list(csv.DictReader(handle)) == expected
