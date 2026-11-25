@@ -103,6 +103,41 @@ def classify_device(hostname, vendor):
 
     return "Unknown / unclassified", 0
 
+def classify_infrastructure_role(hostname, vendor):
+    """Classify infrastructure roles only from explicit device evidence.
+
+    A manufacturer OUI identifies a network-equipment vendor at most; it does
+    not prove that an observed endpoint is a router, AP, switch, or controller.
+    """
+    host = str(hostname or "").strip().casefold()
+    maker = str(vendor or "").strip().casefold()
+
+    if "rap2200e" in host and "ruijie" in maker:
+        return "Access Point", 85, "hostname_model_family_inference"
+
+    rules = [
+        (r"\\b(router|gateway)\\b", "Router / Gateway", 85),
+        (r"access[\\s_-]?point|\\b(wap|wireless ap)\\b", "Access Point", 85),
+        (r"\\b(switch|managed-switch)\\b", "Switch", 85),
+        (r"\\b(repeater|range extender)\\b", "Repeater", 85),
+        (r"\\b(mesh|mesh node)\\b", "Mesh Node", 80),
+        (r"\\b(firewall)\\b", "Firewall", 85),
+        (r"\\b(controller|wireless controller)\\b", "Controller", 85),
+    ]
+    for pattern, role, confidence in rules:
+        if re.search(pattern, host):
+            return role, confidence, "hostname_role_hint"
+
+    infrastructure_vendors = (
+        "ruijie", "ubiquiti", "mikrotik", "cisco", "huawei",
+        "tp-link", "zyxel", "netgear", "aruba", "juniper",
+    )
+    if any(name in maker for name in infrastructure_vendors):
+        return "Network equipment candidate", 30, "vendor_only"
+
+    return "Unknown", 0, "insufficient_evidence"
+
+
 def run():
     source = DATA / "device_inventory.csv"
     if not source.exists():
@@ -149,7 +184,7 @@ def run():
 
     fields = [
         "timestamp", "ip", "mac", "hostname", "vendor", "mac_type",
-        "vendor_role", "classification", "vendor_confidence",
+        "vendor_role", "device_role", "role_confidence",\n        "role_evidence_type", "classification", "vendor_confidence",
         "device_confidence", "evidence"
     ]
     overwrite_rows(DATA / "device_intelligence.csv", rows, fields)
