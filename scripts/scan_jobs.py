@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import re
+import signal
 import subprocess
 import sys
 import threading
@@ -107,12 +108,14 @@ class ScanJobManager:
                 errors="replace",
                 bufsize=1,
                 shell=False,
+                creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
+                start_new_session=(os.name != "nt"),
             )
             with self._lock:
                 self._processes[job_id] = process
                 cancelled = self._jobs[job_id]["cancel_requested"]
             if cancelled:
-                process.terminate()
+                self._terminate_process_tree(process)
 
             assert process.stdout is not None
             for line in process.stdout:
@@ -190,11 +193,46 @@ class ScanJobManager:
             process = self._processes.get(job_id)
             if process is None:
                 return True
+        if process is not None:
+            self._terminate_process_tree(process)
+        return True
+
+    @staticmethod
+    def _terminate_process_tree(process: subprocess.Popen[str]) -> None:
+        """Stop the scan process and descendants, not only the Python parent."""
+        if process.poll() is not None:
+            return
+
+        if os.name == "nt":
             try:
-                process.terminate()
+                subprocess.run(
+                    ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=10,
+                    check=False,
+                )
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+        else:
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
             except ProcessLookupError:
                 pass
-            return True
+            try:
+                process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
+        try:
+            process.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=2)
 
     def get(self, job_id: str) -> dict[str, Any] | None:
         with self._lock:

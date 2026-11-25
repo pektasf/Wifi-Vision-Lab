@@ -1,3 +1,4 @@
+import os
 import sys
 import time
 
@@ -152,3 +153,54 @@ def test_job_manager_uses_structured_progress_events():
     assert job["stage"] == "Ağ topolojisi"
     assert job["progress"] == 0.72
     assert job["progress_message"] == "Topoloji ilişkileri hesaplanıyor"
+
+
+
+def _process_is_running(pid):
+    if sys.platform.startswith("linux"):
+        stat_path = f"/proc/{pid}/stat"
+        try:
+            state = open(stat_path, encoding="utf-8").read().split(") ", 1)[1][0]
+            return state != "Z"
+        except FileNotFoundError:
+            return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except (ProcessLookupError, OSError):
+        return False
+
+
+def test_cancel_running_job_terminates_child_processes(tmp_path):
+    project = make_project(
+        tmp_path,
+        "import subprocess, sys, time\n"
+        "child = subprocess.Popen([sys.executable, '-c', "
+        "'import time; time.sleep(60)'])\n"
+        "print(child.pid, flush=True)\n"
+        "time.sleep(60)\n",
+    )
+    manager = ScanJobManager()
+    job_id = manager.start(project)
+
+    deadline = time.monotonic() + 5
+    child_pid = None
+    while time.monotonic() < deadline:
+        current = manager.get(job_id)
+        if current["output"]:
+            try:
+                child_pid = int(current["output"][0])
+                break
+            except ValueError:
+                pass
+        time.sleep(0.02)
+
+    assert child_pid is not None, "child process did not report its PID"
+    assert manager.cancel(job_id) is True
+    job = wait_for_terminal(manager, job_id)
+
+    assert job["status"] == "cancelled"
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline and _process_is_running(child_pid):
+        time.sleep(0.05)
+    assert not _process_is_running(child_pid), "child process survived scan cancellation"
