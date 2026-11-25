@@ -52,3 +52,23 @@ Run:
 
 Tests cover idempotent initialization, schema-v1 upgrade, generic dataset
 round-trips, empty snapshots, legacy CSV preservation, and deduplication.
+
+
+## Backup and restore
+
+Use SQLite's online backup API. Do not copy only the `.db` file while the
+application is running; committed data may still be in the WAL.
+
+Create a backup from the repository root:
+
+    python -m scripts.storage --backup-to .\backups\wifi-vision-backup.db
+
+Restore to a new database path (the destination must not already exist):
+
+    python -m scripts.storage --restore-from .\backups\wifi-vision-backup.db --db-path .\data\processed\wifi_vision_restored.db
+
+The backup operation refuses to overwrite an existing destination and runs an
+integrity check. Restore verifies the backup integrity and schema version,
+refuses to overwrite an existing database, and applies any supported schema
+upgrade after copying. Keep backups on trusted local storage; they contain
+sensitive local network inventory and observations.

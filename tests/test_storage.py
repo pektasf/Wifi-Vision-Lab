@@ -4,8 +4,9 @@ import sqlite3
 import pytest
 
 from scripts.storage import (
-    add_event, add_observation, connect, import_legacy_csvs,
-    initialize_database, read_dataset, upsert_device, write_dataset_snapshot, MIGRATIONS,
+    add_event, add_observation, backup_database, connect, import_legacy_csvs,
+    initialize_database, read_dataset, restore_database, upsert_device,
+    write_dataset_snapshot, MIGRATIONS,
 )
 
 
@@ -243,3 +244,53 @@ def test_legacy_import_does_not_overwrite_existing_runtime_snapshot(tmp_path):
     import_legacy_csvs(data_dir, db_path)
 
     assert read_dataset("device_inventory.csv", db_path) == current_rows
+
+
+
+def test_sqlite_backup_and_restore_preserve_runtime_data(tmp_path):
+    source = tmp_path / "source.db"
+    backup = tmp_path / "backups" / "wifi-backup.db"
+    restored = tmp_path / "restore" / "wifi-restored.db"
+    initialize_database(source)
+    rows = [{"ip": "192.168.1.8", "hostname": "access-point"}]
+    write_dataset_snapshot("device_inventory.csv", rows, source)
+
+    assert backup_database(backup, source) == backup
+    assert restore_database(backup, restored) == restored
+    assert read_dataset("device_inventory.csv", restored) == rows
+
+    with connect(restored) as connection:
+        assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
+
+
+def test_backup_and_restore_refuse_to_overwrite_existing_files(tmp_path):
+    source = initialize_database(tmp_path / "source.db")
+    backup = backup_database(tmp_path / "backup.db", source)
+    existing = tmp_path / "existing.db"
+    existing.write_bytes(b"keep this file")
+
+    with pytest.raises(FileExistsError):
+        backup_database(backup, source)
+    with pytest.raises(FileExistsError):
+        restore_database(backup, existing)
+
+    assert existing.read_bytes() == b"keep this file"
+
+
+def test_restore_rejects_corrupt_backup_without_creating_destination(tmp_path):
+    corrupt = tmp_path / "corrupt.db"
+    corrupt.write_bytes(b"not a sqlite database")
+    destination = tmp_path / "restored.db"
+
+    with pytest.raises(sqlite3.DatabaseError):
+        restore_database(corrupt, destination)
+
+    assert not destination.exists()
+
+
+def test_backup_rejects_same_source_and_destination(tmp_path):
+    source = initialize_database(tmp_path / "same.db")
+
+    with pytest.raises(ValueError):
+        backup_database(source, source)

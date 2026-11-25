@@ -434,15 +434,119 @@ def read_dataset(
         ).fetchall()
     return [json.loads(row["row_json"]) for row in rows]
 
+
+def backup_database(
+    destination: str | Path,
+    db_path: str | Path | None = None,
+) -> Path:
+    """Create a consistent SQLite backup, including committed WAL content."""
+    source_path = Path(db_path) if db_path is not None else DEFAULT_DB_PATH
+    target_path = Path(destination)
+    if not source_path.is_file():
+        raise FileNotFoundError(f"SQLite source database not found: {source_path}")
+    if source_path.resolve() == target_path.resolve():
+        raise ValueError("Backup destination must differ from the source database.")
+    if target_path.exists():
+        raise FileExistsError(f"Backup destination already exists: {target_path}")
+
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    source_connection = connect(source_path)
+    target_connection = None
+    try:
+        target_connection = sqlite3.connect(str(target_path))
+        source_connection.backup(target_connection)
+        integrity = target_connection.execute("PRAGMA integrity_check").fetchone()[0]
+        if integrity != "ok":
+            raise sqlite3.DatabaseError(f"Backup integrity check failed: {integrity}")
+        target_connection.commit()
+    except Exception:
+        if target_connection is not None:
+            target_connection.close()
+            target_connection = None
+        for candidate in (
+            target_path,
+            Path(str(target_path) + "-wal"),
+            Path(str(target_path) + "-shm"),
+        ):
+            try:
+                candidate.unlink()
+            except FileNotFoundError:
+                pass
+        raise
+    finally:
+        source_connection.close()
+        if target_connection is not None:
+            target_connection.close()
+    return target_path
+
+
+def restore_database(
+    backup_path: str | Path,
+    destination: str | Path,
+) -> Path:
+    """Restore a verified backup into a new database; never overwrite an existing file."""
+    source_path = Path(backup_path)
+    target_path = Path(destination)
+    if not source_path.is_file():
+        raise FileNotFoundError(f"SQLite backup not found: {source_path}")
+    if source_path.resolve() == target_path.resolve():
+        raise ValueError("Restore destination must differ from the backup file.")
+    if target_path.exists():
+        raise FileExistsError(f"Restore destination already exists: {target_path}")
+
+    source_connection = sqlite3.connect(str(source_path))
+    try:
+        integrity = source_connection.execute("PRAGMA integrity_check").fetchone()[0]
+        if integrity != "ok":
+            raise sqlite3.DatabaseError(f"Backup integrity check failed: {integrity}")
+        version = int(source_connection.execute("PRAGMA user_version").fetchone()[0])
+        if version < 1 or version > SCHEMA_VERSION:
+            raise RuntimeError(f"Unsupported backup schema version: {version}")
+
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            target_connection = sqlite3.connect(str(target_path))
+            try:
+                source_connection.backup(target_connection)
+                target_connection.commit()
+            finally:
+                target_connection.close()
+            initialize_database(target_path)
+        except Exception:
+            for candidate in (
+                target_path,
+                Path(str(target_path) + "-wal"),
+                Path(str(target_path) + "-shm"),
+            ):
+                try:
+                    candidate.unlink()
+                except FileNotFoundError:
+                    pass
+            raise
+    finally:
+        source_connection.close()
+    return target_path
+
 def _main() -> None:
     parser = argparse.ArgumentParser(
         description="Initialize local SQLite storage and import processed CSVs."
     )
     parser.add_argument("--data-dir", type=Path, default=DATA)
     parser.add_argument("--db-path", type=Path, default=DEFAULT_DB_PATH)
+    parser.add_argument("--backup-to", type=Path)
+    parser.add_argument("--restore-from", type=Path)
     args = parser.parse_args()
+    if args.backup_to and args.restore_from:
+        parser.error("--backup-to and --restore-from cannot be used together.")
+    if args.restore_from:
+        restored = restore_database(args.restore_from, args.db_path)
+        print(f"SQLite database restored: {restored}")
+        return
     initialize_database(args.db_path)
     summary = import_legacy_csvs(args.data_dir, args.db_path)
+    if args.backup_to:
+        backup = backup_database(args.backup_to, args.db_path)
+        print(f"SQLite backup created: {backup}")
     print(f"SQLite database ready: {args.db_path}")
     print(f"New CSV rows imported: {sum(summary.values())}")
     for dataset, count in summary.items():
