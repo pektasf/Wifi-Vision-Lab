@@ -79,7 +79,7 @@ def parse_interfaces_output(output: str) -> dict[str, str]:
     signal_match = re.search(r"(?<![-\d])(\d{1,3})\s*%", _value(block, "signal"))
     if not signal_match:
         raise RuntimeError("Wi-Fi sinyal yüzdesi okunamadı.")
-    signal_percent = int(signal_match.group())
+    signal_percent = int(signal_match.group(1))
     if not 0 <= signal_percent <= 100:
         raise RuntimeError("Wi-Fi sinyal yüzdesi 0-100 aralığında değil.")
     rssi_match = re.search(r"-?\d{1,3}", _value(block, "rssi"))
