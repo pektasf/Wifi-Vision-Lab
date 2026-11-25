@@ -2,7 +2,7 @@ name: Python tests
 
 on:
   push:
-    branches: [master, phase-1-test-foundation]
+    branches: [master, 'phase-*']
   pull_request:
     branches: [master]
 

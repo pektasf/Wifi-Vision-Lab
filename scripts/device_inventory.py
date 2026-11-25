@@ -7,6 +7,7 @@ import json
 import platform
 
 from scripts.common import DATA, stamp, overwrite_rows
+from scripts.scan_policy import build_scan_targets, load_scan_settings
 
 
 def get_network():
@@ -48,12 +49,12 @@ def get_network():
     }
 
 
-def ping_one(ip):
+def ping_one(ip, timeout_ms=600):
     try:
         result = subprocess.run(
-            ["ping", "-n", "1", "-w", "600", str(ip)],
+            ["ping", "-n", "1", "-w", str(timeout_ms), str(ip)],
             capture_output=True,
-            timeout=2
+            timeout=(timeout_ms / 1000) + 2
         )
         return result.returncode == 0
     except Exception:
@@ -134,26 +135,34 @@ def scan():
     print("[1/4] Aktif ağ algılanıyor...", flush=True)
     net = get_network()
 
-    hosts = [
-        str(x)
-        for x in ipaddress.ip_network(
-            net["network"], strict=False
-        ).hosts()
-    ]
+    settings = load_scan_settings()
+    hosts, truncated = build_scan_targets(
+        net["network"],
+        net["ip"],
+        net["gateway"],
+        max_hosts=settings["max_hosts"],
+    )
 
-    if len(hosts) > 1024:
-        hosts = hosts[:1024]
+    if truncated:
+        network_size = ipaddress.ip_network(net["network"]).num_addresses
+        print(
+            f"[UYARI] Alt ağda {network_size} adres alanı var; "
+            f"güvenlik sınırı nedeniyle ilk {len(hosts)} hedef taranacak. "
+            "WIFI_VISION_MAX_SCAN_HOSTS ile sınırı kontrollü artırabilirsiniz.",
+            flush=True,
+        )
 
     print(
-        f"[2/4] {len(hosts)} IP adresi taranıyor: {net['network']}",
+        f"[2/4] {len(hosts)} IP adresi taranıyor: {net['network']} "
+        f"(eşzamanlı işçi: {settings['workers']}, ping: {settings['ping_timeout_ms']} ms)",
         flush=True
     )
 
     alive = {}
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=64) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=settings["workers"]) as executor:
         futures = {
-            executor.submit(ping_one, ip): ip
+            executor.submit(ping_one, ip, settings["ping_timeout_ms"]): ip
             for ip in hosts
         }
 

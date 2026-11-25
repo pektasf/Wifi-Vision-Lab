@@ -30,3 +30,13 @@ Install the development dependencies into the project's virtual environment:
 ## Known limitations
 
 These tests validate current deterministic transformations. They do not prove that a device label is factually correct, that a topology edge is physical, or that a device is reachable on a live network. Atomic CSV replacement, schema versioning, and adapter contract tests remain planned work.
+
+
+## Scan safety policy tests
+
+`tests/test_scan_policy.py` verifies that discovery accepts only the active
+private IPv4 subnet, rejects public/loopback/link-local or mismatched network
+details, enforces bounded host/worker/timeout settings, and reports when the
+host limit truncates a subnet. These tests are offline and do not send packets.
+
+See [SCAN_SAFETY.md](SCAN_SAFETY.md) for configuration and authorization notes.
