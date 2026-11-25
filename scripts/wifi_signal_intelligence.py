@@ -76,7 +76,7 @@ def parse_interfaces_output(output: str) -> dict[str, str]:
     candidates.sort(key=lambda item: item[0], reverse=True)
     block = candidates[0][1]
 
-    signal_match = re.search(r"\d{1,3}", _value(block, "signal"))
+    signal_match = re.search(r"(?<![-\d])(\d{1,3})\s*%", _value(block, "signal"))
     if not signal_match:
         raise RuntimeError("Wi-Fi sinyal yüzdesi okunamadı.")
     signal_percent = int(signal_match.group())
