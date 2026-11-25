@@ -126,3 +126,29 @@ def test_progress_parser_tracks_stage_and_target_counts():
     ScanJobManager._update_progress(job, "Tarama tamamlandi. Bulunan cihaz: 12")
     assert job["stage"] == "Tamamlandı"
     assert job["progress"] == 1.0
+
+
+def test_job_manager_uses_structured_progress_events():
+    import json
+
+    from scripts.scan_events import EVENT_PREFIX
+
+    job = {
+        "progress": 0.0,
+        "stage": "Sırada",
+        "progress_message": "",
+        "completed_targets": 0,
+        "total_targets": 0,
+    }
+    event = {
+        "type": "progress",
+        "stage": "Ağ topolojisi",
+        "progress": 0.72,
+        "message": "Topoloji ilişkileri hesaplanıyor",
+    }
+
+    ScanJobManager._update_progress(job, EVENT_PREFIX + json.dumps(event))
+
+    assert job["stage"] == "Ağ topolojisi"
+    assert job["progress"] == 0.72
+    assert job["progress_message"] == "Topoloji ilişkileri hesaplanıyor"
