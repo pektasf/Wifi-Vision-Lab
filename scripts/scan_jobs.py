@@ -64,6 +64,12 @@ class ScanJobManager:
             "cancel_requested": False,
         }
         with self._lock:
+            active = [
+                item for item in self._jobs.values()
+                if item["status"] in {"queued", "running"}
+            ]
+            if active:
+                raise RuntimeError("A scan is already active. Wait for it to finish or cancel it.")
             self._jobs[job_id] = job
         worker = threading.Thread(
             target=self._run,
