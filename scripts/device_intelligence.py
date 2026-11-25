@@ -177,6 +177,9 @@ def run():
             "vendor": vendor,
             "mac_type": mac_type,
             "vendor_role": vendor_role,
+            "device_role": device_role,
+            "role_confidence": role_confidence,
+            "role_evidence_type": role_evidence_type,
             "classification": category,
             "vendor_confidence": vendor_confidence,
             "device_confidence": device_confidence,
@@ -185,7 +188,8 @@ def run():
 
     fields = [
         "timestamp", "ip", "mac", "hostname", "vendor", "mac_type",
-        "vendor_role", "device_role", "role_confidence",\n        "role_evidence_type", "classification", "vendor_confidence",
+        "vendor_role", "device_role", "role_confidence",
+        "role_evidence_type", "classification", "vendor_confidence",
         "device_confidence", "evidence"
     ]
     overwrite_rows(DATA / "device_intelligence.csv", rows, fields)
