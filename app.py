@@ -335,6 +335,7 @@ def run_scan():
     st.success("Tarama arka planda başlatıldı. Diğer sayfalarda çalışmaya devam edebilirsiniz.")
 
 
+@st.fragment(run_every="1s")
 def render_scan_job():
     job_id = st.session_state.get("active_scan_job_id")
     if not job_id:
@@ -357,6 +358,12 @@ def render_scan_job():
         expanded=job["status"] in {"queued", "running"},
     ):
         st.caption(f"İş kimliği: {job_id}")
+        st.caption(job["stage"])
+        st.progress(float(job["progress"]))
+        if job["total_targets"]:
+            st.caption(
+                f"Hedefler: {job['completed_targets']:,} / {job['total_targets']:,}"
+            )
         if job["return_code"] is not None:
             st.caption(f"Çıkış kodu: {job['return_code']}")
         if job["error"]:
