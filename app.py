@@ -5,6 +5,7 @@ import sys
 
 import pandas as pd
 import streamlit as st
+from scripts.ui_theme import apply_theme
 from scripts.scan_jobs import scan_jobs
 
 ROOT = Path(__file__).resolve().parent
@@ -19,6 +20,8 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+apply_theme("light")
 
 
 
