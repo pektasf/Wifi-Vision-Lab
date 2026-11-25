@@ -49,7 +49,8 @@ def run():
 
     fields = [
         "timestamp", "ip", "identity_hint", "category", "vendor",
-        "vendor_role", "device_role", "role_confidence",\n        "role_evidence_type", "mac_type", "vendor_confidence",
+        "vendor_role", "device_role", "role_confidence",
+        "role_evidence_type", "mac_type", "vendor_confidence",
         "device_confidence", "confidence", "note"
     ]
     overwrite_rows(DATA / "device_classification.csv", rows, fields)
