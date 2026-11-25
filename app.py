@@ -103,6 +103,7 @@ def run_scan():
         return
 
     st.session_state["active_scan_job_id"] = job_id
+    st.session_state.pop("last_auto_refreshed_scan_job_id", None)
     st.success("Tarama arka planda başlatıldı. Diğer sayfalarda çalışmaya devam edebilirsiniz.")
 
 
@@ -116,6 +117,14 @@ def render_scan_job():
     if job is None:
         st.session_state.pop("active_scan_job_id", None)
         return
+
+    # Refresh the whole app once when a scan finishes so every page reads the
+    # newly persisted datasets without requiring a manual browser refresh.
+    if job["status"] == "completed":
+        refreshed_job_id = st.session_state.get("last_auto_refreshed_scan_job_id")
+        if refreshed_job_id != job_id:
+            st.session_state["last_auto_refreshed_scan_job_id"] = job_id
+            st.rerun()
 
     labels = {
         "queued": "Sırada",
