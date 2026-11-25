@@ -339,7 +339,19 @@ def import_legacy_csvs(
 
         imported_count = 0
         with connect(database_path) as connection:
-            _replace_dataset_rows(connection, dataset, rows)
+            snapshot_exists = connection.execute(
+                "SELECT 1 FROM dataset_snapshots WHERE dataset=?", (dataset,)
+            ).fetchone() is not None
+            previous_import = connection.execute(
+                "SELECT file_hash FROM csv_imports WHERE dataset=?", (dataset,)
+            ).fetchone()
+            csv_changed_since_import = (
+                previous_import is not None
+                and previous_import["file_hash"] != file_digest
+            )
+            if not snapshot_exists or csv_changed_since_import:
+                _replace_dataset_rows(connection, dataset, rows)
+
             for row in rows:
                 row_json = _json(row)
                 row_hash = _hash(dataset, row_json)
