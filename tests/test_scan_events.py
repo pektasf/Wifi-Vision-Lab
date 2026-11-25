@@ -40,3 +40,8 @@ def test_parse_ignores_non_events_and_invalid_events():
         "stage": "Ağ keşfi",
         "progress": 0.5,
     })) is None
+
+
+def test_parse_rejects_non_finite_progress():
+    line = EVENT_PREFIX + '{"type":"progress","stage":"Ağ keşfi","progress":NaN}'
+    assert parse_event_line(line) is None
