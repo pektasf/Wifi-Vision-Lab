@@ -62,7 +62,7 @@ def run_collector(
     started_clock = perf_counter()
     try:
         value = callback()
-        status = "no_data" if value is None or value == [] else "success"
+        status = "no_data" if value is None or (isinstance(value, list) and not value) else "success"
         result = CollectorResult(
             collector=collector,
             status=status,
