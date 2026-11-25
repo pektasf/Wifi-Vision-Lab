@@ -1,12 +1,10 @@
 """Capture the local Windows WLAN interface's current AP association."""
+import csv
 import re
 import subprocess
 from datetime import datetime
-from pathlib import Path
 
-from scripts.common import overwrite_rows
-
-DATA = Path(__file__).resolve().parents[2] / "data" / "processed"
+from scripts.common import DATA, overwrite_rows
 OUTPUT = DATA / "ap_client_relationships.csv"
 
 FIELDS = [
@@ -26,7 +24,6 @@ def read_rows(path):
     if not path.exists():
         return []
     try:
-        import csv
         with path.open("r", encoding="utf-8-sig", newline="") as handle:
             return list(csv.DictReader(handle))
     except (OSError, UnicodeError, csv.Error):
