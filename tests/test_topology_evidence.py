@@ -179,3 +179,42 @@ def test_topology_uses_last_row_when_association_timestamps_are_missing():
 
     assert len(associations) == 1
     assert associations[0]["source"] == "BSSID:AA:BB:CC:DD:EE:99"
+
+
+
+def test_topology_ui_separates_verified_inferred_context_and_unknown_edges():
+    from scripts.topology_evidence import split_topology_edges
+
+    edges = pd.DataFrame([
+        {"source": "ap", "target": "client", "relation": "wifi_association",
+         "confidence": "verified", "evidence_type": "direct_association"},
+        {"source": "candidate", "target": "host", "relation": "possible_role",
+         "confidence": "inferred", "evidence_type": "hostname_hint"},
+        {"source": "scope", "target": "host", "relation": "observed_in_scope",
+         "confidence": "context_only", "evidence_type": "shared_scan_scope"},
+        {"source": "x", "target": "y", "relation": "unknown",
+         "confidence": "", "evidence_type": ""},
+        {"source": "", "target": "orphan", "relation": "wifi_association",
+         "confidence": "verified", "evidence_type": "direct_association"},
+    ])
+
+    groups = split_topology_edges(edges, "source", "target")
+
+    assert len(groups["verified"]) == 1
+    assert groups["verified"].iloc[0]["source"] == "ap"
+    assert len(groups["inferred"]) == 1
+    assert len(groups["context"]) == 1
+    assert len(groups["unverified"]) == 1
+
+
+def test_missing_confidence_is_never_promoted_to_verified():
+    from scripts.topology_evidence import split_topology_edges
+
+    edges = pd.DataFrame([{
+        "source": "a", "target": "b", "relation": "connected_to"
+    }])
+
+    groups = split_topology_edges(edges, "source", "target")
+
+    assert groups["verified"].empty
+    assert len(groups["unverified"]) == 1

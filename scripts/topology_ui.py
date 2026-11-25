@@ -2,6 +2,8 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from scripts.topology_evidence import split_topology_edges
+
 
 DATA = Path(__file__).resolve().parent.parent / "data" / "processed"
 
@@ -94,39 +96,29 @@ def render():
     edge_to = first_column(edges, ["target", "to", "target_id", "dst", "to_id"])
 
     relation_col = first_column(edges, ["relation", "type", "relationship"])
-    confidence_col = first_column(edges, ["confidence", "evidence", "status"])
+    confidence_col = first_column(edges, ["confidence"])
 
-    valid_edges = pd.DataFrame()
-    context_edges = pd.DataFrame()
+    edge_groups = split_topology_edges(edges, edge_from, edge_to)
+    verified_edges = edge_groups["verified"]
+    inferred_edges = edge_groups["inferred"]
+    context_edges = edge_groups["context"]
+    unverified_edges = edge_groups["unverified"]
 
-    if edge_from and edge_to and not edges.empty:
-        valid_mask = (
-            (edges[edge_from].astype(str).str.strip() != "") &
-            (edges[edge_to].astype(str).str.strip() != "")
-        )
-        all_edges = edges[valid_mask].copy()
-
-        context_mask = pd.Series(False, index=all_edges.index)
-        if relation_col:
-            context_mask |= all_edges[relation_col].astype(str).str.lower().isin(
-                ["same_network", "same network", "context_only"]
-            )
-        if confidence_col:
-            context_mask |= all_edges[confidence_col].astype(str).str.lower().isin(
-                ["context_only", "inferred", "low"]
-            )
-
-        context_edges = all_edges[context_mask].copy()
-        valid_edges = all_edges[~context_mask].copy()
-
-    e_count = len(valid_edges)
+    e_count = len(verified_edges)
+    inferred_count = len(inferred_edges)
     context_count = len(context_edges)
+    unverified_count = len(unverified_edges)
 
     a, b, c, d = st.columns(4)
     a.metric("Toplam cihaz", f"{total:,}")
     b.metric("Cevap veren", f"{online:,}")
     c.metric("Gateway / router", f"{gateway_count:,}")
     d.metric("Dogrulanmis baglanti", f"{e_count:,}")
+
+    e, f, g = st.columns(3)
+    e.metric("Tahmini iliski", f"{inferred_count:,}")
+    f.metric("Ag baglami", f"{context_count:,}")
+    g.metric("Kaniti yetersiz", f"{unverified_count:,}")
 
     st.divider()
 
@@ -154,7 +146,7 @@ def render():
                 positions[node_id] = (math.cos(angle), math.sin(angle))
 
             edge_x, edge_y = [], []
-            for _, edge in valid_edges.iterrows():
+            for _, edge in verified_edges.iterrows():
                 s, t = str(edge[edge_from]), str(edge[edge_to])
                 if s in positions and t in positions:
                     edge_x.extend([positions[s][0], positions[t][0], None])
@@ -220,25 +212,31 @@ def render():
             "ancak fiziksel veya AP-istemci baglantilari icin dogrulanmis kaynak gerekir."
         )
 
-    if context_count:
-        st.subheader("Ayni agda gozlemlenen cihazlar")
-        st.caption(
-            f"{context_count} iliski ayni ag baglamini gosteriyor. "
-            "Bunlar fiziksel kablo veya AP-istemci baglantisi kaniti degildir."
-        )
-        context_cols = [
-            col for col in [
-                edge_from, edge_to, relation_col, confidence_col,
-                "evidence_type", "evidence_source", "observed_at", "details"
-            ] if col and col in context_edges.columns
-        ]
-        if context_cols:
-            st.dataframe(
-                context_edges[context_cols],
-                width="stretch",
-                hide_index=True,
-                height=260
-            )
+    display_columns = [
+        col for col in [
+            edge_from, edge_to, relation_col, confidence_col,
+            "evidence_type", "evidence_source", "observed_at", "details"
+        ] if col and col in edges.columns
+    ]
+
+    for title, frame, explanation in [
+        ("Tahmini iliskiler", inferred_edges,
+         "Cihaz adı veya sınıflandırma gibi dolaylı ipuçlarıdır; doğrulanmış fiziksel bağlantı değildir."),
+        ("Aynı ağda gözlemlenenler", context_edges,
+         "Ortak tarama kapsamı veya ağ yapılandırması bağlamıdır; fiziksel bağlantı kanıtı değildir."),
+        ("Kanıtı yetersiz kayıtlar", unverified_edges,
+         "Kaynakta açık bir doğrulama seviyesi bulunmuyor; bu kayıtlar haritada bağlantı olarak çizilmez."),
+    ]:
+        if not frame.empty:
+            st.subheader(title)
+            st.caption(explanation)
+            if display_columns:
+                st.dataframe(
+                    frame[display_columns],
+                    width="stretch",
+                    hide_index=True,
+                    height=240,
+                )
 
     st.divider()
     st.subheader("Cihazlar")
