@@ -5,7 +5,7 @@ import pytest
 
 from scripts.storage import (
     add_event, add_observation, connect, import_legacy_csvs,
-    initialize_database, read_dataset, upsert_device, write_dataset_snapshot,
+    initialize_database, read_dataset, upsert_device, write_dataset_snapshot, MIGRATIONS,
 )
 
 
@@ -169,3 +169,33 @@ def test_legacy_import_populates_runtime_dataset_snapshot(tmp_path):
     import_legacy_csvs(data_dir, db_path)
 
     assert read_dataset("device_inventory.csv", db_path) == rows
+
+
+def test_existing_schema_v1_upgrades_without_losing_rows(tmp_path):
+    db_path = tmp_path / "legacy-v1.db"
+    with connect(db_path) as connection:
+        connection.executescript(MIGRATIONS[1])
+        connection.execute("PRAGMA user_version = 1")
+        connection.execute(
+            "INSERT INTO schema_migrations(version, applied_at) VALUES (1, 'test')"
+        )
+        upsert_device(
+            connection, "AA:BB:CC:DD:EE:FF",
+            mac="AA:BB:CC:DD:EE:FF", current_ip="192.168.1.5",
+        )
+
+    initialize_database(db_path)
+
+    with connect(db_path) as connection:
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
+        row = connection.execute(
+            "SELECT current_ip FROM devices WHERE identity_key=?",
+            ("AA:BB:CC:DD:EE:FF",),
+        ).fetchone()
+        tables = {
+            item["name"] for item in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+    assert row["current_ip"] == "192.168.1.5"
+    assert {"dataset_snapshots", "dataset_rows"} <= tables
