@@ -42,10 +42,16 @@ def parse_event_line(line: str) -> dict[str, Any] | None:
     progress = event.get("progress")
     if not isinstance(stage, str) or not isinstance(progress, (int, float)):
         return None
-    if isinstance(progress, bool) or not math.isfinite(float(progress)):
+    if isinstance(progress, bool):
+        return None
+    try:
+        numeric_progress = float(progress)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not math.isfinite(numeric_progress):
         return None
     return {
         "stage": stage[:120],
-        "progress": max(0.0, min(1.0, float(progress))),
+        "progress": max(0.0, min(1.0, numeric_progress)),
         "message": str(event.get("message", ""))[:500],
     }
