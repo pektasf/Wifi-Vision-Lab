@@ -133,6 +133,7 @@ def test_changed_csv_adds_only_new_rows(tmp_path):
     with connect(db_path) as connection:
         assert connection.execute("SELECT COUNT(*) FROM observations").fetchone()[0] == 2
         assert connection.execute("SELECT COUNT(*) FROM legacy_records").fetchone()[0] == 2
+    assert read_dataset("device_inventory.csv", db_path) == [first_row, second_row]
 
 
 def test_dataset_snapshot_round_trip_and_empty_snapshot(tmp_path):
