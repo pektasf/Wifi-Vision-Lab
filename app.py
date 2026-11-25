@@ -859,77 +859,104 @@ def live_page():
 
 def signal_page():
     st.title("Wi-Fi Sinyali")
-    st.caption("Mevcut Wi-Fi baglantisi ve kesfedilen erisim noktalari.")
+    st.caption("Aktif bağlantı ölçümü, sinyal kalitesi ve erişim noktası görünümü.")
 
     connection = load("wifi_connection.csv")
     access_points = load("wifi_access_points.csv")
+    signal_history = load("wifi_signal_history.csv")
 
-    st.markdown("### Mevcut baglanti")
-
+    st.markdown("### Mevcut bağlantı")
     if not connection.empty:
         current = connection.iloc[-1]
-
         a, b, c, d = st.columns(4)
         a.metric("SSID", str(current.get("ssid", "-")) or "-")
         b.metric("Sinyal", str(current.get("signal", "-")) or "-")
         c.metric("Kanal", str(current.get("channel", "-")) or "-")
         d.metric("Radyo tipi", str(current.get("radio_type", "-")) or "-")
-
-        st.markdown("#### Baglanti ayrintilari")
         left, right = st.columns(2)
         with left:
-            st.write("**BSSID**")
+            st.caption("BSSID")
             st.code(str(current.get("bssid", "-")) or "-")
-            st.write("**Veri kaynagi**")
-            st.write(str(current.get("bssid_source", "-")) or "-")
         with right:
-            st.write("**Olcum zamani**")
+            st.caption("Son keşif zamanı")
             st.write(str(current.get("observed_at", "-")) or "-")
-            st.write("**Baglanti durumu**")
-            st.success("Baglanti kaydi mevcut")
     else:
-        st.info("Wi-Fi baglanti kaydi bulunamadi. Once Wi-Fi kesfini calistirin.")
+        st.info("Wi-Fi bağlantı kaydı bulunamadı. Önce Wi-Fi keşfini çalıştırın.")
 
     st.markdown("---")
-    st.markdown("### Kesfedilen erisim noktalari")
+    st.markdown("### Sinyal ölçüm geçmişi")
+    if not signal_history.empty and "signal_percent" in signal_history.columns:
+        history = signal_history.copy()
+        history["signal_percent"] = pd.to_numeric(
+            history["signal_percent"], errors="coerce"
+        )
+        history = history.dropna(subset=["signal_percent"])
+        if "observed_at" in history.columns:
+            history = history.sort_values("observed_at")
+        if not history.empty:
+            latest = history.iloc[-1]
+            a, b, c = st.columns(3)
+            a.metric("Son ölçüm", f"{int(latest['signal_percent'])}%")
+            b.metric("Kalite", str(latest.get("quality", "-")) or "-")
+            change = latest.get("change_percent", "")
+            c.metric(
+                "Önceki ölçüme göre",
+                f"{int(float(change)):+d} puan"
+                if str(change).strip() else "İlk ölçüm",
+            )
+            if "observed_at" in history.columns:
+                st.line_chart(
+                    history.tail(100).set_index("observed_at")[["signal_percent"]],
+                    height=250,
+                )
+            detail_columns = [
+                column for column in [
+                    "observed_at", "ssid", "signal_percent", "rssi_dbm",
+                    "channel", "receive_mbps", "transmit_mbps", "quality",
+                ] if column in history.columns
+            ]
+            st.dataframe(
+                history[detail_columns].tail(20).iloc[::-1],
+                width="stretch",
+                hide_index=True,
+            )
+    else:
+        st.info("Henüz sinyal geçmişi yok. Bir ağ taraması çalıştırıldığında ölçüm kaydedilir.")
 
+    st.markdown("---")
+    st.markdown("### Yakındaki erişim noktaları")
     if not access_points.empty:
-        st.metric("Kesfedilen AP kaydi", f"{len(access_points):,}")
-
+        st.metric("Keşfedilen AP kaydı", f"{len(access_points):,}")
         if "signal" in access_points.columns:
             signal_values = (
                 access_points["signal"].astype(str)
                 .str.replace("%", "", regex=False)
             )
-            numeric_signal = pd.to_numeric(signal_values, errors="coerce")
             chart_data = access_points.copy()
-            chart_data["Sinyal (%)"] = numeric_signal
+            chart_data["Sinyal (%)"] = pd.to_numeric(
+                signal_values, errors="coerce"
+            )
             label_col = next(
-                (c for c in ["ssid", "bssid"] if c in chart_data.columns),
-                None
+                (column for column in ["ssid", "bssid"] if column in chart_data.columns),
+                None,
             )
             if label_col:
                 chart_data = chart_data.dropna(subset=["Sinyal (%)"])
                 if not chart_data.empty:
                     st.bar_chart(
                         chart_data.set_index(label_col)["Sinyal (%)"],
-                        height=240
+                        height=240,
                     )
-
         st.dataframe(
-            access_points,
-            width="stretch",
-            hide_index=True,
-            height=320
+            access_points, width="stretch", hide_index=True, height=320
         )
     else:
-        st.info("Kesfedilmis erisim noktasi kaydi bulunmuyor.")
+        st.info("Keşfedilmiş erişim noktası kaydı bulunmuyor.")
 
     st.caption(
-        "Sinyal degerleri kayitli olcumleri yansitir. "
-        "Fiziksel mesafe, yalnizca sinyal yuzdesinden dogrudan hesaplanamaz."
+        "Sinyal yüzdesi bağlantı kalitesini gösterir; tek başına fiziksel mesafe "
+        "veya AP-istemci bağlantı topolojisini kanıtlamaz."
     )
-
     if st.button("Wi-Fi verisini yeniden tara", key="wifi_scan_button"):
         run_scan()
 
