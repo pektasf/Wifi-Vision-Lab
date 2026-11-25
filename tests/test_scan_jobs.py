@@ -102,3 +102,27 @@ def test_rejects_overlapping_scan_jobs(tmp_path):
         raise AssertionError("overlapping scan was accepted")
     manager.cancel(first)
     assert wait_for_terminal(manager, first)["status"] == "cancelled"
+
+
+def test_progress_parser_tracks_stage_and_target_counts():
+    job = {
+        "progress": 0.0,
+        "stage": "Sırada",
+        "completed_targets": 0,
+        "total_targets": 0,
+    }
+
+    ScanJobManager._update_progress(job, "[1/4] Aktif ag algilaniyor...")
+    assert job["stage"] == "Ağ algılanıyor"
+    assert job["progress"] == 0.0
+
+    ScanJobManager._update_progress(job, "[2/4] 100 IP adresi taraniyor")
+    ScanJobManager._update_progress(job, "Tarama: 50/100")
+    assert job["stage"] == "Cihazlar taranıyor"
+    assert job["completed_targets"] == 50
+    assert job["total_targets"] == 100
+    assert 0.5 < job["progress"] < 0.6
+
+    ScanJobManager._update_progress(job, "Tarama tamamlandi. Bulunan cihaz: 12")
+    assert job["stage"] == "Tamamlandı"
+    assert job["progress"] == 1.0
