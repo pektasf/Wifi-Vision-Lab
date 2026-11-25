@@ -504,28 +504,27 @@ def restore_database(
             raise RuntimeError(f"Unsupported backup schema version: {version}")
 
         target_path.parent.mkdir(parents=True, exist_ok=True)
-        target_connection = sqlite3.connect(str(target_path))
         try:
-            source_connection.backup(target_connection)
-            target_connection.commit()
-        finally:
-            target_connection.close()
+            target_connection = sqlite3.connect(str(target_path))
+            try:
+                source_connection.backup(target_connection)
+                target_connection.commit()
+            finally:
+                target_connection.close()
+            initialize_database(target_path)
+        except Exception:
+            for candidate in (
+                target_path,
+                Path(str(target_path) + "-wal"),
+                Path(str(target_path) + "-shm"),
+            ):
+                try:
+                    candidate.unlink()
+                except FileNotFoundError:
+                    pass
+            raise
     finally:
         source_connection.close()
-
-    try:
-        initialize_database(target_path)
-    except Exception:
-        for candidate in (
-            target_path,
-            Path(str(target_path) + "-wal"),
-            Path(str(target_path) + "-shm"),
-        ):
-            try:
-                candidate.unlink()
-            except FileNotFoundError:
-                pass
-        raise
     return target_path
 
 def _main() -> None:
