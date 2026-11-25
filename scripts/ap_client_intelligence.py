@@ -23,7 +23,7 @@ def normalize_mac(value):
 
 
 def _normalize_label(value):
-    value = unicodedata.normalize("NFKD", str(value or ""))
+    value = unicodedata.normalize("NFKD", str(value or "").replace("ı", "i").replace("İ", "I"))
     value = "".join(char for char in value if not unicodedata.combining(char))
     return re.sub(r"\s+", " ", value).strip().casefold()
 
