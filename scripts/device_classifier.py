@@ -37,6 +37,9 @@ def run():
             "category": r.get("classification", ""),
             "vendor": r.get("vendor", ""),
             "vendor_role": r.get("vendor_role", ""),
+            "device_role": r.get("device_role", "Unknown"),
+            "role_confidence": _score(r.get("role_confidence", 0)),
+            "role_evidence_type": r.get("role_evidence_type", "insufficient_evidence"),
             "mac_type": r.get("mac_type", ""),
             "vendor_confidence": vendor_score,
             "device_confidence": device_score,
@@ -46,7 +49,8 @@ def run():
 
     fields = [
         "timestamp", "ip", "identity_hint", "category", "vendor",
-        "vendor_role", "mac_type", "vendor_confidence",
+        "vendor_role", "device_role", "role_confidence",
+        "role_evidence_type", "mac_type", "vendor_confidence",
         "device_confidence", "confidence", "note"
     ]
     overwrite_rows(DATA / "device_classification.csv", rows, fields)

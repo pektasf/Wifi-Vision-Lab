@@ -119,6 +119,15 @@ def render():
     vendor_role_col = find_col(devices, ["vendor_role"])
 
     def role_for(row):
+        explicit_role = str(row.get("device_role", "")).strip()
+        if explicit_role in {
+            "Router / Gateway", "Access Point", "Switch",
+            "Repeater", "Mesh Node", "Firewall", "Controller",
+        }:
+            return explicit_role
+        if explicit_role == "Network equipment candidate":
+            return "Ag ekipmani adayi"
+
         values = [
             row.get(type_col, ""),
             row.get(class_col, ""),
@@ -166,7 +175,13 @@ def render():
         if role == "Diger / Belirsiz":
             return "Siniflandirilmamis"
         if role == "Ag ekipmani adayi":
+            if str(row.get("role_evidence_type", "")).strip() == "vendor_only":
+                return "Yalnizca uretici bilgisi; cihaz rolu dogrulanmadi"
             return "Uretici veya tahmini siniflandirma"
+        if str(row.get("role_evidence_type", "")).strip() == "hostname_role_hint":
+            return "Hostname ipucuna dayali tahmin"
+        if str(row.get("role_evidence_type", "")).strip() == "hostname_model_family_inference":
+            return "Model ailesi ipucuna dayali tahmin"
         if "manufacturer-based inference" in category or "inferred" in classification_value:
             return "Tahmini siniflandirma"
         return "Kayitli siniflandirma"
