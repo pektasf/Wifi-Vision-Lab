@@ -6,6 +6,7 @@ consume progress without coupling the UI to collector log wording.
 from __future__ import annotations
 
 import json
+import math
 import sys
 from typing import Any
 
@@ -14,10 +15,13 @@ EVENT_PREFIX = "WIFI_VISION_EVENT "
 
 def emit_progress(stage: str, progress: float, message: str = "") -> None:
     """Emit one bounded progress event for the parent process."""
+    numeric_progress = float(progress)
+    if not math.isfinite(numeric_progress):
+        raise ValueError("progress must be a finite number")
     event = {
         "type": "progress",
         "stage": str(stage)[:120],
-        "progress": max(0.0, min(1.0, float(progress))),
+        "progress": max(0.0, min(1.0, numeric_progress)),
         "message": str(message)[:500],
     }
     sys.stdout.write(EVENT_PREFIX + json.dumps(event, ensure_ascii=False) + "\n")
@@ -38,7 +42,7 @@ def parse_event_line(line: str) -> dict[str, Any] | None:
     progress = event.get("progress")
     if not isinstance(stage, str) or not isinstance(progress, (int, float)):
         return None
-    if isinstance(progress, bool):
+    if isinstance(progress, bool) or not math.isfinite(float(progress)):
         return None
     return {
         "stage": stage[:120],
