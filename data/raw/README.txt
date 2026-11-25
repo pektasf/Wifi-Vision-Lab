@@ -1,0 +1,1 @@
+Ham veri klasörü.

@@ -1,0 +1,294 @@
+from pathlib import Path
+import pandas as pd
+import streamlit as st
+
+
+DATA = Path(__file__).resolve().parent.parent / "data" / "processed"
+
+
+def read_data(filename):
+    path = DATA / filename
+    if not path.exists():
+        return pd.DataFrame()
+    try:
+        return pd.read_csv(path, dtype=str).fillna("")
+    except Exception:
+        return pd.DataFrame()
+
+
+def first_column(df, names):
+    for name in names:
+        if name in df.columns:
+            return name
+    return None
+
+
+def render():
+    nodes = read_data("topology_nodes.csv")
+    edges = read_data("topology_edges.csv")
+    inventory = read_data("device_inventory.csv")
+    wifi = read_data("wifi_connection.csv")
+
+    st.title("Ag Topolojisi")
+    st.caption("Yerel ag cihazlari, gozlemlenen iliskiler ve altyapi gorunumu")
+
+    if nodes.empty and inventory.empty:
+        st.warning("Topoloji verisi bulunamadi. Once cihaz kesfi yapilmalidir.")
+        return
+
+    if nodes.empty:
+        nodes = inventory.copy()
+        nodes["id"] = nodes.get("ip", pd.Series(dtype=str))
+        nodes["label"] = nodes.get("hostname", nodes.get("ip", "Bilinmeyen"))
+        nodes["node_type"] = "unknown"
+
+    ip_col = first_column(nodes, ["ip", "IP"])
+    label_col = first_column(nodes, ["label", "hostname", "device_name", "ip"])
+    type_col = first_column(nodes, ["node_type", "device_type", "type"])
+    status_col = first_column(nodes, ["status", "state"])
+    vendor_col = first_column(nodes, ["vendor", "manufacturer"])
+    mac_col = first_column(nodes, ["mac", "mac_address"])
+
+    if label_col is None:
+        nodes["label"] = "Bilinmeyen cihaz"
+        label_col = "label"
+
+    nodes = nodes.copy()
+    nodes["_label"] = nodes[label_col].astype(str)
+    nodes["_ip"] = nodes[ip_col].astype(str) if ip_col else ""
+    nodes["_type"] = nodes[type_col].astype(str) if type_col else "unknown"
+    nodes["_status"] = nodes[status_col].astype(str) if status_col else "unknown"
+
+    total = len(nodes)
+    online = nodes["_status"].str.lower().isin(
+        ["online", "up", "active", "responding", "reachable"]
+    ).sum()
+
+    gateway_count = nodes["_type"].str.contains(
+        "gateway|router", case=False, na=False
+    ).sum()
+
+    edge_from = first_column(edges, ["source", "from", "source_id", "src", "from_id"])
+    edge_to = first_column(edges, ["target", "to", "target_id", "dst", "to_id"])
+
+    relation_col = first_column(edges, ["relation", "type", "relationship"])
+    confidence_col = first_column(edges, ["confidence", "evidence", "status"])
+
+    valid_edges = pd.DataFrame()
+    context_edges = pd.DataFrame()
+
+    if edge_from and edge_to and not edges.empty:
+        valid_mask = (
+            (edges[edge_from].astype(str).str.strip() != "") &
+            (edges[edge_to].astype(str).str.strip() != "")
+        )
+        all_edges = edges[valid_mask].copy()
+
+        context_mask = pd.Series(False, index=all_edges.index)
+        if relation_col:
+            context_mask |= all_edges[relation_col].astype(str).str.lower().isin(
+                ["same_network", "same network", "context_only"]
+            )
+        if confidence_col:
+            context_mask |= all_edges[confidence_col].astype(str).str.lower().isin(
+                ["context_only", "inferred", "low"]
+            )
+
+        context_edges = all_edges[context_mask].copy()
+        valid_edges = all_edges[~context_mask].copy()
+
+    e_count = len(valid_edges)
+    context_count = len(context_edges)
+
+    a, b, c, d = st.columns(4)
+    a.metric("Toplam cihaz", f"{total:,}")
+    b.metric("Cevap veren", f"{online:,}")
+    c.metric("Gateway / router", f"{gateway_count:,}")
+    d.metric("Dogrulanmis baglanti", f"{e_count:,}")
+
+    st.divider()
+
+    st.subheader("Ag haritasi")
+    st.caption(
+        "Harita yalnizca topology_edges.csv dosyasinda kayitli iliskileri cizer. "
+        "Eksik iliskiler otomatik olarak gercek baglanti kabul edilmez."
+    )
+
+    if e_count and edge_from and edge_to:
+        try:
+            import plotly.graph_objects as go
+            import math
+
+            ids_col = first_column(nodes, ["id", "ip", "mac"])
+            if ids_col is None:
+                ids_col = "_label"
+
+            node_ids = nodes[ids_col].astype(str).tolist()
+            positions = {}
+            count = max(len(node_ids), 1)
+
+            for i, node_id in enumerate(node_ids):
+                angle = 2 * math.pi * i / count
+                positions[node_id] = (math.cos(angle), math.sin(angle))
+
+            edge_x, edge_y = [], []
+            for _, edge in valid_edges.iterrows():
+                s, t = str(edge[edge_from]), str(edge[edge_to])
+                if s in positions and t in positions:
+                    edge_x.extend([positions[s][0], positions[t][0], None])
+                    edge_y.extend([positions[s][1], positions[t][1], None])
+
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=edge_x, y=edge_y,
+                mode="lines",
+                line=dict(width=1.5, color="#94A3B8"),
+                hoverinfo="skip",
+                name="Kayitli iliskiler"
+            ))
+
+            node_x, node_y, hover, labels = [], [], [], []
+            for _, row in nodes.iterrows():
+                node_id = str(row[ids_col])
+                if node_id not in positions:
+                    continue
+                x, y = positions[node_id]
+                node_x.append(x)
+                node_y.append(y)
+                labels.append(str(row["_label"])[:24])
+                hover.append(
+                    f"Cihaz: {row['_label']}<br>"
+                    f"IP: {row['_ip']}<br>"
+                    f"Tur: {row['_type']}<br>"
+                    f"Durum: {row['_status']}"
+                )
+
+            fig.add_trace(go.Scatter(
+                x=node_x, y=node_y,
+                mode="markers+text",
+                text=labels,
+                textposition="bottom center",
+                hovertext=hover,
+                hoverinfo="text",
+                marker=dict(size=19, color="#2563EB",
+                            line=dict(width=2, color="#FFFFFF")),
+                name="Ag cihazlari"
+            ))
+
+            fig.update_layout(
+                height=540,
+                margin=dict(l=20, r=20, t=20, b=45),
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                showlegend=True,
+                xaxis=dict(visible=False),
+                yaxis=dict(visible=False),
+                dragmode="pan"
+            )
+            st.plotly_chart(fig, width="stretch")
+        except ImportError:
+            st.info("Grafik kutuphanesi bulunamadi. Baglanti kayitlari tablo olarak gosteriliyor.")
+            st.dataframe(edges, width="stretch", hide_index=True)
+        except Exception as exc:
+            st.warning(f"Ag haritasi olusturulamadi: {exc}")
+            st.dataframe(edges, width="stretch", hide_index=True)
+    else:
+        st.info(
+            "Henuz cizilebilir baglanti kaydi yok. Cihazlar kesfedilmis olabilir; "
+            "ancak fiziksel veya AP-istemci baglantilari icin dogrulanmis kaynak gerekir."
+        )
+
+    if context_count:
+        st.subheader("Ayni agda gozlemlenen cihazlar")
+        st.caption(
+            f"{context_count} iliski ayni ag baglamini gosteriyor. "
+            "Bunlar fiziksel kablo veya AP-istemci baglantisi kaniti degildir."
+        )
+        context_cols = [
+            col for col in [
+                edge_from, edge_to, relation_col, confidence_col
+            ] if col and col in context_edges.columns
+        ]
+        if context_cols:
+            st.dataframe(
+                context_edges[context_cols],
+                width="stretch",
+                hide_index=True,
+                height=260
+            )
+
+    st.divider()
+    st.subheader("Cihaz kesfi")
+
+    search = st.text_input("Cihaz ara", placeholder="IP, MAC, marka veya cihaz adi")
+    type_options = ["Tum cihazlar"] + sorted(
+        [x for x in nodes["_type"].dropna().unique().tolist() if x]
+    )
+    selected_type = st.selectbox("Cihaz turu", type_options)
+
+    filtered = nodes.copy()
+    if search.strip():
+        mask = filtered.astype(str).apply(
+            lambda col: col.str.contains(search.strip(), case=False, na=False)
+        ).any(axis=1)
+        filtered = filtered[mask]
+
+    if selected_type != "Tum cihazlar":
+        filtered = filtered[filtered["_type"] == selected_type]
+
+    st.caption(f"{len(filtered):,} cihaz listeleniyor.")
+
+    display_cols = []
+    for col in [label_col, ip_col, mac_col, vendor_col, type_col, status_col]:
+        if col and col in filtered.columns and col not in display_cols:
+            display_cols.append(col)
+
+    if display_cols:
+        st.dataframe(
+            filtered[display_cols],
+            width="stretch",
+            hide_index=True,
+            height=360
+        )
+
+    st.divider()
+    st.subheader("Cihaz detaylari")
+
+    if not filtered.empty:
+        options = filtered.index.tolist()
+        selected_index = st.selectbox(
+            "Detayini incele",
+            options,
+            format_func=lambda idx: (
+                str(filtered.loc[idx, "_label"]) +
+                (" ? " + str(filtered.loc[idx, "_ip"]) if filtered.loc[idx, "_ip"] else "")
+            )
+        )
+        selected = filtered.loc[selected_index]
+
+        left, right = st.columns(2)
+        with left:
+            st.markdown("**Kimlik ve ag bilgisi**")
+            for col in [label_col, ip_col, mac_col, vendor_col]:
+                if col and col in selected.index:
+                    st.write(f"{col}: {selected[col] or 'Bilinmiyor'}")
+        with right:
+            st.markdown("**Siniflandirma ve durum**")
+            for col in [type_col, status_col]:
+                if col and col in selected.index:
+                    st.write(f"{col}: {selected[col] or 'Bilinmiyor'}")
+            if "classification" in selected.index:
+                st.write(f"Siniflandirma: {selected['classification'] or 'Bilinmiyor'}")
+
+    st.divider()
+    st.subheader("Mevcut Wi-Fi baglantisi")
+    if not wifi.empty:
+        st.dataframe(wifi, width="stretch", hide_index=True)
+    else:
+        st.caption("Wi-Fi baglanti kaydi bulunamadi.")
+
+    st.caption(
+        "Kanita dayali topoloji: dogrulanmis, gozlemlenmis ve tahmini iliskiler "
+        "birbirinden ayri tutulmalidir. Bu ekran tek basina fiziksel kablo veya "
+        "AP-istemci iliskisini dogrulamaz."
+    )
