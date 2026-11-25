@@ -35,3 +35,15 @@ The orchestration layer reports stage-level progress through
 internal progress, so a long-running stage can remain at the same percentage
 until it finishes. Cancellation terminates the scan process rather than
 stopping each collector cooperatively.
+
+
+## Process-tree cancellation
+
+Each scan runs in its own process group/session. On Windows, cancellation uses
+`taskkill /T /F` against the scan PID so child processes are included; on
+POSIX systems, the worker sends termination to the process group and escalates
+to a kill signal if needed. The worker still waits for the parent process to
+exit before marking the job terminal.
+
+This is best-effort OS process cleanup, not cooperative cancellation. A scan
+may have already committed partial CSV/SQLite results before cancellation.
