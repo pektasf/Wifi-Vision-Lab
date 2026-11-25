@@ -12,12 +12,12 @@ continues while the Streamlit server remains running.
 - The sidebar refreshes job status once per second and offers cancellation.
 - The scan runner emits structured JSON-lines progress events for each analysis stage.
 - Older discovery target-count console lines remain supported as a fallback.
-- Cancellation terminates the scan subprocess. A cancelled scan may have
-  already written partial output files; existing collectors are not yet
-  transactional as a whole.
+- Cancellation terminates the scan process tree (the Python runner and its
+  descendants). A cancelled scan may have already written partial output
+  files; existing collectors are not transactional as a whole.
 - Job state and captured output are in memory only. Restarting Streamlit
   discards job history; network observations continue to use existing local
-  CSV storage.
+  SQLite storage with CSV compatibility exports.
 
 ## Safety and scope
 
@@ -33,8 +33,8 @@ one active scan at a time because collectors share local CSV files.
 The orchestration layer reports stage-level progress through
 `scripts/scan_events.py`. Individual collectors do not yet report their own
 internal progress, so a long-running stage can remain at the same percentage
-until it finishes. Cancellation terminates the scan process rather than
-stopping each collector cooperatively.
+until it finishes. Cancellation is OS-level process-tree termination, not cooperative stopping
+inside each collector.
 
 
 ## Process-tree cancellation
