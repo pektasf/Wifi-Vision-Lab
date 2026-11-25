@@ -85,3 +85,20 @@ def test_missing_entry_point_is_reported(tmp_path):
         pass
     else:
         raise AssertionError("missing main.py was accepted")
+
+
+def test_rejects_overlapping_scan_jobs(tmp_path):
+    project = make_project(
+        tmp_path,
+        "import time\\ntime.sleep(2)\\n",
+    )
+    manager = ScanJobManager()
+    first = manager.start(project)
+    try:
+        manager.start(project)
+    except RuntimeError as exc:
+        assert "already active" in str(exc)
+    else:
+        raise AssertionError("overlapping scan was accepted")
+    manager.cancel(first)
+    assert wait_for_terminal(manager, first)["status"] == "cancelled"
