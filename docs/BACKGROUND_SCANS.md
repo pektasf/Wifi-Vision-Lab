@@ -10,7 +10,8 @@ continues while the Streamlit server remains running.
 - The worker captures combined stdout/stderr and retains only the latest
   2,000 lines in memory.
 - The sidebar refreshes job status once per second and offers cancellation.
-- Progress is derived from the existing discovery stage and target-count output.
+- The scan runner emits structured JSON-lines progress events for each analysis stage.
+- Older discovery target-count console lines remain supported as a fallback.
 - Cancellation terminates the scan subprocess. A cancelled scan may have
   already written partial output files; existing collectors are not yet
   transactional as a whole.
@@ -29,6 +30,8 @@ change host, worker, or timeout limits and does not run a scan in CI.
 
 This is a single-process job manager, not a distributed queue. It enforces
 one active scan at a time because collectors share local CSV files.
-Progress is inferred from the existing discovery console messages. Other
-analysis modules do not yet report structured progress, and cancellation
-terminates the scan process rather than stopping each collector cooperatively.
+The orchestration layer reports stage-level progress through
+`scripts/scan_events.py`. Individual collectors do not yet report their own
+internal progress, so a long-running stage can remain at the same percentage
+until it finishes. Cancellation terminates the scan process rather than
+stopping each collector cooperatively.

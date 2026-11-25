@@ -19,7 +19,7 @@ Install the development dependencies into the project's virtual environment:
 - Inventory consolidation: one row per resolved profile and preservation of available evidence.
 - CSV persistence: append behavior, header handling, field allow-listing, and overwrite behavior.
 - Device classification: confidence bands, malformed numeric values, evidence retention, and missing input.
-- Background scan jobs: output capture, exit status, failure reporting, cancellation, and exact custom-CIDR confirmation, and progress parsing.
+- Background scan jobs: output capture, exit status, failure reporting, cancellation, and exact custom-CIDR confirmation, legacy progress parsing, and structured scan-event encoding/decoding.
 
 ## Safety rules for tests
 
@@ -43,3 +43,5 @@ host limit truncates a subnet. These tests are offline and do not send packets.
 See [SCAN_SAFETY.md](SCAN_SAFETY.md) for configuration and authorization notes.
 
 See [BACKGROUND_SCANS.md](BACKGROUND_SCANS.md) for job lifecycle and current limitations.
+
+See [SCAN_EVENTS.md](SCAN_EVENTS.md) for the stdout progress-event contract.
