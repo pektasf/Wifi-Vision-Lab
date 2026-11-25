@@ -23,6 +23,26 @@ def first_column(df, names):
     return None
 
 
+
+@st.dialog("Cihaz bilgileri", width="large")
+def show_topology_device(row):
+    left, right = st.columns(2)
+    fields = [
+        ("Cihaz", "_label"), ("IP adresi", "_ip"),
+        ("Tür", "_type"), ("Durum", "_status"),
+        ("Üretici", "vendor"), ("MAC adresi", "mac"),
+    ]
+    for index, (label, key) in enumerate(fields):
+        with (left if index % 2 == 0 else right):
+            st.markdown(f"**{label}**")
+            st.write(str(row.get(key, "") or "Bilinmiyor"))
+    with st.expander("Kaynak kaydın tüm alanları"):
+        for key, value in row.items():
+            if str(value).strip():
+                st.markdown(f"**{key}**")
+                st.write(str(value))
+
+
 def render():
     nodes = read_data("topology_nodes.csv")
     edges = read_data("topology_edges.csv")
@@ -221,67 +241,36 @@ def render():
             )
 
     st.divider()
-    st.subheader("Cihaz kesfi")
-
-    search = st.text_input("Cihaz ara", placeholder="IP, MAC, marka veya cihaz adi")
-    type_options = ["Tum cihazlar"] + sorted(
+    st.subheader("Cihazlar")
+    st.caption("Önemli bilgiler kartlarda; teknik ayrıntılar cihaz penceresinde.")
+    search = st.text_input("Cihaz ara", placeholder="IP, MAC, marka veya cihaz adı", key="topology_device_search")
+    type_options = ["Tüm cihazlar"] + sorted(
         [x for x in nodes["_type"].dropna().unique().tolist() if x]
     )
-    selected_type = st.selectbox("Cihaz turu", type_options)
+    selected_type = st.selectbox("Cihaz türü", type_options, key="topology_device_type")
 
     filtered = device_nodes.copy()
     if search.strip():
         mask = filtered.astype(str).apply(
-            lambda col: col.str.contains(search.strip(), case=False, na=False)
+            lambda col: col.str.contains(search.strip(), case=False, na=False, regex=False)
         ).any(axis=1)
         filtered = filtered[mask]
-
-    if selected_type != "Tum cihazlar":
+    if selected_type != "Tüm cihazlar":
         filtered = filtered[filtered["_type"] == selected_type]
 
-    st.caption(f"{len(filtered):,} cihaz listeleniyor.")
-
-    display_cols = []
-    for col in [label_col, ip_col, mac_col, vendor_col, type_col, status_col]:
-        if col and col in filtered.columns and col not in display_cols:
-            display_cols.append(col)
-
-    if display_cols:
-        st.dataframe(
-            filtered[display_cols],
-            width="stretch",
-            hide_index=True,
-            height=360
-        )
-
-    st.divider()
-    st.subheader("Cihaz detaylari")
-
-    if not filtered.empty:
-        options = filtered.index.tolist()
-        selected_index = st.selectbox(
-            "Detayini incele",
-            options,
-            format_func=lambda idx: (
-                str(filtered.loc[idx, "_label"]) +
-                (" ? " + str(filtered.loc[idx, "_ip"]) if filtered.loc[idx, "_ip"] else "")
-            )
-        )
-        selected = filtered.loc[selected_index]
-
-        left, right = st.columns(2)
-        with left:
-            st.markdown("**Kimlik ve ag bilgisi**")
-            for col in [label_col, ip_col, mac_col, vendor_col]:
-                if col and col in selected.index:
-                    st.write(f"{col}: {selected[col] or 'Bilinmiyor'}")
-        with right:
-            st.markdown("**Siniflandirma ve durum**")
-            for col in [type_col, status_col]:
-                if col and col in selected.index:
-                    st.write(f"{col}: {selected[col] or 'Bilinmiyor'}")
-            if "classification" in selected.index:
-                st.write(f"Siniflandirma: {selected['classification'] or 'Bilinmiyor'}")
+    st.caption(f"{len(filtered):,} cihaz")
+    records = list(filtered.iterrows())
+    for offset in range(0, len(records), 3):
+        columns = st.columns(3)
+        for column, (idx, row) in zip(columns, records[offset:offset + 3]):
+            with column:
+                with st.container(border=True):
+                    st.markdown(f"**{str(row['_label']) or 'İsimsiz cihaz'}**")
+                    st.caption(str(row["_ip"]) or "IP bilinmiyor")
+                    st.write(str(row["_type"]) or "Tür bilinmiyor")
+                    st.caption(str(row["_status"]) or "Durum bilinmiyor")
+                    if st.button("Detayları aç", key=f"topology_detail_{idx}", width="stretch"):
+                        show_topology_device(row)
 
     st.divider()
     st.subheader("Mevcut Wi-Fi baglantisi")
