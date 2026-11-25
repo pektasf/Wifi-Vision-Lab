@@ -1368,7 +1368,7 @@ with st.sidebar:
         font-size: 1.28rem;
         font-weight: 800;
         letter-spacing: -0.5px;
-        color: #17243A;
+        color: #F2F6FC;
         margin: 0 0 2px 0;
     }
 
@@ -1377,12 +1377,12 @@ with st.sidebar:
         line-height: 1.5;
         font-weight: 750;
         letter-spacing: 0.8px;
-        color: #8491A5;
+        color: #91A1B8;
         margin-bottom: 13px;
     }
 
     [data-testid="stSidebar"] .nav-heading {
-        color: #8793A5;
+        color: #71839D;
         font-size: 0.66rem;
         font-weight: 800;
         letter-spacing: 0.85px;
@@ -1412,33 +1412,33 @@ with st.sidebar:
     [data-testid="stSidebar"] div.stButton > button[kind="secondary"] {
         background: transparent;
         border: 1px solid transparent;
-        color: #46566D;
+        color: #C5D0DF;
     }
 
     [data-testid="stSidebar"] div.stButton > button[kind="secondary"]:hover {
-        background: #F0F3F8;
-        border-color: transparent;
-        color: #174EA6;
+        background: #1B2A41;
+        border-color: #263A56;
+        color: #FFFFFF;
     }
 
     [data-testid="stSidebar"] div.stButton > button[kind="primary"] {
-        background: #EAF1FF;
+        background: #1C3556;
         border: 0;
-        border-left: 3px solid #3478E5;
-        color: #174EA6;
+        border-left: 3px solid #4A9BFF;
+        color: #FFFFFF;
         font-weight: 700;
         padding-left: 7px;
     }
 
     [data-testid="stSidebar"] hr {
         margin: 9px 0;
-        border-color: #E7EBF1;
+        border-color: #26364E;
     }
 
     [data-testid="stSidebar"] .sidebar-footer {
         font-size: 0.72rem;
         line-height: 1.6;
-        color: #8793A5;
+        color: #91A1B8;
     }
 
     @media (max-height: 800px) {
