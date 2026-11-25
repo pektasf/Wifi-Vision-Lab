@@ -11,7 +11,7 @@ from typing import Any, Iterable, Mapping
 
 from scripts.common import DATA, stamp
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 DEFAULT_DB_PATH = DATA / "wifi_vision.db"
 
 MIGRATIONS = {
@@ -78,6 +78,23 @@ MIGRATIONS = {
         version INTEGER PRIMARY KEY,
         applied_at TEXT NOT NULL
     );
+    """,
+    2: """
+    CREATE TABLE IF NOT EXISTS dataset_snapshots (
+        dataset TEXT PRIMARY KEY,
+        row_count INTEGER NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS dataset_rows (
+        dataset TEXT NOT NULL,
+        row_number INTEGER NOT NULL,
+        row_json TEXT NOT NULL,
+        PRIMARY KEY(dataset, row_number),
+        FOREIGN KEY(dataset) REFERENCES dataset_snapshots(dataset)
+            ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_dataset_rows_dataset
+        ON dataset_rows(dataset, row_number);
     """,
 }
 
@@ -322,6 +339,7 @@ def import_legacy_csvs(
 
         imported_count = 0
         with connect(database_path) as connection:
+            _replace_dataset_rows(connection, dataset, rows)
             for row in rows:
                 row_json = _json(row)
                 row_hash = _hash(dataset, row_json)
@@ -351,6 +369,58 @@ def import_legacy_csvs(
         summary[dataset] = imported_count
     return summary
 
+
+
+def _replace_dataset_rows(
+    connection: sqlite3.Connection,
+    dataset: str,
+    rows: Iterable[Mapping[str, Any]],
+) -> int:
+    """Replace one generic dataset snapshot inside the caller's transaction."""
+    normalized = [dict(row) for row in rows]
+    connection.execute(
+        """INSERT INTO dataset_snapshots(dataset, row_count, updated_at)
+           VALUES (?, ?, ?)
+           ON CONFLICT(dataset) DO UPDATE SET
+               row_count=excluded.row_count, updated_at=excluded.updated_at""",
+        (dataset, len(normalized), stamp()),
+    )
+    connection.execute("DELETE FROM dataset_rows WHERE dataset=?", (dataset,))
+    connection.executemany(
+        "INSERT INTO dataset_rows(dataset, row_number, row_json) VALUES (?, ?, ?)",
+        [(dataset, index, _json(row)) for index, row in enumerate(normalized)],
+    )
+    return len(normalized)
+
+
+def write_dataset_snapshot(
+    dataset: str,
+    rows: Iterable[Mapping[str, Any]],
+    db_path: str | Path | None = None,
+) -> int:
+    """Persist the active application snapshot for a CSV-compatible dataset."""
+    database_path = initialize_database(db_path)
+    with connect(database_path) as connection:
+        return _replace_dataset_rows(connection, dataset, rows)
+
+
+def read_dataset(
+    dataset: str,
+    db_path: str | Path | None = None,
+) -> list[dict[str, Any]] | None:
+    """Read a dataset from SQLite; return None only when it has never been loaded."""
+    database_path = initialize_database(db_path)
+    with connect(database_path) as connection:
+        snapshot = connection.execute(
+            "SELECT row_count FROM dataset_snapshots WHERE dataset=?", (dataset,)
+        ).fetchone()
+        if snapshot is None:
+            return None
+        rows = connection.execute(
+            "SELECT row_json FROM dataset_rows WHERE dataset=? ORDER BY row_number",
+            (dataset,),
+        ).fetchall()
+    return [json.loads(row["row_json"]) for row in rows]
 
 def _main() -> None:
     parser = argparse.ArgumentParser(
