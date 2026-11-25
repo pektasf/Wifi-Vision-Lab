@@ -21,7 +21,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-apply_theme()
+apply_theme(st.session_state.get("wv_theme", "dark"))
 
 
 
@@ -527,9 +527,49 @@ def dashboard_page():
     st.markdown("### Ag genel bakis")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Toplam cihaz", f"{total:,}")
-    c2.metric("Yan\u0131t veren", f"{responding:,}")
+    c2.metric("Yan\\u0131t veren", f"{responding:,}")
     c3.metric("Cihaz profili", f"{profile_count:,}")
     c4.metric("Kayitli olay", f"{event_count:,}")
+
+    # Dashboard context: data freshness and discovered scope, not a live-status claim.
+    timestamp_col = next(
+        (column for column in ["timestamp", "observed_at", "last_seen"]
+         if column in inventory.columns),
+        None,
+    )
+    latest_observation = "Henüz gözlem yok"
+    if timestamp_col and not inventory.empty:
+        parsed_times = pd.to_datetime(inventory[timestamp_col], errors="coerce")
+        if parsed_times.notna().any():
+            latest_observation = parsed_times.max().strftime("%d.%m.%Y %H:%M")
+
+    adapter_count = (
+        inventory["adapter"].replace("", pd.NA).nunique()
+        if "adapter" in inventory.columns else 0
+    )
+    subnet_count = (
+        inventory["subnet"].replace("", pd.NA).nunique()
+        if "subnet" in inventory.columns else 0
+    )
+
+    with st.container(border=True):
+        freshness_col, scope_col, actions_col = st.columns([1.15, 1, 1.2])
+        with freshness_col:
+            st.caption("SON VERİ GÜNCELLEMESİ")
+            st.markdown(f"**{latest_observation}**")
+        with scope_col:
+            st.caption("KEŞİF KAPSAMI")
+            st.markdown(f"**{adapter_count} arayüz · {subnet_count} alt ağ**")
+        with actions_col:
+            st.caption("HIZLI İŞLEMLER")
+            action_scan, action_devices = st.columns(2)
+            with action_scan:
+                if st.button("Yeni tarama", key="dashboard_start_scan", type="primary", width="stretch"):
+                    run_scan()
+            with action_devices:
+                if st.button("Cihazlar", key="dashboard_open_devices", width="stretch"):
+                    st.session_state.active_page = PAGES[1]
+                    st.rerun()
 
     st.markdown("---")
     left, right = st.columns([1.15, 1])
@@ -1368,7 +1408,7 @@ with st.sidebar:
         font-size: 1.28rem;
         font-weight: 800;
         letter-spacing: -0.5px;
-        color: #17243A;
+        color: #F2F6FC;
         margin: 0 0 2px 0;
     }
 
@@ -1377,12 +1417,12 @@ with st.sidebar:
         line-height: 1.5;
         font-weight: 750;
         letter-spacing: 0.8px;
-        color: #8491A5;
+        color: var(--wv-sidebar-muted);
         margin-bottom: 13px;
     }
 
     [data-testid="stSidebar"] .nav-heading {
-        color: #8793A5;
+        color: #71839D;
         font-size: 0.66rem;
         font-weight: 800;
         letter-spacing: 0.85px;
@@ -1412,33 +1452,33 @@ with st.sidebar:
     [data-testid="stSidebar"] div.stButton > button[kind="secondary"] {
         background: transparent;
         border: 1px solid transparent;
-        color: #46566D;
+        color: #C5D0DF;
     }
 
     [data-testid="stSidebar"] div.stButton > button[kind="secondary"]:hover {
-        background: #F0F3F8;
-        border-color: transparent;
-        color: #174EA6;
+        background: var(--wv-hover);
+        border-color: var(--wv-border);
+        color: #FFFFFF;
     }
 
     [data-testid="stSidebar"] div.stButton > button[kind="primary"] {
-        background: #EAF1FF;
+        background: var(--wv-accent-soft);
         border: 0;
-        border-left: 3px solid #3478E5;
-        color: #174EA6;
+        border-left: 3px solid var(--wv-accent);
+        color: #FFFFFF;
         font-weight: 700;
         padding-left: 7px;
     }
 
     [data-testid="stSidebar"] hr {
         margin: 9px 0;
-        border-color: #E7EBF1;
+        border-color: var(--wv-border);
     }
 
     [data-testid="stSidebar"] .sidebar-footer {
         font-size: 0.72rem;
         line-height: 1.6;
-        color: #8793A5;
+        color: #91A1B8;
     }
 
     @media (max-height: 800px) {
@@ -1458,6 +1498,16 @@ with st.sidebar:
         '<div class="brand-name">WiFi Vision Lab</div>'
         '<div class="brand-description">A\u011e G\u00d6ZLEM VE \u0130ST\u0130HBARAT PLATFORMU</div>',
         unsafe_allow_html=True
+    )
+
+    st.caption("GÖRÜNÜM")
+    st.radio(
+        "Tema seçimi",
+        options=["dark", "light"],
+        format_func=lambda value: "◐ Koyu" if value == "dark" else "☼ Açık",
+        key="wv_theme",
+        horizontal=True,
+        label_visibility="collapsed",
     )
 
     if "active_page" not in st.session_state:
