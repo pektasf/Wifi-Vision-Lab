@@ -116,13 +116,13 @@ def classify_infrastructure_role(hostname, vendor):
         return "Access Point", 85, "hostname_model_family_inference"
 
     rules = [
-        (r"\\b(router|gateway)\\b", "Router / Gateway", 85),
-        (r"access[\\s_-]?point|\\b(wap|wireless ap)\\b", "Access Point", 85),
-        (r"\\b(switch|managed-switch)\\b", "Switch", 85),
-        (r"\\b(repeater|range extender)\\b", "Repeater", 85),
-        (r"\\b(mesh|mesh node)\\b", "Mesh Node", 80),
-        (r"\\b(firewall)\\b", "Firewall", 85),
-        (r"\\b(controller|wireless controller)\\b", "Controller", 85),
+        (r"\b(router|gateway)\b", "Router / Gateway", 85),
+        (r"access[\s_-]?point|\b(wap|wireless ap)\b", "Access Point", 85),
+        (r"\b(switch|managed-switch)\b", "Switch", 85),
+        (r"\b(repeater|range extender)\b", "Repeater", 85),
+        (r"\b(mesh|mesh node)\b", "Mesh Node", 80),
+        (r"\b(firewall)\b", "Firewall", 85),
+        (r"\b(controller|wireless controller)\b", "Controller", 85),
     ]
     for pattern, role, confidence in rules:
         if re.search(pattern, host):
@@ -153,6 +153,7 @@ def run():
         hostname = record.get("hostname", "")
         vendor_role = vendor_intelligence(vendor)
         category, device_confidence = classify_device(hostname, vendor)
+        device_role, role_confidence, role_evidence_type = classify_infrastructure_role(hostname, vendor)
 
         vendor_confidence = 95 if vendor else 0
         if mac_type == "Locally administered / randomized":
