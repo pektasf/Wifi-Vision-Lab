@@ -225,3 +225,21 @@ def test_common_collector_writes_update_sqlite_and_csv(tmp_path, monkeypatch):
     assert read_dataset("device_inventory.csv") == expected
     with csv_path.open("r", newline="", encoding="utf-8-sig") as handle:
         assert list(csv.DictReader(handle)) == expected
+
+
+
+def test_legacy_import_does_not_overwrite_existing_runtime_snapshot(tmp_path):
+    data_dir = tmp_path / "processed"
+    data_dir.mkdir()
+    source = data_dir / "device_inventory.csv"
+    write_csv(
+        source, ["ip", "hostname"],
+        [{"ip": "192.168.1.2", "hostname": "stale-csv"}],
+    )
+    db_path = tmp_path / "wifi.db"
+    current_rows = [{"ip": "192.168.1.9", "hostname": "sqlite-current"}]
+    write_dataset_snapshot("device_inventory.csv", current_rows, db_path)
+
+    import_legacy_csvs(data_dir, db_path)
+
+    assert read_dataset("device_inventory.csv", db_path) == current_rows
