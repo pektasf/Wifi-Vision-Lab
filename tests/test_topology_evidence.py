@@ -133,7 +133,7 @@ def test_topology_uses_latest_verified_ap_association_per_client():
             "verification_status": "verified",
         },
         {
-            "observed_at": "2026-01-01T08:30:00Z",
+            "observed_at": "2026-01-01T06:30:00Z",
             "client_mac": "AA:BB:CC:DD:EE:20",
             "ap_bssid": "AA:BB:CC:DD:EE:99",
             "ssid": "Current AP",
