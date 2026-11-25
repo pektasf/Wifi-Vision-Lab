@@ -274,7 +274,7 @@ def render():
 
         preferred = [
             name_col, ip_col, mac_col, vendor_col,
-            "model", "firmware", "Altyapi rolu",
+            "model", "firmware_version", "model_status", "firmware_status", "Altyapi rolu",
             status_col, "KanIt durumu"
         ]
         columns = []
@@ -301,7 +301,7 @@ def render():
                 left, right = st.columns(2)
                 for column, fields in [
                     (left, [(name_col, "Cihaz adı"), (ip_col, "IP adresi"), (mac_col, "MAC adresi"), (vendor_col, "Üretici")]),
-                    (right, [("model", "Model"), ("firmware", "Firmware"), ("ssid", "SSID"), ("channel", "Kanal"), ("frequency", "Frekans"), ("band", "Bant")]),
+                    (right, [("model", "Model"), ("model_status", "Model kanıt durumu"), ("model_source", "Model kaynağı"), ("firmware_version", "Firmware"), ("firmware_status", "Firmware kanıt durumu"), ("firmware_source", "Firmware kaynağı"), ("ssid", "SSID"), ("channel", "Kanal"), ("frequency", "Frekans"), ("band", "Bant")]),
                 ]:
                     with column:
                         for key, label in fields:
@@ -358,7 +358,10 @@ def render():
             "- **Kayitli siniflandirma:** Kaynak dosyada cihaz turu veya siniflandirma var.\n"
             "- **Uretici bilgisine dayali aday:** Uretici ag ekipmani markasi olarak taniniyor; rol kesin degil.\n"
             "- **Tahmini siniflandirma:** Siniflandirma kaynagi tahmine dayaniyor.\n"
-            "- **Siniflandirilmamis:** Cihaz turu icin yeterli veri yok."
+            "- **Siniflandirilmamis:** Cihaz turu icin yeterli veri yok.\n"
+            "- **Model/Firmware verified:** Yönetim API’si veya manuel doğrulama kaynağı.\n"
+            "- **Model/Firmware observed_unverified:** SNMP/LLDP açıklaması; cihaz kimliği ayrıca doğrulanmalı.\n"
+            "- **Model/Firmware unknown:** Kaynak veri yok; tahminle doldurulmaz."
         )
 
         st.markdown("**Kullanilan yerel veri dosyalari**")
