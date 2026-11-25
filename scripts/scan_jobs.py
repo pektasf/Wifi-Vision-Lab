@@ -16,6 +16,8 @@ from collections import deque
 from pathlib import Path
 from typing import Any
 
+from scripts.scan_events import parse_event_line
+
 
 class ScanJobManager:
     def __init__(self, output_limit: int = 2000):
@@ -65,6 +67,7 @@ class ScanJobManager:
             "cancel_requested": False,
             "progress": 0.0,
             "stage": "Sırada",
+            "progress_message": "",
             "completed_targets": 0,
             "total_targets": 0,
         }
@@ -141,7 +144,14 @@ class ScanJobManager:
 
     @staticmethod
     def _update_progress(job: dict[str, Any], line: str) -> None:
-        """Extract bounded, user-facing progress from existing scan log lines."""
+        """Prefer structured events; retain legacy log parsing for older runners."""
+        event = parse_event_line(line)
+        if event is not None:
+            job["stage"] = event["stage"]
+            job["progress"] = max(job["progress"], event["progress"])
+            job["progress_message"] = event["message"]
+            return
+
         stage_match = re.search(r"\[(\d+)/4\]", line)
         if stage_match:
             stage_number = int(stage_match.group(1))
@@ -202,6 +212,7 @@ class ScanJobManager:
                 "cancel_requested": job["cancel_requested"],
                 "progress": job["progress"],
                 "stage": job["stage"],
+                "progress_message": job["progress_message"],
                 "completed_targets": job["completed_targets"],
                 "total_targets": job["total_targets"],
             }
