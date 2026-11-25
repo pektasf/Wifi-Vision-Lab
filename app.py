@@ -21,7 +21,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-apply_theme()
+apply_theme(st.session_state.get("wv_theme", "dark"))
 
 
 
@@ -1417,7 +1417,7 @@ with st.sidebar:
         line-height: 1.5;
         font-weight: 750;
         letter-spacing: 0.8px;
-        color: #91A1B8;
+        color: var(--wv-sidebar-muted);
         margin-bottom: 13px;
     }
 
@@ -1456,15 +1456,15 @@ with st.sidebar:
     }
 
     [data-testid="stSidebar"] div.stButton > button[kind="secondary"]:hover {
-        background: #1B2A41;
-        border-color: #263A56;
+        background: var(--wv-hover);
+        border-color: var(--wv-border);
         color: #FFFFFF;
     }
 
     [data-testid="stSidebar"] div.stButton > button[kind="primary"] {
-        background: #1C3556;
+        background: var(--wv-accent-soft);
         border: 0;
-        border-left: 3px solid #4A9BFF;
+        border-left: 3px solid var(--wv-accent);
         color: #FFFFFF;
         font-weight: 700;
         padding-left: 7px;
@@ -1472,7 +1472,7 @@ with st.sidebar:
 
     [data-testid="stSidebar"] hr {
         margin: 9px 0;
-        border-color: #26364E;
+        border-color: var(--wv-border);
     }
 
     [data-testid="stSidebar"] .sidebar-footer {
@@ -1498,6 +1498,16 @@ with st.sidebar:
         '<div class="brand-name">WiFi Vision Lab</div>'
         '<div class="brand-description">A\u011e G\u00d6ZLEM VE \u0130ST\u0130HBARAT PLATFORMU</div>',
         unsafe_allow_html=True
+    )
+
+    st.caption("GÖRÜNÜM")
+    st.radio(
+        "Tema seçimi",
+        options=["dark", "light"],
+        format_func=lambda value: "◐ Koyu" if value == "dark" else "☼ Açık",
+        key="wv_theme",
+        horizontal=True,
+        label_visibility="collapsed",
     )
 
     if "active_page" not in st.session_state:
