@@ -4,6 +4,7 @@ import subprocess
 import re
 import concurrent.futures
 import json
+import os
 import platform
 
 from scripts.common import DATA, stamp, overwrite_rows
@@ -12,7 +13,7 @@ from scripts.scan_policy import build_scan_targets, load_scan_settings
 
 def get_network():
     if platform.system() != "Windows":
-        raise RuntimeError("Bu paket Windows içindir.")
+        raise RuntimeError("Bu tarama adaptoru su anda Windows icindir.")
 
     ps = (
         "$c=Get-NetIPConfiguration | "
@@ -26,26 +27,47 @@ def get_network():
         "}|ConvertTo-Json -Compress}"
     )
 
-    p = subprocess.run(
-        ["powershell", "-NoProfile", "-Command", ps],
-        capture_output=True,
-        text=True,
-        timeout=15
-    )
-
-    if p.returncode or not p.stdout.strip():
+    try:
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", ps],
+            capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=15
+        )
+    except FileNotFoundError as exc:
         raise RuntimeError(
-            "Aktif IPv4 ağı bulunamadı. Wi-Fi/Ethernet bağlantısını kontrol edin."
+            "PowerShell bulunamadi. Windows PowerShell erisimini kontrol edin."
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            "Aktif ag arayuzu sorgusu zaman asimina ugradi."
+        ) from exc
+    except OSError as exc:
+        raise RuntimeError(f"Ag arayuzu sorgusu baslatilamadi: {exc}") from exc
+
+    if result.returncode or not result.stdout.strip():
+        detail = result.stderr.strip() or "PowerShell aktif IPv4 agi dondurmedi."
+        raise RuntimeError(
+            "Aktif IPv4 agi bulunamadi. Wi-Fi/Ethernet baglantisini kontrol edin. "
+            + detail[:300]
         )
 
-    d = json.loads(p.stdout.strip().splitlines()[-1])
-    iface = ipaddress.ip_interface(f"{d['IP']}/{d['Prefix']}")
+    try:
+        data = json.loads(result.stdout.strip().splitlines()[-1])
+        interface = ipaddress.ip_interface(
+            f"{data['IP']}/{data['Prefix']}"
+        )
+        gateway = str(ipaddress.ip_address(data["Gateway"]))
+    except (KeyError, ValueError, json.JSONDecodeError, TypeError) as exc:
+        raise RuntimeError(
+            "Windows ag bilgisi okunamadi veya eksik. "
+            "IPv4 adresi, prefix ve varsayilan gateway kontrol edilmeli."
+        ) from exc
 
     return {
-        "ip": d["IP"],
-        "gateway": d["Gateway"],
-        "adapter": d["Adapter"],
-        "network": str(iface.network)
+        "ip": str(interface.ip),
+        "gateway": gateway,
+        "adapter": str(data.get("Adapter", "Unknown")),
+        "network": str(interface.network)
     }
 
 
@@ -62,27 +84,35 @@ def ping_one(ip, timeout_ms=600):
 
 
 def arp_map():
-    p = subprocess.run(
-        ["arp", "-a"],
-        capture_output=True,
-        text=True,
-        errors="ignore",
-        timeout=10
-    )
+    try:
+        result = subprocess.run(
+            ["arp", "-a"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=10
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError("Windows ARP komutu bulunamadi.") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError("ARP tablosu sorgusu 10 saniyede tamamlanamadi.") from exc
+    except OSError as exc:
+        raise RuntimeError(f"ARP tablosu okunamadi: {exc}") from exc
 
-    out = {}
+    if result.returncode and not result.stdout.strip():
+        detail = result.stderr.strip() or "ARP komutu sonuc dondurmedi."
+        raise RuntimeError(f"ARP tablosu okunamadi: {detail[:300]}")
 
-    for line in p.stdout.splitlines():
-        m = re.search(
+    output = {}
+    for line in result.stdout.splitlines():
+        match = re.search(
             r"(\d{1,3}(?:\.\d{1,3}){3})\s+([0-9a-fA-F-]{17})",
             line
         )
-
-        if m:
-            out[m.group(1)] = m.group(2).replace("-", ":").upper()
-
-    return out
-
+        if match:
+            output[match.group(1)] = match.group(2).replace("-", ":").upper()
+    return output
 
 
 def resolve_hostnames(ips):
@@ -131,68 +161,75 @@ def resolve_hostnames(ips):
         return {}
 
 
-def scan():
-    print("[1/4] Aktif ağ algılanıyor...", flush=True)
+def scan(scan_cidr=None, approved=False, confirmation=None):
+    print("[1/4] Aktif ag algilaniyor...", flush=True)
     net = get_network()
+    active_network = net["network"]
+
+    requested_cidr = (
+        str(scan_cidr or os.getenv("WIFI_VISION_SCAN_CIDR", "")).strip()
+        or active_network
+    )
+    approved = approved or os.getenv("WIFI_VISION_SCAN_APPROVED") == "1"
+    confirmation = (
+        confirmation
+        if confirmation is not None
+        else os.getenv("WIFI_VISION_SCAN_CONFIRMATION", "")
+    )
 
     settings = load_scan_settings()
     hosts, truncated = build_scan_targets(
-        net["network"],
+        requested_cidr,
         net["ip"],
         net["gateway"],
         max_hosts=settings["max_hosts"],
+        active_network_cidr=active_network,
+        approved=approved,
+        confirmation=confirmation,
     )
+    selected_network = str(ipaddress.ip_network(requested_cidr, strict=True))
+    net["active_network"] = active_network
+    net["network"] = selected_network
 
     if truncated:
-        network_size = ipaddress.ip_network(net["network"]).num_addresses
+        network_size = ipaddress.ip_network(selected_network).num_addresses
         print(
-            f"[UYARI] Alt ağda {network_size} adres alanı var; "
-            f"güvenlik sınırı nedeniyle ilk {len(hosts)} hedef taranacak. "
-            "WIFI_VISION_MAX_SCAN_HOSTS ile sınırı kontrollü artırabilirsiniz.",
+            f"[UYARI] Alt agda {network_size} adres alani var; "
+            f"guvenlik siniri nedeniyle ilk {len(hosts)} hedef taranacak. "
+            "WIFI_VISION_MAX_SCAN_HOSTS ile siniri kontrollu artirabilirsiniz.",
             flush=True,
         )
 
     print(
-        f"[2/4] {len(hosts)} IP adresi taranıyor: {net['network']} "
-        f"(eşzamanlı işçi: {settings['workers']}, ping: {settings['ping_timeout_ms']} ms)",
+        f"[2/4] {len(hosts)} IP adresi taraniyor: {selected_network} "
+        f"(eszamanli isci: {settings['workers']}, "
+        f"ping: {settings['ping_timeout_ms']} ms)",
         flush=True
     )
 
     alive = {}
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=settings["workers"]) as executor:
+    with concurrent.futures.ThreadPoolExecutor(
+        max_workers=settings["workers"]
+    ) as executor:
         futures = {
             executor.submit(ping_one, ip, settings["ping_timeout_ms"]): ip
             for ip in hosts
         }
-
         completed = 0
-
         for future in concurrent.futures.as_completed(futures):
             ip = futures[future]
-
             try:
                 alive[ip] = future.result()
             except Exception:
                 alive[ip] = False
-
             completed += 1
-
             if completed % 25 == 0 or completed == len(hosts):
-                print(
-                    f"    Tarama: {completed}/{len(hosts)}",
-                    flush=True
-                )
+                print(f"    Tarama: {completed}/{len(hosts)}", flush=True)
 
     print("[3/4] ARP tablosu okunuyor...", flush=True)
     arp = arp_map()
 
-    infrastructure_prefixes = (
-        "48:81:D4",
-        "E0:5D:54",
-        "9C:CE:88"
-    )
-
+    infrastructure_prefixes = ("48:81:D4", "E0:5D:54", "9C:CE:88")
     discovered_ips = [
         ip for ip in hosts
         if ip == net["gateway"]
@@ -205,41 +242,30 @@ def scan():
     hostnames = resolve_hostnames(discovered_ips)
 
     rows = []
-
     for ip in hosts:
-        ok = alive.get(ip, False)
-
-        if ok or ip in arp or ip == net["gateway"]:
+        responding = alive.get(ip, False)
+        if responding or ip in arp or ip == net["gateway"]:
             rows.append({
                 "timestamp": stamp(),
                 "ip": ip,
                 "mac": arp.get(ip, ""),
                 "hostname": hostnames.get(ip, ""),
-                "status": "responding" if ok else "arp_seen",
+                "status": "responding" if responding else "arp_seen",
                 "gateway": net["gateway"],
                 "adapter": net["adapter"],
-                "subnet": net["network"]
+                "subnet": selected_network
             })
 
-    print("[4/4] Sonuçlar kaydediliyor...", flush=True)
-
+    print("[4/4] Sonuclar kaydediliyor...", flush=True)
     overwrite_rows(
         DATA / "device_inventory.csv",
         rows,
         [
-            "timestamp",
-            "ip",
-            "mac",
-            "hostname",
-            "status",
-            "gateway",
-            "adapter",
-            "subnet"
+            "timestamp", "ip", "mac", "hostname",
+            "status", "gateway", "adapter", "subnet"
         ]
     )
-
-    print(f"Tarama tamamlandı. Bulunan cihaz: {len(rows)}", flush=True)
-
+    print(f"Tarama tamamlandi. Bulunan cihaz: {len(rows)}", flush=True)
     return net, rows
 
 
