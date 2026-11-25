@@ -1,6 +1,7 @@
 import re
 import pandas as pd
 from scripts.common import DATA, ROOT, stamp, overwrite_rows
+from scripts.device_fingerprints import resolve_device_fingerprint
 
 REFERENCE = ROOT / "data" / "reference"
 OUI_FILES = [
@@ -154,6 +155,7 @@ def run():
         vendor_role = vendor_intelligence(vendor)
         category, device_confidence = classify_device(hostname, vendor)
         device_role, role_confidence, role_evidence_type = classify_infrastructure_role(hostname, vendor)
+        fingerprint = resolve_device_fingerprint(record.to_dict())
 
         vendor_confidence = 95 if vendor else 0
         if mac_type == "Locally administered / randomized":
@@ -180,6 +182,7 @@ def run():
             "device_role": device_role,
             "role_confidence": role_confidence,
             "role_evidence_type": role_evidence_type,
+            **fingerprint,
             "classification": category,
             "vendor_confidence": vendor_confidence,
             "device_confidence": device_confidence,
@@ -189,7 +192,10 @@ def run():
     fields = [
         "timestamp", "ip", "mac", "hostname", "vendor", "mac_type",
         "vendor_role", "device_role", "role_confidence",
-        "role_evidence_type", "classification", "vendor_confidence",
+        "role_evidence_type", "model", "model_confidence", "model_status",
+        "model_source", "firmware_version", "firmware_confidence",
+        "firmware_status", "firmware_source", "fingerprint_evidence",
+        "classification", "vendor_confidence",
         "device_confidence", "evidence"
     ]
     overwrite_rows(DATA / "device_intelligence.csv", rows, fields)
