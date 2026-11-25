@@ -527,9 +527,49 @@ def dashboard_page():
     st.markdown("### Ag genel bakis")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Toplam cihaz", f"{total:,}")
-    c2.metric("Yan\u0131t veren", f"{responding:,}")
+    c2.metric("Yan\\u0131t veren", f"{responding:,}")
     c3.metric("Cihaz profili", f"{profile_count:,}")
     c4.metric("Kayitli olay", f"{event_count:,}")
+
+    # Dashboard context: data freshness and discovered scope, not a live-status claim.
+    timestamp_col = next(
+        (column for column in ["timestamp", "observed_at", "last_seen"]
+         if column in inventory.columns),
+        None,
+    )
+    latest_observation = "Henüz gözlem yok"
+    if timestamp_col and not inventory.empty:
+        parsed_times = pd.to_datetime(inventory[timestamp_col], errors="coerce")
+        if parsed_times.notna().any():
+            latest_observation = parsed_times.max().strftime("%d.%m.%Y %H:%M")
+
+    adapter_count = (
+        inventory["adapter"].replace("", pd.NA).nunique()
+        if "adapter" in inventory.columns else 0
+    )
+    subnet_count = (
+        inventory["subnet"].replace("", pd.NA).nunique()
+        if "subnet" in inventory.columns else 0
+    )
+
+    with st.container(border=True):
+        freshness_col, scope_col, actions_col = st.columns([1.15, 1, 1.2])
+        with freshness_col:
+            st.caption("SON VERİ GÜNCELLEMESİ")
+            st.markdown(f"**{latest_observation}**")
+        with scope_col:
+            st.caption("KEŞİF KAPSAMI")
+            st.markdown(f"**{adapter_count} arayüz · {subnet_count} alt ağ**")
+        with actions_col:
+            st.caption("HIZLI İŞLEMLER")
+            action_scan, action_devices = st.columns(2)
+            with action_scan:
+                if st.button("Yeni tarama", key="dashboard_start_scan", type="primary", width="stretch"):
+                    run_scan()
+            with action_devices:
+                if st.button("Cihazlar", key="dashboard_open_devices", width="stretch"):
+                    st.session_state.active_page = PAGES[1]
+                    st.rerun()
 
     st.markdown("---")
     left, right = st.columns([1.15, 1])
