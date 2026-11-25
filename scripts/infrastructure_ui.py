@@ -23,6 +23,26 @@ def find_col(df, candidates):
     return None
 
 
+def assign_identity_keys(combined, ip_col, mac_col):
+    """Create stable grouping keys without mismatched boolean-index assignment."""
+    result = combined.copy()
+    result["_ip_key"] = result[ip_col].astype(str).str.strip()
+    result["_mac_key"] = result[mac_col].astype(str).str.strip().str.upper()
+    result["_identity"] = result["_ip_key"]
+
+    missing_ip = result["_identity"].eq("")
+    result.loc[missing_ip, "_identity"] = result.loc[missing_ip, "_mac_key"]
+
+    missing_identity = result["_identity"].eq("")
+    fallback = pd.Series(
+        [f"kayit-{index}" for index in result.index[missing_identity]],
+        index=result.index[missing_identity],
+        dtype="object",
+    )
+    result.loc[missing_identity, "_identity"] = fallback
+    return result
+
+
 def render():
     inventory = read_data("device_inventory.csv")
     nodes = read_data("topology_nodes.csv")
@@ -79,13 +99,7 @@ def render():
         class_col = "_classification"
 
     # Bir IP/MAC icin birden fazla kayit varsa dolu alanlari koru.
-    combined["_ip_key"] = combined[ip_col].astype(str).str.strip()
-    combined["_mac_key"] = combined[mac_col].astype(str).str.strip().str.upper()
-    combined["_identity"] = combined["_ip_key"]
-    combined.loc[combined["_identity"] == "", "_identity"] = combined["_mac_key"]
-    combined.loc[combined["_identity"] == "", "_identity"] = (
-        "kayit-" + combined.index.astype(str)
-    )
+    combined = assign_identity_keys(combined, ip_col, mac_col)
 
     rows = []
     for identity, group in combined.groupby("_identity", sort=False):
@@ -254,43 +268,43 @@ def render():
                 columns.append(col)
 
         if columns:
-            st.dataframe(
-                filtered[columns],
-                width="stretch",
-                hide_index=True,
-                height=390
-            )
+            st.caption(f"{len(filtered):,} cihaz")
+            records = list(filtered.iterrows())
+            for offset in range(0, len(records), 3):
+                card_cols = st.columns(3)
+                for card_col, (idx, row) in zip(card_cols, records[offset:offset + 3]):
+                    with card_col:
+                        with st.container(border=True):
+                            st.markdown(f"**{str(row.get(name_col, '') or 'İsimsiz cihaz')}**")
+                            st.caption(str(row.get(ip_col, '') or 'IP bilinmiyor'))
+                            st.write(str(row.get("Altyapi rolu", "Belirsiz")))
+                            st.caption(str(row.get("KanIt durumu", "Bilinmiyor")))
 
         if not filtered.empty:
-            st.markdown("**Cihaz inceleme**")
+            @st.dialog("Altyapı cihazı", width="large")
+            def show_infrastructure_device(selected):
+                left, right = st.columns(2)
+                for column, fields in [
+                    (left, [(name_col, "Cihaz adı"), (ip_col, "IP adresi"), (mac_col, "MAC adresi"), (vendor_col, "Üretici")]),
+                    (right, [("model", "Model"), ("firmware", "Firmware"), ("ssid", "SSID"), ("channel", "Kanal"), ("frequency", "Frekans"), ("band", "Bant")]),
+                ]:
+                    with column:
+                        for key, label in fields:
+                            st.markdown(f"**{label}**")
+                            st.write(str(selected.get(key, "") or "Bilinmiyor"))
+                st.caption(f"Rol: {selected['Altyapi rolu']} · Kanıt: {selected['KanIt durumu']}")
+
             selected_index = st.selectbox(
-                "Cihaz sec",
+                "Ayrıntılarını aç",
                 filtered.index.tolist(),
                 format_func=lambda idx: (
-                    str(filtered.loc[idx, name_col] or "Isimsiz cihaz")
-                    + " | "
-                    + str(filtered.loc[idx, ip_col] or "IP yok")
-                )
+                    str(filtered.loc[idx, name_col] or "İsimsiz cihaz")
+                    + " · " + str(filtered.loc[idx, ip_col] or "IP yok")
+                ),
+                key="infrastructure_device_select",
             )
-            selected = filtered.loc[selected_index]
-
-            left, right = st.columns(2)
-            with left:
-                st.markdown("**Kimlik bilgileri**")
-                for label, col in [
-                    ("Cihaz adi", name_col),
-                    ("IP adresi", ip_col),
-                    ("MAC adresi", mac_col),
-                    ("Uretici", vendor_col)
-                ]:
-                    st.write(f"{label}: {selected.get(col, '') or 'Bilinmiyor'}")
-
-            with right:
-                st.markdown("**Teknik bilgiler**")
-                for label in ["model", "firmware", "ssid", "channel", "frequency", "band"]:
-                    st.write(f"{label}: {selected.get(label, '') or 'Bilinmiyor'}")
-                st.write(f"Rol: {selected['Altyapi rolu']}")
-                st.write(f"KanIt: {selected['KanIt durumu']}")
+            if st.button("Seçili cihazın detaylarını aç", key="infrastructure_open_detail"):
+                show_infrastructure_device(filtered.loc[selected_index])
 
         if not devices.empty:
             st.download_button(

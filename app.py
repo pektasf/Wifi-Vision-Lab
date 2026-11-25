@@ -21,262 +21,8 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-apply_theme(st.session_state.get("wv_theme", "dark"))
+apply_theme("light")
 
-
-
-def apply_design():
-    st.markdown("""
-    <style>
-    :root {
-        --wv-bg: #F3F6FB;
-        --wv-surface: #FFFFFF;
-        --wv-border: #E2E8F0;
-        --wv-text: #17243A;
-        --wv-muted: #64748B;
-        --wv-primary: #2563EB;
-        --wv-primary-soft: #EFF6FF;
-    }
-
-    .stApp {
-        background: var(--wv-bg);
-        color: var(--wv-text);
-    }
-
-    .block-container {
-        max-width: 1600px;
-        padding-top: 1.5rem;
-        padding-bottom: 3rem;
-    }
-
-    [data-testid="stSidebar"] {
-        background: #FFFFFF;
-        border-right: 1px solid var(--wv-border);
-    }
-
-    [data-testid="stSidebar"] > div:first-child {
-        padding-top: 1.2rem;
-    }
-
-    [data-testid="stSidebar"] h1 {
-        color: #14213D;
-        font-size: 1.35rem;
-        font-weight: 800;
-        letter-spacing: -0.5px;
-    }
-
-    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {
-        color: var(--wv-muted);
-        font-size: 0.78rem;
-    }
-
-    [data-testid="stSidebar"] [role="radiogroup"] {
-        gap: 5px;
-    }
-
-    [data-testid="stSidebar"] [role="radiogroup"] label {
-        padding: 9px 12px;
-        border-radius: 9px;
-        transition: background .15s ease;
-        border: 1px solid transparent;
-    }
-
-    [data-testid="stSidebar"] [role="radiogroup"] label:hover {
-        background: #F1F5F9;
-    }
-
-    [data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) {
-        background: var(--wv-primary-soft);
-        border-color: #BFDBFE;
-        color: #1D4ED8;
-        font-weight: 700;
-    }
-
-    h1, h2, h3 {
-        color: #17243A !important;
-        letter-spacing: -0.35px;
-    }
-
-    h1 {
-        font-size: 1.9rem !important;
-        font-weight: 800 !important;
-    }
-
-    h2 {
-        font-size: 1.35rem !important;
-        font-weight: 750 !important;
-    }
-
-    h3 {
-        font-size: 1.05rem !important;
-        font-weight: 700 !important;
-    }
-
-    p, label, span, div {
-        text-rendering: optimizeLegibility;
-    }
-
-    [data-testid="stMetric"] {
-        background: #FFFFFF;
-        border: 1px solid var(--wv-border);
-        border-radius: 12px;
-        padding: 16px 18px;
-        box-shadow: 0 2px 5px rgba(15, 23, 42, .025);
-    }
-
-    [data-testid="stMetricLabel"] {
-        color: #64748B !important;
-        font-size: .82rem !important;
-        font-weight: 600 !important;
-    }
-
-    [data-testid="stMetricValue"] {
-        color: #17243A !important;
-        font-size: 1.7rem !important;
-        font-weight: 800 !important;
-    }
-
-    [data-testid="stDataFrame"],
-    [data-testid="stTable"] {
-        border: 1px solid var(--wv-border);
-        border-radius: 10px;
-        overflow: hidden;
-        background: #FFFFFF;
-    }
-
-    [data-testid="stTextInput"] input,
-    [data-testid="stNumberInput"] input,
-    [data-testid="stSelectbox"] div[data-baseweb="select"] > div {
-        border-radius: 8px;
-        border-color: #CBD5E1;
-        background: #FFFFFF;
-    }
-
-    [data-testid="stButton"] button,
-    [data-testid="stDownloadButton"] button {
-        border-radius: 8px;
-        font-weight: 650;
-        min-height: 40px;
-        transition: all .15s ease;
-    }
-
-    [data-testid="stButton"] button[kind="primary"] {
-        background: var(--wv-primary);
-        border-color: var(--wv-primary);
-        color: #FFFFFF;
-    }
-
-    [data-testid="stButton"] button:hover,
-    [data-testid="stDownloadButton"] button:hover {
-        border-color: var(--wv-primary);
-        color: var(--wv-primary);
-    }
-
-    [data-testid="stTabs"] [role="tab"] {
-        font-weight: 650;
-        padding: 10px 15px;
-    }
-
-    [data-testid="stExpander"] {
-        background: #FFFFFF;
-        border: 1px solid var(--wv-border);
-        border-radius: 10px;
-    }
-
-    hr {
-        border-color: var(--wv-border);
-    }
-
-    [data-testid="stAlert"] {
-        border-radius: 10px;
-    }
-
-    @media (max-width: 768px) {
-        .block-container {
-            padding: 1rem .8rem 2rem .8rem;
-        }
-
-        h1 {
-            font-size: 1.55rem !important;
-        }
-
-        [data-testid="stMetricValue"] {
-            font-size: 1.35rem !important;
-        }
-    }
-    
-    /* Sidebar: ekran yuksekligine uyumlu, kompakt navigasyon */
-    [data-testid="stSidebar"] > div:first-child {
-        padding-top: 0.35rem !important;
-        padding-bottom: 0.5rem !important;
-    }
-
-    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
-        gap: 0.45rem;
-    }
-
-    [data-testid="stSidebar"] h1 {
-        font-size: 1.15rem !important;
-        line-height: 1.25 !important;
-        margin-bottom: 0 !important;
-    }
-
-    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {
-        margin-bottom: 0.25rem !important;
-        font-size: 0.72rem !important;
-    }
-
-    [data-testid="stSidebar"] [role="radiogroup"] {
-        gap: 2px !important;
-    }
-
-    [data-testid="stSidebar"] [role="radiogroup"] label {
-        min-height: 0 !important;
-        padding: 5px 9px !important;
-        margin: 0 !important;
-        border-radius: 7px !important;
-        font-size: 0.86rem !important;
-        line-height: 1.2 !important;
-    }
-
-    [data-testid="stSidebar"] [role="radiogroup"] label p {
-        margin: 0 !important;
-        line-height: 1.2 !important;
-    }
-
-    [data-testid="stSidebar"] [data-testid="stButton"] button {
-        min-height: 36px !important;
-        padding: 5px 10px !important;
-        font-size: 0.84rem !important;
-    }
-
-    [data-testid="stSidebar"] hr {
-        margin: 0.35rem 0 !important;
-    }
-
-    @media (max-height: 850px) {
-        [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
-            gap: 0.25rem !important;
-        }
-
-        [data-testid="stSidebar"] [role="radiogroup"] label {
-            padding-top: 3px !important;
-            padding-bottom: 3px !important;
-        }
-    }
-
-    @media (max-height: 700px) {
-        [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {
-            font-size: 0.68rem !important;
-        }
-
-        [data-testid="stSidebar"] [role="radiogroup"] label {
-            font-size: 0.81rem !important;
-        }
-    }
-
-    </style>
-    """, unsafe_allow_html=True)
 
 
 
@@ -498,268 +244,152 @@ def filtered_table(data, key, allow_status=True):
 
 
 
+@st.dialog("Cihaz detayları", width="large")
+def show_device_modal(device):
+    st.caption("Seçilen cihazın kayıtlı kimlik ve ağ bilgileri")
+    fields = [
+        ("IP adresi", "ip"), ("MAC adresi", "mac"),
+        ("Cihaz adı", "hostname"), ("Durum", "status"),
+        ("Üretici", "vendor"), ("Gateway", "gateway"),
+        ("Ağ arayüzü", "adapter"), ("Alt ağ", "subnet"),
+        ("Son gözlem", "timestamp"), ("İlk görülme", "first_seen"),
+        ("Son görülme", "last_seen"), ("Sınıflandırma", "classification"),
+    ]
+    left, right = st.columns(2)
+    for index, (label, key) in enumerate(fields):
+        with (left if index % 2 == 0 else right):
+            st.markdown(f"**{label}**")
+            st.write(str(device.get(key, "") or "Bilinmiyor"))
+    known = {key for _, key in fields}
+    extras = [key for key in device.index if key not in known and str(device.get(key, "")).strip()]
+    if extras:
+        with st.expander("Diğer teknik alanlar"):
+            for key in extras:
+                st.markdown(f"**{str(key).replace('_', ' ').title()}**")
+                st.write(str(device.get(key)))
+
+
+def render_device_cards(data, key_prefix="device"):
+    if data.empty:
+        st.info("Filtrelerle eşleşen cihaz bulunamadı.")
+        return
+    st.caption(f"{len(data):,} cihaz")
+    items = list(data.iterrows())
+    for start in range(0, len(items), 3):
+        columns = st.columns(3)
+        for column, (index, device) in zip(columns, items[start:start + 3]):
+            with column:
+                with st.container(border=True):
+                    st.markdown(f"**{str(device.get('hostname', '') or 'İsimsiz cihaz')}**")
+                    st.caption(str(device.get("ip", "") or "IP bilinmiyor"))
+                    st.write(str(device.get("status", "") or "Bilinmiyor"))
+                    if st.button("Detayları incele", key=f"{key_prefix}_details_{index}", width="stretch"):
+                        show_device_modal(device)
+
+
 def dashboard_page():
     inventory = load("device_inventory.csv")
     profiles = load("device_profiles.csv")
     events = load("device_events.csv")
     classification = load("device_classification.csv")
-
-    st.markdown(
-        "<div style='color:#38bdf8;font-size:12px;font-weight:700;"
-        "letter-spacing:1.5px;margin-bottom:8px'>NETWORK OPERATIONS</div>",
-        unsafe_allow_html=True
-    )
-    st.title("Ag Kontrol Merkezi")
-    st.caption("Yerel ag envanteri, cihaz durumu ve kesif ozeti")
+    page_header("Ağ kontrol merkezi", "Ağınızdaki cihazları ve son gözlemleri tek bakışta görün.")
 
     total = len(inventory)
     responding = 0
     if "status" in inventory.columns:
-        responding = int(
-            inventory["status"].astype(str).str.lower()
-            .isin(["responding", "online", "active"]).sum()
-        )
+        responding = int(inventory["status"].astype(str).str.lower().isin(
+            ["responding", "online", "active"]
+        ).sum())
+    metrics = st.columns(3)
+    metrics[0].metric("Toplam cihaz", f"{total:,}")
+    metrics[1].metric("Yanıt veren", f"{responding:,}")
+    metrics[2].metric("Diğer / bilinmiyor", f"{max(total - responding, 0):,}")
 
-    offline = max(total - responding, 0)
-    profile_count = len(profiles)
-    event_count = len(events)
-
-    st.markdown("### Ag genel bakis")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Toplam cihaz", f"{total:,}")
-    c2.metric("Yan\\u0131t veren", f"{responding:,}")
-    c3.metric("Cihaz profili", f"{profile_count:,}")
-    c4.metric("Kayitli olay", f"{event_count:,}")
-
-    # Dashboard context: data freshness and discovered scope, not a live-status claim.
-    timestamp_col = next(
-        (column for column in ["timestamp", "observed_at", "last_seen"]
-         if column in inventory.columns),
-        None,
-    )
-    latest_observation = "Henüz gözlem yok"
+    latest = "Henüz gözlem yok"
+    timestamp_col = next((c for c in ["timestamp", "observed_at", "last_seen"] if c in inventory.columns), None)
     if timestamp_col and not inventory.empty:
-        parsed_times = pd.to_datetime(inventory[timestamp_col], errors="coerce")
-        if parsed_times.notna().any():
-            latest_observation = parsed_times.max().strftime("%d.%m.%Y %H:%M")
-
-    adapter_count = (
-        inventory["adapter"].replace("", pd.NA).nunique()
-        if "adapter" in inventory.columns else 0
-    )
-    subnet_count = (
-        inventory["subnet"].replace("", pd.NA).nunique()
-        if "subnet" in inventory.columns else 0
-    )
+        parsed = pd.to_datetime(inventory[timestamp_col], errors="coerce")
+        if parsed.notna().any():
+            latest = parsed.max().strftime("%d.%m.%Y %H:%M")
 
     with st.container(border=True):
-        freshness_col, scope_col, actions_col = st.columns([1.15, 1, 1.2])
-        with freshness_col:
-            st.caption("SON VERİ GÜNCELLEMESİ")
-            st.markdown(f"**{latest_observation}**")
-        with scope_col:
-            st.caption("KEŞİF KAPSAMI")
-            st.markdown(f"**{adapter_count} arayüz · {subnet_count} alt ağ**")
-        with actions_col:
-            st.caption("HIZLI İŞLEMLER")
-            action_scan, action_devices = st.columns(2)
-            with action_scan:
-                if st.button("Yeni tarama", key="dashboard_start_scan", type="primary", width="stretch"):
-                    run_scan()
-            with action_devices:
-                if st.button("Cihazlar", key="dashboard_open_devices", width="stretch"):
-                    st.session_state.active_page = PAGES[1]
-                    st.rerun()
+        st.markdown("**Son veri güncellemesi**")
+        st.write(latest)
+        left, right = st.columns(2)
+        with left:
+            if st.button("Yeni tarama", type="primary", width="stretch", key="dashboard_start_scan"):
+                run_scan()
+        with right:
+            if st.button("Cihaz envanterini aç", width="stretch", key="dashboard_open_devices"):
+                st.session_state.active_page = PAGES[1]
+                st.rerun()
 
-    st.markdown("---")
-    left, right = st.columns([1.15, 1])
-
+    left, right = st.columns([1.1, 1])
     with left:
-        st.markdown("### Cihaz durum dagilimi")
+        st.subheader("Cihaz durumu")
         if "status" in inventory.columns and not inventory.empty:
-            status_data = (
-                inventory["status"].replace("", "Bilinmiyor")
-                .value_counts().rename_axis("Durum")
-                .reset_index(name="Cihaz")
-                .set_index("Durum")
-            )
-            st.bar_chart(status_data, height=250)
+            chart = inventory["status"].replace("", "Bilinmiyor").value_counts().rename_axis("Durum").reset_index(name="Cihaz").set_index("Durum")
+            st.bar_chart(chart, height=230)
         else:
-            st.info("Durum dagilimi icin yeterli veri yok.")
-
+            st.info("Durum dağılımı için henüz veri yok.")
     with right:
-        st.markdown("### Ag kesif bilgisi")
-        if not inventory.empty:
-            if "adapter" in inventory.columns:
-                adapter_count = inventory["adapter"].replace(
-                    "", "Bilinmiyor"
-                ).nunique()
-                st.metric("Kesifte gorulen ag arayuzu", adapter_count)
-            if "subnet" in inventory.columns:
-                subnet_count = inventory["subnet"].replace(
-                    "", "Bilinmiyor"
-                ).nunique()
-                st.metric("Gorulen alt ag", subnet_count)
-            if "gateway" in inventory.columns:
-                gateways = inventory["gateway"].replace("", "-").unique()
-                st.write("**Varsayilan ag gecidi**")
-                st.code(", ".join(gateways[:5]))
-        else:
-            st.info("Henuz cihaz envanteri bulunmuyor.")
+        st.subheader("Envanter özeti")
+        st.metric("Cihaz profili", f"{len(profiles):,}")
+        st.metric("Kayıtlı olay", f"{len(events):,}")
+        st.metric("Üretici kaydı", f"{len(classification):,}")
 
-    st.markdown("---")
-    st.markdown("### Uretici dagilimi")
-    if "vendor" in classification.columns and not classification.empty:
-        vendor_data = (
-            classification["vendor"].replace("", "Bilinmiyor")
-            .value_counts().head(8).rename_axis("Uretici")
-            .reset_index(name="Cihaz")
-            .set_index("Uretici")
-        )
-        st.bar_chart(vendor_data, height=240)
-    elif "vendor" in inventory.columns and not inventory.empty:
-        vendor_data = (
-            inventory["vendor"].replace("", "Bilinmiyor")
-            .value_counts().head(8).rename_axis("Uretici")
-            .reset_index(name="Cihaz")
-            .set_index("Uretici")
-        )
-        st.bar_chart(vendor_data, height=240)
+    st.subheader("Son keşfedilen cihazlar")
+    if inventory.empty:
+        st.info("Henüz cihaz kaydı yok. Yeni tarama başlatabilirsiniz.")
     else:
-        st.info("Uretici dagilimi icin siniflandirma verisi bulunamadi.")
-
-    st.markdown("---")
-    st.markdown("### Son kesfedilen cihazlar")
-    if not inventory.empty:
         recent = inventory.copy()
-        if "timestamp" in recent.columns:
-            recent = recent.sort_values("timestamp", ascending=False)
-
-        preferred = [
-            "timestamp", "ip", "hostname", "mac",
-            "status", "gateway", "adapter"
-        ]
-        visible = [col for col in preferred if col in recent.columns]
-        if not visible:
-            visible = list(recent.columns[:7])
-
-        st.dataframe(
-            recent[visible].head(12),
-            width="stretch",
-            hide_index=True
-        )
-    else:
-        st.info("Henuz envanter kaydi yok. Yeni kesif baslatabilirsiniz.")
+        if timestamp_col:
+            recent = recent.sort_values(timestamp_col, ascending=False)
+        visible = [c for c in ["ip", "hostname", "status", "vendor"] if c in recent.columns]
+        render_device_cards(recent[visible].head(6) if visible else recent.head(6), "dashboard")
 
 
 def devices_page():
     inventory = load("device_inventory.csv")
-
-    st.title("Cihaz Envanteri")
-    st.caption("Kesfedilen ag cihazlarini ara, filtrele ve incele.")
-
+    page_header("Cihaz envanteri", "Cihazları arayın, filtreleyin ve teknik ayrıntıları gerektiğinde açın.")
     if inventory.empty:
-        st.info("Henuz cihaz kaydi bulunmuyor. Once ag kesfi yapin.")
+        st.info("Henüz cihaz kaydı bulunmuyor. Önce ağ keşfi yapın.")
         return
 
     data = inventory.copy()
-
     for col in ["ip", "mac", "hostname", "status", "gateway", "adapter", "subnet"]:
         if col not in data.columns:
             data[col] = ""
-
     data["status"] = data["status"].replace("", "Bilinmiyor")
 
-    total = len(data)
-    responding = int(
-        data["status"].astype(str).str.lower()
-        .isin(["responding", "online", "active"]).sum()
-    )
-    other = total - responding
+    responding = int(data["status"].astype(str).str.lower().isin(
+        ["responding", "online", "active"]
+    ).sum())
+    summary = st.columns(3)
+    summary[0].metric("Toplam cihaz", f"{len(data):,}")
+    summary[1].metric("Yanıt veren", f"{responding:,}")
+    summary[2].metric("Diğer / bilinmiyor", f"{len(data) - responding:,}")
 
-    a, b, c = st.columns(3)
-    a.metric("Toplam cihaz", f"{total:,}")
-    b.metric("Yan\u0131t veren", f"{responding:,}")
-    c.metric("Di\u011fer / bilinmiyor", f"{other:,}")
-
-    st.markdown("---")
-    st.markdown("### Filtreler")
-
-    f1, f2 = st.columns([2, 1])
-    with f1:
-        search = st.text_input(
-            "Cihaz ara",
-            placeholder="IP, MAC adresi, cihaz adi veya gateway..."
-        )
-    with f2:
-        statuses = ["Tum durumlar"] + sorted(
-            data["status"].astype(str).unique().tolist()
-        )
-        selected_status = st.selectbox("Durum", statuses)
+    filters = st.columns([2, 1])
+    with filters[0]:
+        search = st.text_input("Cihaz ara", placeholder="IP, MAC veya cihaz adı", key="inventory_search")
+    with filters[1]:
+        statuses = ["Tüm durumlar"] + sorted(data["status"].astype(str).unique().tolist())
+        selected_status = st.selectbox("Durum", statuses, key="inventory_status")
 
     filtered = data.copy()
-
-    if selected_status != "Tum durumlar":
-        filtered = filtered[
-            filtered["status"].astype(str) == selected_status
-        ]
-
+    if selected_status != "Tüm durumlar":
+        filtered = filtered[filtered["status"].astype(str) == selected_status]
     if search.strip():
-        term = search.strip().lower()
         mask = filtered.astype(str).apply(
-            lambda col: col.str.lower().str.contains(term, regex=False)
+            lambda col: col.str.contains(search.strip(), case=False, na=False, regex=False)
         ).any(axis=1)
         filtered = filtered[mask]
 
-    st.markdown(
-        f"**{len(filtered):,}** cihaz listeleniyor",
-    )
+    st.divider()
+    render_device_cards(filtered, "inventory")
 
-    preferred = [
-        "ip", "hostname", "mac", "status",
-        "gateway", "adapter", "subnet", "timestamp"
-    ]
-    visible = [col for col in preferred if col in filtered.columns]
 
-    st.dataframe(
-        filtered[visible],
-        width="stretch",
-        hide_index=True,
-        height=420
-    )
-
-    st.markdown("---")
-    st.markdown("### Cihaz detaylari")
-
-    device_options = filtered["ip"].astype(str).tolist()
-    device_options = [x for x in device_options if x.strip()]
-
-    if not device_options:
-        st.info("Secilen filtrelere uygun cihaz bulunamadi.")
-        return
-
-    selected_ip = st.selectbox("Incelenecek cihaz", device_options)
-    selected_rows = data[data["ip"].astype(str) == selected_ip]
-
-    if not selected_rows.empty:
-        device = selected_rows.iloc[0]
-
-        d1, d2, d3 = st.columns(3)
-        d1.metric("IP adresi", str(device.get("ip", "-")) or "-")
-        d2.metric("MAC adresi", str(device.get("mac", "-")) or "-")
-        d3.metric("Durum", str(device.get("status", "-")) or "-")
-
-        left, right = st.columns(2)
-        with left:
-            st.markdown("**Ag bilgileri**")
-            st.write("Gateway:", device.get("gateway", "-") or "-")
-            st.write("Ag arayuzu:", device.get("adapter", "-") or "-")
-            st.write("Alt ag:", device.get("subnet", "-") or "-")
-
-        with right:
-            st.markdown("**Cihaz kimligi**")
-            st.write("Cihaz adi:", device.get("hostname", "-") or "-")
-            st.write("Son kayit:", device.get("timestamp", "-") or "-")
 
 def history_page():
     page_header(
@@ -1405,29 +1035,15 @@ with st.sidebar:
     }
 
     [data-testid="stSidebar"] .brand-name {
-        font-size: 1.28rem;
-        font-weight: 800;
-        letter-spacing: -0.5px;
-        color: #F2F6FC;
-        margin: 0 0 2px 0;
+        font-size: 1.15rem; font-weight: 750; letter-spacing: -0.4px;
+        color: #17243A; margin: 0 0 3px 0;
     }
-
     [data-testid="stSidebar"] .brand-description {
-        font-size: 0.64rem;
-        line-height: 1.5;
-        font-weight: 750;
-        letter-spacing: 0.8px;
-        color: var(--wv-sidebar-muted);
-        margin-bottom: 13px;
+        font-size: .68rem; line-height: 1.45; font-weight: 600;
+        letter-spacing: .25px; color: #718096; margin-bottom: 12px;
     }
 
-    [data-testid="stSidebar"] .nav-heading {
-        color: #71839D;
-        font-size: 0.66rem;
-        font-weight: 800;
-        letter-spacing: 0.85px;
-        margin: 11px 0 4px 9px;
-    }
+    [data-testid="stSidebar"] .nav-heading { color: #8995A7; font-size: .68rem; font-weight: 700; letter-spacing: .35px; margin: 13px 0 5px 8px; }
 
     [data-testid="stSidebar"] div.stButton {
         margin: 0;
@@ -1450,24 +1066,13 @@ with st.sidebar:
     }
 
     [data-testid="stSidebar"] div.stButton > button[kind="secondary"] {
-        background: transparent;
-        border: 1px solid transparent;
-        color: #C5D0DF;
+        background: transparent; border: 1px solid transparent; color: #526176;
     }
-
     [data-testid="stSidebar"] div.stButton > button[kind="secondary"]:hover {
-        background: var(--wv-hover);
-        border-color: var(--wv-border);
-        color: #FFFFFF;
+        background: #F1F5F9; border-color: #E2E8F0; color: #1D4ED8;
     }
-
     [data-testid="stSidebar"] div.stButton > button[kind="primary"] {
-        background: var(--wv-accent-soft);
-        border: 0;
-        border-left: 3px solid var(--wv-accent);
-        color: #FFFFFF;
-        font-weight: 700;
-        padding-left: 7px;
+        background: #EAF2FF; border: 1px solid #D6E6FF; color: #1D4ED8; font-weight: 700;
     }
 
     [data-testid="stSidebar"] hr {
@@ -1475,11 +1080,7 @@ with st.sidebar:
         border-color: var(--wv-border);
     }
 
-    [data-testid="stSidebar"] .sidebar-footer {
-        font-size: 0.72rem;
-        line-height: 1.6;
-        color: #91A1B8;
-    }
+    [data-testid="stSidebar"] .sidebar-footer { font-size: .72rem; line-height: 1.6; color: #8995A7; }
 
     @media (max-height: 800px) {
         [data-testid="stSidebar"] .nav-heading {
@@ -1496,18 +1097,8 @@ with st.sidebar:
 
     st.markdown(
         '<div class="brand-name">WiFi Vision Lab</div>'
-        '<div class="brand-description">A\u011e G\u00d6ZLEM VE \u0130ST\u0130HBARAT PLATFORMU</div>',
+        <div class="brand-description">YEREL AĞ GÖZLEM PLATFORMU</div>,
         unsafe_allow_html=True
-    )
-
-    st.caption("GÖRÜNÜM")
-    st.radio(
-        "Tema seçimi",
-        options=["dark", "light"],
-        format_func=lambda value: "◐ Koyu" if value == "dark" else "☼ Açık",
-        key="wv_theme",
-        horizontal=True,
-        label_visibility="collapsed",
     )
 
     if "active_page" not in st.session_state:
