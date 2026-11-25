@@ -281,8 +281,33 @@ def apply_design():
 
 
 
+_STORAGE_READY = False
+
+
 def load(filename):
+    global _STORAGE_READY
     path = DATA / filename
+    try:
+        from scripts.storage import (
+            import_legacy_csvs,
+            initialize_database,
+            read_dataset,
+        )
+
+        if not _STORAGE_READY:
+            initialize_database()
+            import_legacy_csvs(DATA)
+            _STORAGE_READY = True
+
+        rows = read_dataset(filename)
+        if rows is not None:
+            if not rows and path.exists():
+                # Preserve CSV headers for empty datasets without reading their records.
+                return pd.read_csv(path, dtype=str, nrows=0).fillna("")
+            return pd.DataFrame(rows).fillna("")
+    except Exception as exc:
+        st.warning(f"SQLite veri deposu okunamadı; CSV yedeği deneniyor: {exc}")
+
     if not path.exists():
         return pd.DataFrame()
     try:

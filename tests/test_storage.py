@@ -5,7 +5,7 @@ import pytest
 
 from scripts.storage import (
     add_event, add_observation, connect, import_legacy_csvs,
-    initialize_database, upsert_device,
+    initialize_database, read_dataset, upsert_device, write_dataset_snapshot, MIGRATIONS,
 )
 
 
@@ -21,7 +21,7 @@ def test_initialize_database_is_idempotent_and_versioned(tmp_path):
     initialize_database(db_path)
     initialize_database(db_path)
     with connect(db_path) as connection:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 1
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
         tables = {
             row["name"] for row in connection.execute(
                 "SELECT name FROM sqlite_master WHERE type='table'"
@@ -133,3 +133,113 @@ def test_changed_csv_adds_only_new_rows(tmp_path):
     with connect(db_path) as connection:
         assert connection.execute("SELECT COUNT(*) FROM observations").fetchone()[0] == 2
         assert connection.execute("SELECT COUNT(*) FROM legacy_records").fetchone()[0] == 2
+    assert read_dataset("device_inventory.csv", db_path) == [first_row, second_row]
+
+
+def test_dataset_snapshot_round_trip_and_empty_snapshot(tmp_path):
+    db_path = tmp_path / "wifi.db"
+    rows = [
+        {"ip": "192.168.1.2", "hostname": "router"},
+        {"ip": "192.168.1.3", "hostname": "laptop"},
+    ]
+
+    assert read_dataset("device_inventory.csv", db_path) is None
+    assert write_dataset_snapshot("device_inventory.csv", rows, db_path) == 2
+    assert read_dataset("device_inventory.csv", db_path) == rows
+
+    assert write_dataset_snapshot("empty.csv", [], db_path) == 0
+    assert read_dataset("empty.csv", db_path) == []
+
+
+def test_legacy_import_populates_runtime_dataset_snapshot(tmp_path):
+    data_dir = tmp_path / "processed"
+    data_dir.mkdir()
+    source = data_dir / "device_inventory.csv"
+    rows = [{
+        "timestamp": "2026-01-01T10:00:00+03:00",
+        "ip": "192.168.1.20",
+        "mac": "AA:BB:CC:DD:EE:FF",
+        "hostname": "test-device",
+        "status": "responding",
+    }]
+    write_csv(
+        source, ["timestamp", "ip", "mac", "hostname", "status"], rows
+    )
+    db_path = tmp_path / "wifi.db"
+
+    import_legacy_csvs(data_dir, db_path)
+
+    assert read_dataset("device_inventory.csv", db_path) == rows
+
+
+def test_existing_schema_v1_upgrades_without_losing_rows(tmp_path):
+    db_path = tmp_path / "legacy-v1.db"
+    with connect(db_path) as connection:
+        connection.executescript(MIGRATIONS[1])
+        connection.execute("PRAGMA user_version = 1")
+        connection.execute(
+            "INSERT INTO schema_migrations(version, applied_at) VALUES (1, 'test')"
+        )
+        upsert_device(
+            connection, "AA:BB:CC:DD:EE:FF",
+            mac="AA:BB:CC:DD:EE:FF", current_ip="192.168.1.5",
+        )
+
+    initialize_database(db_path)
+
+    with connect(db_path) as connection:
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
+        row = connection.execute(
+            "SELECT current_ip FROM devices WHERE identity_key=?",
+            ("AA:BB:CC:DD:EE:FF",),
+        ).fetchone()
+        tables = {
+            item["name"] for item in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+    assert row["current_ip"] == "192.168.1.5"
+    assert {"dataset_snapshots", "dataset_rows"} <= tables
+
+
+
+def test_common_collector_writes_update_sqlite_and_csv(tmp_path, monkeypatch):
+    from scripts import common, storage
+
+    monkeypatch.setattr(common, "DATA", tmp_path)
+    monkeypatch.setattr(storage, "DEFAULT_DB_PATH", tmp_path / "wifi.db")
+    csv_path = tmp_path / "device_inventory.csv"
+    fields = ["ip", "hostname"]
+
+    common.overwrite_rows(
+        csv_path, [{"ip": "192.168.1.2", "hostname": "router"}], fields
+    )
+    common.write_rows(
+        csv_path, [{"ip": "192.168.1.3", "hostname": "laptop"}], fields
+    )
+
+    expected = [
+        {"ip": "192.168.1.2", "hostname": "router"},
+        {"ip": "192.168.1.3", "hostname": "laptop"},
+    ]
+    assert read_dataset("device_inventory.csv") == expected
+    with csv_path.open("r", newline="", encoding="utf-8-sig") as handle:
+        assert list(csv.DictReader(handle)) == expected
+
+
+
+def test_legacy_import_does_not_overwrite_existing_runtime_snapshot(tmp_path):
+    data_dir = tmp_path / "processed"
+    data_dir.mkdir()
+    source = data_dir / "device_inventory.csv"
+    write_csv(
+        source, ["ip", "hostname"],
+        [{"ip": "192.168.1.2", "hostname": "stale-csv"}],
+    )
+    db_path = tmp_path / "wifi.db"
+    current_rows = [{"ip": "192.168.1.9", "hostname": "sqlite-current"}]
+    write_dataset_snapshot("device_inventory.csv", current_rows, db_path)
+
+    import_legacy_csvs(data_dir, db_path)
+
+    assert read_dataset("device_inventory.csv", db_path) == current_rows
