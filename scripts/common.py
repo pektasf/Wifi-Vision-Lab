@@ -82,7 +82,11 @@ def write_rows(
                 )
             existing_rows = list(reader)
 
-    _atomic_write_rows(path, [*existing_rows, *new_rows], fields)
+    snapshot = [*existing_rows, *new_rows]
+    from scripts.storage import write_dataset_snapshot
+
+    write_dataset_snapshot(path.name, snapshot)
+    _atomic_write_rows(path, snapshot, fields)
 
 
 def overwrite_rows(
@@ -90,5 +94,10 @@ def overwrite_rows(
     rows: Iterable[Mapping[str, object]],
     fields: Sequence[str],
 ) -> None:
-    """Atomically replace a CSV with a new snapshot."""
-    _atomic_write_rows(Path(path), rows, fields)
+    """Persist the active SQLite snapshot, then export its CSV compatibility copy."""
+    path = Path(path)
+    snapshot = list(rows)
+    from scripts.storage import write_dataset_snapshot
+
+    write_dataset_snapshot(path.name, snapshot)
+    _atomic_write_rows(path, snapshot, fields)
