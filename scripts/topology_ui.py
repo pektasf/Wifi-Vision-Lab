@@ -2,7 +2,10 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from scripts.topology_evidence import split_topology_edges
+from scripts.topology_evidence import (
+    prepare_association_history,
+    split_topology_edges,
+)
 
 
 DATA = Path(__file__).resolve().parent.parent / "data" / "processed"
@@ -133,11 +136,11 @@ def render():
             import plotly.graph_objects as go
             import math
 
-            ids_col = first_column(nodes, ["id", "ip", "mac"])
+            ids_col = first_column(device_nodes, ["id", "ip", "mac"])
             if ids_col is None:
                 ids_col = "_label"
 
-            node_ids = nodes[ids_col].astype(str).tolist()
+            node_ids = device_nodes[ids_col].astype(str).tolist()
             positions = {}
             count = max(len(node_ids), 1)
 
@@ -162,7 +165,7 @@ def render():
             ))
 
             node_x, node_y, hover, labels = [], [], [], []
-            for _, row in nodes.iterrows():
+            for _, row in device_nodes.iterrows():
                 node_id = str(row[ids_col])
                 if node_id not in positions:
                     continue
@@ -238,6 +241,38 @@ def render():
                     height=240,
                 )
 
+    if not verified_edges.empty:
+        st.subheader("Dogrulanmis iliski ayrintisi")
+        edge_labels = []
+        edge_rows = []
+        for _, edge in verified_edges.reset_index(drop=True).iterrows():
+            label = (
+                f"{edge[edge_from]} -> {edge[edge_to]} | "
+                f"{edge.get('relation', 'iliski')} | "
+                f"{edge.get('observed_at', '') or 'zaman bilinmiyor'}"
+            )
+            edge_labels.append(label)
+            edge_rows.append(edge)
+        selected_label = st.selectbox(
+            "Incelenecek baglanti",
+            edge_labels,
+            key="topology_verified_edge_detail",
+        )
+        selected_edge = edge_rows[edge_labels.index(selected_label)]
+        left, right = st.columns(2)
+        with left:
+            st.markdown("**Kanıt kaynağı**")
+            st.write(str(selected_edge.get("evidence_source", "") or "Bilinmiyor"))
+            st.markdown("**Kanıt türü**")
+            st.write(str(selected_edge.get("evidence_type", "") or "Bilinmiyor"))
+        with right:
+            st.markdown("**Doğrulama seviyesi**")
+            st.write(str(selected_edge.get("confidence", "") or "Bilinmiyor"))
+            st.markdown("**Gözlem zamanı**")
+            st.write(str(selected_edge.get("observed_at", "") or "Bilinmiyor"))
+        if str(selected_edge.get("details", "")).strip():
+            st.caption(str(selected_edge.get("details")))
+
     st.divider()
     st.subheader("Cihazlar")
     st.caption("Önemli bilgiler kartlarda; teknik ayrıntılar cihaz penceresinde.")
@@ -269,6 +304,53 @@ def render():
                     st.caption(str(row["_status"]) or "Durum bilinmiyor")
                     if st.button("Detayları aç", key=f"topology_detail_{idx}", width="stretch"):
                         show_topology_device(row)
+
+    st.divider()
+    st.subheader("AP-istemci baglanti gecmisi")
+    association_history = read_data("ap_client_relationships.csv")
+    if not association_history.empty:
+        association_history = prepare_association_history(association_history)
+        h1, h2, h3 = st.columns(3)
+        h1.metric("Gozlem kaydi", f"{len(association_history):,}")
+        client_count = (
+            association_history["client_mac"].nunique()
+            if "client_mac" in association_history.columns else 0
+        )
+        ap_count = (
+            association_history["ap_bssid"].nunique()
+            if "ap_bssid" in association_history.columns else 0
+        )
+        h2.metric("Istemci", f"{client_count:,}")
+        h3.metric("AP radyosu", f"{ap_count:,}")
+        history_search = st.text_input(
+            "Gecmiste istemci veya AP ara",
+            placeholder="MAC, cihaz adi veya SSID",
+            key="topology_association_history_search",
+        )
+        history_filtered = association_history.copy()
+        if history_search.strip():
+            history_mask = history_filtered.astype(str).apply(
+                lambda column: column.str.contains(
+                    history_search.strip(), case=False, na=False, regex=False
+                )
+            ).any(axis=1)
+            history_filtered = history_filtered[history_mask]
+        history_columns = [
+            column for column in [
+                "observed_at", "client_hostname", "client_ip", "client_mac",
+                "ssid", "ap_bssid", "source", "confidence", "verification_status",
+            ] if column in history_filtered.columns
+        ]
+        st.caption(f"{len(history_filtered):,} kayit | En yeni gozlem en ustte")
+        if history_columns:
+            st.dataframe(
+                history_filtered[history_columns],
+                width="stretch",
+                hide_index=True,
+                height=300,
+            )
+    else:
+        st.caption("Henuz AP-istemci gozlem gecmisi bulunmuyor.")
 
     st.divider()
     st.subheader("Mevcut Wi-Fi baglantisi")

@@ -47,3 +47,20 @@ def split_topology_edges(edges, edge_from, edge_to):
         "context": usable[context_mask].copy(),
         "unverified": usable[unverified_mask].copy(),
     }
+
+
+
+def prepare_association_history(history):
+    """Return association observations newest-first, keeping invalid dates last."""
+    if history.empty:
+        return history.copy()
+    result = history.copy()
+    if "observed_at" not in result.columns:
+        return result.iloc[::-1].reset_index(drop=True)
+    result["_observed_at_utc"] = pd.to_datetime(
+        result["observed_at"], utc=True, errors="coerce"
+    )
+    result = result.sort_values(
+        "_observed_at_utc", ascending=False, na_position="last", kind="stable"
+    )
+    return result.drop(columns=["_observed_at_utc"]).reset_index(drop=True)
