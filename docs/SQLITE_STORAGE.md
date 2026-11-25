@@ -1,68 +1,54 @@
-# SQLite storage and CSV migration
+# SQLite runtime storage
 
-## Current transition model
+## Active data path
 
-Collectors and the Streamlit UI still use CSV in this phase. SQLite is added
-alongside them as a local data layer; existing readers and writers are not
-switched yet. CSV remains the compatibility source until later phases move
-each collector and UI page to repository APIs.
+SQLite is now the application's primary read/write source for processed datasets.
+The default database is `data/processed/wifi_vision.db`, which is local and
+excluded from Git.
 
-Default database path: data/processed/wifi_vision.db
+- Streamlit's shared `load()` helper initializes the database, imports any
+  existing processed CSV files once per app process, and then reads datasets
+  from SQLite.
+- Collector writes through `scripts.common.write_rows` and
+  `overwrite_rows` update the SQLite dataset snapshot first, then atomically
+  export the CSV compatibility copy.
+- A dataset that has never been imported is distinguishable from an imported
+  empty dataset. If SQLite is unavailable, the UI attempts a CSV fallback.
+- Existing collector return values and CSV column formats are unchanged.
 
-The processed-data directory is already excluded from Git. The database is
-local and must not be committed or uploaded.
+## Migration and compatibility
 
-## Initialize and import
+Schema version 2 adds `dataset_snapshots` and `dataset_rows`. Each dataset is
+stored as an ordered JSON row snapshot. The migration is additive and retains
+the existing devices, observations, events, legacy_records, and csv_imports
+tables. Existing schema version 1 databases are upgraded without dropping
+their records.
 
-From the repository root, run:
+On first app data load, `import_legacy_csvs` imports top-level CSV files from
+the processed-data directory. It preserves source CSV files and retains the
+existing typed device/observation/event import behavior. Importing the same
+CSV repeatedly is idempotent for legacy rows and typed observations.
 
-    python -m scripts.storage
+CSV files remain compatibility exports and a recovery fallback; they are not
+the normal application read source after import. A CSV export is written after
+the SQLite snapshot commits. If export fails, the committed SQLite data
+remains available to the app.
 
-Optional paths for testing or a deliberate alternate location:
+## Local privacy and backup
 
-    python -m scripts.storage --data-dir .\data\processed --db-path .\data\processed\wifi_vision.db
+The database, WAL files, processed CSVs, and network observations must remain
+local. Do not commit or upload database files, real IP/MAC/hostname/SSID/BSSID
+observations, or backups.
 
-The importer:
-- reads only top-level CSV files in the selected processed-data directory;
-- preserves every imported row in legacy_records;
-- maps device inventory/history to devices and observations;
-- maps device profiles to devices;
-- maps device events to events;
-- records a SHA-256 digest and row count in csv_imports;
-- uses stable row hashes so reruns do not duplicate rows;
-- imports changed snapshots additively, retaining prior observations;
-- never modifies, renames, or deletes source CSV files.
-
-The OUI reference data under data/reference is deliberately not imported.
-
-## Schema
-
-- devices: stable identity key, MAC, hostname, vendor, classification,
-  first/last seen, current IP and JSON metadata.
-- observations: time-stamped device sightings, IP/MAC/hostname/status,
-  source and raw JSON evidence. Each source row has a unique hash.
-- events: device/network events with time, type, old/new values and details.
-- legacy_records: JSON copy of rows from all processed CSVs.
-- csv_imports: latest file digest, row count and import time per CSV file.
-- schema_migrations: applied migration versions.
-
-SQLite uses foreign-key enforcement, a 15-second busy timeout, WAL journaling
-and synchronous=FULL. Database schema upgrades are versioned through
-PRAGMA user_version. A database newer than the application is rejected
-rather than silently downgraded.
-
-## Important limitations in this phase
-
-- Existing collectors and UI pages still use CSV. This is an additive storage
-  foundation, not yet a full runtime cutover.
-- Import is additive. If a CSV snapshot removes a row, the old SQLite record
-  is retained as historical data; deletion/reconciliation policy is separate.
-- Do not manually edit the SQLite database while the application is running.
-- Keep real network observations, database files, and exports local. Do not
-  attach them to issues or pull requests.
+Before manually copying a live database, stop the application or use SQLite's
+backup API so the WAL state is included. Do not manually edit the database
+while the application is running.
 
 ## Verification
 
 Run:
 
     python -m pytest -q
+
+Tests cover idempotent initialization, schema-v1 upgrade, generic dataset
+round-trips, empty snapshots, legacy CSV preservation, and deduplication.
