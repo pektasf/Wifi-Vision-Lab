@@ -119,6 +119,15 @@ def render():
     vendor_role_col = find_col(devices, ["vendor_role"])
 
     def role_for(row):
+        explicit_role = str(row.get("device_role", "")).strip()
+        if explicit_role in {
+            "Router / Gateway", "Access Point", "Switch",
+            "Repeater", "Mesh Node", "Firewall", "Controller",
+        }:
+            return explicit_role
+        if explicit_role == "Network equipment candidate":
+            return "Ag ekipmani adayi"
+
         values = [
             row.get(type_col, ""),
             row.get(class_col, ""),
