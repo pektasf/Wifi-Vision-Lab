@@ -19,7 +19,7 @@ Install the development dependencies into the project's virtual environment:
 - Inventory consolidation: one row per resolved profile and preservation of available evidence.
 - CSV persistence: append behavior, header handling, field allow-listing, and overwrite behavior.
 - Device classification: confidence bands, malformed numeric values, evidence retention, and missing input.
-- Background scan jobs: output capture, exit status, failure reporting, cancellation, and exact custom-CIDR confirmation, progress parsing, and structured scan-event encoding/decoding.
+- Background scan jobs: output capture, exit status, failure reporting, cancellation, and exact custom-CIDR confirmation, legacy progress parsing, and structured scan-event encoding/decoding.
 
 ## Safety rules for tests
 
