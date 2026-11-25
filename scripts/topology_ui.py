@@ -59,12 +59,14 @@ def render():
     nodes["_type"] = nodes[type_col].astype(str) if type_col else "unknown"
     nodes["_status"] = nodes[status_col].astype(str) if status_col else "unknown"
 
-    total = len(nodes)
-    online = nodes["_status"].str.lower().isin(
+    # Scope nodes provide context, not device inventory entries.
+    device_nodes = nodes[nodes["_type"].str.lower() != "network_scope"].copy()
+    total = len(device_nodes)
+    online = device_nodes["_status"].str.lower().isin(
         ["online", "up", "active", "responding", "reachable"]
     ).sum()
 
-    gateway_count = nodes["_type"].str.contains(
+    gateway_count = device_nodes["_type"].str.contains(
         "gateway|router", case=False, na=False
     ).sum()
 
@@ -110,8 +112,8 @@ def render():
 
     st.subheader("Ag haritasi")
     st.caption(
-        "Harita yalnizca topology_edges.csv dosyasinda kayitli iliskileri cizer. "
-        "Eksik iliskiler otomatik olarak gercek baglanti kabul edilmez."
+        "Yalnizca dogrudan dogrulanmis iliskiler baglanti olarak cizilir. "
+        "Ayni tarama kapsaminda gorunmek fiziksel baglanti kaniti degildir."
     )
 
     if e_count and edge_from and edge_to:
@@ -206,7 +208,8 @@ def render():
         )
         context_cols = [
             col for col in [
-                edge_from, edge_to, relation_col, confidence_col
+                edge_from, edge_to, relation_col, confidence_col,
+                "evidence_type", "evidence_source", "observed_at", "details"
             ] if col and col in context_edges.columns
         ]
         if context_cols:
@@ -226,7 +229,7 @@ def render():
     )
     selected_type = st.selectbox("Cihaz turu", type_options)
 
-    filtered = nodes.copy()
+    filtered = device_nodes.copy()
     if search.strip():
         mask = filtered.astype(str).apply(
             lambda col: col.str.contains(search.strip(), case=False, na=False)
