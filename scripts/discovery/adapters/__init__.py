@@ -1,0 +1,1 @@
+from scripts.discovery.adapters.windows import WindowsNetworkAdapter

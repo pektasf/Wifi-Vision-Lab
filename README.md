@@ -1,13 +1,23 @@
-# WiFi Vision Lab — Windows taşınabilir paket
+﻿# WiFi Vision Lab
 
-1. ZIP'i çıkarın.
-2. Windows'ta Python 3.10+ kurulu olmalı.
-3. `START.bat` dosyasına çift tıklayın.
-4. İlk çalıştırmada klasör içinde `.venv` oluşturulur ve eksik paketler kurulur. İlk paket kurulumu internet gerektirir.
-5. Uygulama `http://localhost:8501` adresinde açılır.
+Windows icin yerel ag kesfi, cihaz envanteri, ag topolojisi ve Wi-Fi sinyal analizi.
 
-Klasörün tamamını başka Windows bilgisayara kopyalayıp orada da `START.bat` çalıştırabilirsiniz. Her bilgisayar kendi aktif IPv4 ağını otomatik algılar ve kendi CSV verilerini kendi klasöründe tutar. EXE/Docker/bulut gerekmez. Güncellemelerde `.py` dosyalarını değiştirmek yeterlidir.
+## Kurulum
+1. Python 3.10 veya daha yenisini kurun.
+2. GitHub reposunu ZIP olarak indirin ve cikartin.
+3. START.bat dosyasina cift tiklayin.
+4. Ilk calistirmada gerekli paketler otomatik kurulur.
+5. Uygulama http://localhost:8501 adresinde acilir.
 
-**Özellikler:** ping/ARP tabanlı yerel cihaz keşfi, envanter, geçmiş, sezgisel sınıflandırma, davranış ipuçları, basit topoloji, canlı ping takibi ve Windows Wi-Fi kalite/kanal/hız kaydı.
+Ilk kurulum internet baglantisi gerektirir.
 
-**Sınırlar:** Ping yanıtı cihazın açık olduğunu kesin kanıtlamaz. MAC/IP eşleşmeleri fiziksel cihaz kimliğini garanti etmez. Wi-Fi kalite yüzdesi dBm veya mesafe değildir. CSI tabanlı insan/konum algılama bu sürümde yoktur. Yalnızca sahibi olduğunuz veya tarama izniniz olan ağlarda kullanın. Uygulama verileri buluta göndermez; ilk bağımlılık kurulumu internet kullanır.
+## Proje
+- app.py: Streamlit arayuzu
+- main.py: Analiz calistiricisi
+- scripts/: Kesif ve analiz modulleri
+- pages/: Ek arayuz sayfalari
+- data/reference/: OUI uretici verileri
+- data/processed/: Yerel tarama verileri
+
+Yerel tarama verileri ve gizli bilgiler GitHub'a gonderilmez.
+Yalnizca yetkili oldugunuz aglarda kullanin.
