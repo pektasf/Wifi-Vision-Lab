@@ -51,6 +51,7 @@ def test_classifier_maps_confidence_and_preserves_evidence(tmp_path, monkeypatch
     assert [row["confidence"] for row in result] == ["high", "medium", "low"]
     assert result[0]["identity_hint"] == "ap-office"
     assert result[0]["note"] == "hostname and vendor hints"
+    assert result[1]["device_confidence"] == 55
     assert result[1]["vendor_confidence"] == 0
     assert (tmp_path / "device_classification.csv").is_file()
 
