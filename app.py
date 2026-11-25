@@ -162,7 +162,7 @@ def render_scan_job():
                     scan_jobs.cancel(job_id)
                     st.rerun()
         elif job["status"] == "completed":
-            st.success("Tarama ve analiz tamamlandı. Güncel verileri görmek için sayfayı yenileyin.")
+            st.success("Tarama ve analiz tamamlandı. Veriler otomatik olarak güncellendi.")
         elif job["status"] == "failed":
             st.error("Tarama işlemi hata ile sonlandı. Çıktıyı kontrol edin.")
         elif job["status"] == "cancelled":
