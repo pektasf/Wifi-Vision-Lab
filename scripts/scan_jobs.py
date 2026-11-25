@@ -6,6 +6,7 @@ the Streamlit server process. Network observations remain in existing storage.
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -62,6 +63,10 @@ class ScanJobManager:
             "output": deque(maxlen=self._output_limit),
             "error": "",
             "cancel_requested": False,
+            "progress": 0.0,
+            "stage": "Sırada",
+            "completed_targets": 0,
+            "total_targets": 0,
         }
         with self._lock:
             active = [
@@ -108,8 +113,11 @@ class ScanJobManager:
 
             assert process.stdout is not None
             for line in process.stdout:
+                clean_line = line.rstrip("\r\n")
                 with self._lock:
-                    self._jobs[job_id]["output"].append(line.rstrip("\r\n"))
+                    job = self._jobs[job_id]
+                    job["output"].append(clean_line)
+                    self._update_progress(job, clean_line)
             return_code = process.wait()
             with self._lock:
                 job = self._jobs[job_id]
@@ -130,6 +138,37 @@ class ScanJobManager:
                 self._processes.pop(job_id, None)
             if process is not None and process.stdout is not None:
                 process.stdout.close()
+
+    @staticmethod
+    def _update_progress(job: dict[str, Any], line: str) -> None:
+        """Extract bounded, user-facing progress from existing scan log lines."""
+        stage_match = re.search(r"\[(\d+)/4\]", line)
+        if stage_match:
+            stage_number = int(stage_match.group(1))
+            stage_labels = {
+                1: "Ağ algılanıyor",
+                2: "Cihazlar taranıyor",
+                3: "ARP ve cihaz bilgileri okunuyor",
+                4: "Sonuçlar kaydediliyor",
+            }
+            job["stage"] = stage_labels.get(stage_number, "Çalışıyor")
+            job["progress"] = max(job["progress"], (stage_number - 1) / 4)
+
+        target_match = re.search(r"Tarama:\s*(\d+)/(\d+)", line)
+        if target_match:
+            completed = int(target_match.group(1))
+            total = max(1, int(target_match.group(2)))
+            job["completed_targets"] = completed
+            job["total_targets"] = total
+            job["stage"] = "Cihazlar taranıyor"
+            job["progress"] = max(
+                job["progress"],
+                0.25 + 0.60 * min(1.0, completed / total),
+            )
+
+        if "Tarama tamamlandi." in line or "Scan complete:" in line:
+            job["stage"] = "Tamamlandı"
+            job["progress"] = 1.0
 
     def cancel(self, job_id: str) -> bool:
         """Request cancellation. Returns False when the job is already terminal."""
@@ -161,6 +200,10 @@ class ScanJobManager:
                 "output": list(job["output"]),
                 "error": job["error"],
                 "cancel_requested": job["cancel_requested"],
+                "progress": job["progress"],
+                "stage": job["stage"],
+                "completed_targets": job["completed_targets"],
+                "total_targets": job["total_targets"],
             }
 
 
