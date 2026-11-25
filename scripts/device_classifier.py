@@ -1,5 +1,14 @@
-﻿import pandas as pd
+import pandas as pd
 from scripts.common import DATA, stamp, overwrite_rows
+
+
+def _score(value):
+    """Parse one confidence score without affecting the other score."""
+    try:
+        return int(float(value))
+    except (ValueError, TypeError, OverflowError):
+        return 0
+
 
 def run():
     source = DATA / "device_intelligence.csv"
@@ -11,11 +20,8 @@ def run():
     rows = []
 
     for _, r in df.iterrows():
-        try:
-            vendor_score = int(float(r.get("vendor_confidence", 0)))
-            device_score = int(float(r.get("device_confidence", 0)))
-        except (ValueError, TypeError):
-            vendor_score, device_score = 0, 0
+        vendor_score = _score(r.get("vendor_confidence", 0))
+        device_score = _score(r.get("device_confidence", 0))
 
         if device_score >= 75:
             confidence = "high"
@@ -46,6 +52,7 @@ def run():
     overwrite_rows(DATA / "device_classification.csv", rows, fields)
     print(f"Cihaz sınıflandırması tamamlandı: {len(rows)} kayıt")
     return rows
+
 
 if __name__ == "__main__":
     run()
