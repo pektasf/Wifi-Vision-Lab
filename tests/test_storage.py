@@ -5,7 +5,7 @@ import pytest
 
 from scripts.storage import (
     add_event, add_observation, connect, import_legacy_csvs,
-    initialize_database, upsert_device,
+    initialize_database, read_dataset, upsert_device, write_dataset_snapshot,
 )
 
 
@@ -21,7 +21,7 @@ def test_initialize_database_is_idempotent_and_versioned(tmp_path):
     initialize_database(db_path)
     initialize_database(db_path)
     with connect(db_path) as connection:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 1
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
         tables = {
             row["name"] for row in connection.execute(
                 "SELECT name FROM sqlite_master WHERE type='table'"
@@ -133,3 +133,39 @@ def test_changed_csv_adds_only_new_rows(tmp_path):
     with connect(db_path) as connection:
         assert connection.execute("SELECT COUNT(*) FROM observations").fetchone()[0] == 2
         assert connection.execute("SELECT COUNT(*) FROM legacy_records").fetchone()[0] == 2
+
+
+def test_dataset_snapshot_round_trip_and_empty_snapshot(tmp_path):
+    db_path = tmp_path / "wifi.db"
+    rows = [
+        {"ip": "192.168.1.2", "hostname": "router"},
+        {"ip": "192.168.1.3", "hostname": "laptop"},
+    ]
+
+    assert read_dataset("device_inventory.csv", db_path) is None
+    assert write_dataset_snapshot("device_inventory.csv", rows, db_path) == 2
+    assert read_dataset("device_inventory.csv", db_path) == rows
+
+    assert write_dataset_snapshot("empty.csv", [], db_path) == 0
+    assert read_dataset("empty.csv", db_path) == []
+
+
+def test_legacy_import_populates_runtime_dataset_snapshot(tmp_path):
+    data_dir = tmp_path / "processed"
+    data_dir.mkdir()
+    source = data_dir / "device_inventory.csv"
+    rows = [{
+        "timestamp": "2026-01-01T10:00:00+03:00",
+        "ip": "192.168.1.20",
+        "mac": "AA:BB:CC:DD:EE:FF",
+        "hostname": "test-device",
+        "status": "responding",
+    }]
+    write_csv(
+        source, ["timestamp", "ip", "mac", "hostname", "status"], rows
+    )
+    db_path = tmp_path / "wifi.db"
+
+    import_legacy_csvs(data_dir, db_path)
+
+    assert read_dataset("device_inventory.csv", db_path) == rows
