@@ -6,6 +6,7 @@ import sys
 import pandas as pd
 import streamlit as st
 from scripts.ui_theme import apply_theme
+from scripts.scan_jobs import scan_jobs
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data" / "processed"
@@ -309,72 +310,81 @@ def page_header(title, description=""):
 
 
 def run_scan():
-    main_file = ROOT / "main.py"
-
-    if not main_file.exists():
-        st.error("main.py bulunamadı. Tarama başlatılamadı.")
-        return
-
     custom_cidr = str(st.session_state.get("scan_cidr", "")).strip()
     approved = bool(st.session_state.get("scan_approved", False))
     confirmation = str(st.session_state.get("scan_confirmation", "")).strip()
 
-    if custom_cidr and not approved:
-        st.error("Özel ağ taraması için yetki onayını işaretlemelisiniz.")
+    try:
+        job_id = scan_jobs.start(
+            ROOT,
+            scan_cidr=custom_cidr,
+            approved=approved,
+            confirmation=confirmation,
+        )
+    except ValueError as exc:
+        st.error(str(exc))
         return
-    if custom_cidr and confirmation != custom_cidr:
-        st.error("Onay alanına özel CIDR değerini aynen tekrar yazmalısınız.")
+    except FileNotFoundError:
+        st.error("main.py bulunamadı. Tarama başlatılamadı.")
+        return
+    except OSError as exc:
+        st.error(f"Tarama işi başlatılamadı: {exc}")
         return
 
-    scan_env = os.environ.copy()
-    for key in (
-        "WIFI_VISION_SCAN_CIDR",
-        "WIFI_VISION_SCAN_APPROVED",
-        "WIFI_VISION_SCAN_CONFIRMATION",
+    st.session_state["active_scan_job_id"] = job_id
+    st.success("Tarama arka planda başlatıldı. Diğer sayfalarda çalışmaya devam edebilirsiniz.")
+
+
+@st.fragment(run_every="1s")
+def render_scan_job():
+    job_id = st.session_state.get("active_scan_job_id")
+    if not job_id:
+        return
+
+    job = scan_jobs.get(job_id)
+    if job is None:
+        st.session_state.pop("active_scan_job_id", None)
+        return
+
+    labels = {
+        "queued": "Sırada",
+        "running": "Çalışıyor",
+        "completed": "Tamamlandı",
+        "failed": "Hata",
+        "cancelled": "İptal edildi",
+    }
+    with st.expander(
+        f"Arka plan taraması — {labels.get(job['status'], job['status'])}",
+        expanded=job["status"] in {"queued", "running"},
     ):
-        scan_env.pop(key, None)
-
-    if custom_cidr:
-        scan_env["WIFI_VISION_SCAN_CIDR"] = custom_cidr
-        scan_env["WIFI_VISION_SCAN_APPROVED"] = "1"
-        scan_env["WIFI_VISION_SCAN_CONFIRMATION"] = confirmation
-
-    with st.spinner("Ağ taraması ve analiz çalışıyor..."):
-        try:
-            result = subprocess.run(
-                [sys.executable, str(main_file)],
-                cwd=ROOT,
-                env=scan_env,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace"
+        st.caption(f"İş kimliği: {job_id}")
+        st.caption(job["stage"])
+        st.progress(float(job["progress"]))
+        if job["total_targets"]:
+            st.caption(
+                f"Hedefler: {job['completed_targets']:,} / {job['total_targets']:,}"
             )
-        except FileNotFoundError:
-            st.error("Python çalıştırıcısı bulunamadı. Uygulama ortamını kontrol edin.")
-            return
-        except subprocess.TimeoutExpired:
-            st.error("Tarama işlemi zaman aşımına uğradı.")
-            return
-        except OSError as exc:
-            st.error(f"Tarama işlemi başlatılamadı: {exc}")
-            return
-
-    if result.returncode == 0:
-        st.success("Tarama ve analiz tamamlandı.")
-    else:
-        st.error("Tarama sırasında hata oluştu. Ayrıntılar aşağıda.")
-
-    if result.stdout:
-        with st.expander("İşlem çıktıları"):
-            st.code(result.stdout)
-
-    if result.stderr:
-        with st.expander("Hata ayrıntıları"):
-            st.code(result.stderr)
-
-    st.rerun()
-
+        if job["return_code"] is not None:
+            st.caption(f"Çıkış kodu: {job['return_code']}")
+        if job["error"]:
+            st.error(job["error"])
+        if job["output"]:
+            st.code("\n".join(job["output"][-80:]), language="text")
+        if job["status"] in {"queued", "running"}:
+            left, right = st.columns(2)
+            with left:
+                if st.button("Durumu yenile", key="refresh_scan_job", width="stretch"):
+                    st.rerun()
+            with right:
+                if st.button("Taramayı iptal et", key="cancel_scan_job", width="stretch"):
+                    scan_jobs.cancel(job_id)
+                    st.rerun()
+        elif job["status"] == "completed":
+            st.success("Tarama ve analiz tamamlandı. Güncel verileri görmek için sayfayı yenileyin.")
+        elif job["status"] == "failed":
+            st.error("Tarama işlemi hata ile sonlandı. Çıktıyı kontrol edin.")
+        elif job["status"] == "cancelled":
+            st.warning("Tarama kullanıcı tarafından iptal edildi.")
 
 def show_table(data, height=450):
     if data is None or data.empty:
@@ -1464,6 +1474,8 @@ with st.sidebar:
         )
     if st.button("A\u011f taramas\u0131n\u0131 ba\u015flat", key="fixed_nav_scan", width="stretch"):
         run_scan()
+
+    render_scan_job()
 
     st.markdown(
         '<div class="sidebar-footer">Yerel veri depolama<br>WiFi Vision Lab | Local Edition</div>',
