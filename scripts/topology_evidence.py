@@ -64,3 +64,21 @@ def prepare_association_history(history):
         "_observed_at_utc", ascending=False, na_position="last", kind="stable"
     )
     return result.drop(columns=["_observed_at_utc"]).reset_index(drop=True)
+
+
+
+def prepare_verified_edge_options(edges, edge_from, edge_to):
+    """Build unique, stable labels for selecting verified relationship rows."""
+    if edges.empty or not edge_from or not edge_to:
+        return []
+    options = []
+    for position, (_, edge) in enumerate(edges.reset_index(drop=True).iterrows(), start=1):
+        source = str(edge.get(edge_from, "") or "").strip()
+        target = str(edge.get(edge_to, "") or "").strip()
+        relation = str(edge.get("relation", "relationship") or "relationship").strip()
+        observed_at = str(edge.get("observed_at", "") or "time unknown").strip()
+        options.append({
+            "index": position - 1,
+            "label": f"{position}. {source} → {target} | {relation} | {observed_at}",
+        })
+    return options

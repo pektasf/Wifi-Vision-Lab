@@ -4,6 +4,7 @@ import streamlit as st
 
 from scripts.topology_evidence import (
     prepare_association_history,
+    prepare_verified_edge_options,
     split_topology_edges,
 )
 
@@ -243,22 +244,16 @@ def render():
 
     if not verified_edges.empty:
         st.subheader("Dogrulanmis iliski ayrintisi")
-        edge_labels = []
-        edge_rows = []
-        for _, edge in verified_edges.reset_index(drop=True).iterrows():
-            label = (
-                f"{edge[edge_from]} -> {edge[edge_to]} | "
-                f"{edge.get('relation', 'iliski')} | "
-                f"{edge.get('observed_at', '') or 'zaman bilinmiyor'}"
-            )
-            edge_labels.append(label)
-            edge_rows.append(edge)
-        selected_label = st.selectbox(
+        edge_options = prepare_verified_edge_options(
+            verified_edges, edge_from, edge_to
+        )
+        selected_index = st.selectbox(
             "Incelenecek baglanti",
-            edge_labels,
+            options=[option["index"] for option in edge_options],
+            format_func=lambda index: edge_options[index]["label"],
             key="topology_verified_edge_detail",
         )
-        selected_edge = edge_rows[edge_labels.index(selected_label)]
+        selected_edge = verified_edges.reset_index(drop=True).iloc[selected_index]
         left, right = st.columns(2)
         with left:
             st.markdown("**Kanıt kaynağı**")

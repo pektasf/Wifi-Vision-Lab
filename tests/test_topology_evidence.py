@@ -244,3 +244,31 @@ def test_association_history_without_timestamp_preserves_reverse_file_order():
     result = prepare_association_history(history)
 
     assert result["ap_bssid"].tolist() == ["second", "first"]
+
+
+
+def test_verified_edge_options_keep_duplicate_relationships_selectable():
+    from scripts.topology_evidence import prepare_verified_edge_options
+
+    edges = pd.DataFrame([
+        {"source": "ap", "target": "client", "relation": "wifi_association",
+         "observed_at": "2026-01-01T10:00:00Z"},
+        {"source": "ap", "target": "client", "relation": "wifi_association",
+         "observed_at": "2026-01-01T10:00:00Z"},
+    ])
+
+    options = prepare_verified_edge_options(edges, "source", "target")
+
+    assert [item["index"] for item in options] == [0, 1]
+    assert len({item["label"] for item in options}) == 2
+    assert options[0]["label"].startswith("1. ")
+    assert options[1]["label"].startswith("2. ")
+
+
+def test_verified_edge_options_are_empty_without_usable_edge_schema():
+    from scripts.topology_evidence import prepare_verified_edge_options
+
+    assert prepare_verified_edge_options(pd.DataFrame(), "source", "target") == []
+    assert prepare_verified_edge_options(
+        pd.DataFrame([{"source": "a", "target": "b"}]), None, None
+    ) == []
