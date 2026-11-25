@@ -218,3 +218,29 @@ def test_missing_confidence_is_never_promoted_to_verified():
 
     assert groups["verified"].empty
     assert len(groups["unverified"]) == 1
+
+
+
+def test_association_history_is_sorted_newest_first_across_timezones():
+    from scripts.topology_evidence import prepare_association_history
+
+    history = pd.DataFrame([
+        {"observed_at": "2026-01-01T10:00:00+03:00", "ap_bssid": "older"},
+        {"observed_at": "2026-01-01T08:30:00Z", "ap_bssid": "newer"},
+        {"observed_at": "invalid-date", "ap_bssid": "unknown"},
+    ])
+
+    result = prepare_association_history(history)
+
+    assert result["ap_bssid"].tolist() == ["newer", "older", "unknown"]
+    assert "_observed_at_utc" not in result.columns
+
+
+def test_association_history_without_timestamp_preserves_reverse_file_order():
+    from scripts.topology_evidence import prepare_association_history
+
+    history = pd.DataFrame([{"ap_bssid": "first"}, {"ap_bssid": "second"}])
+
+    result = prepare_association_history(history)
+
+    assert result["ap_bssid"].tolist() == ["second", "first"]
