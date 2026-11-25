@@ -301,6 +301,9 @@ def load(filename):
 
         rows = read_dataset(filename)
         if rows is not None:
+            if not rows and path.exists():
+                # Preserve CSV headers for empty datasets without reading their records.
+                return pd.read_csv(path, dtype=str, nrows=0).fillna("")
             return pd.DataFrame(rows).fillna("")
     except Exception as exc:
         st.warning(f"SQLite veri deposu okunamadı; CSV yedeği deneniyor: {exc}")
