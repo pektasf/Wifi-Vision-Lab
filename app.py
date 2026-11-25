@@ -359,6 +359,8 @@ def render_scan_job():
     ):
         st.caption(f"İş kimliği: {job_id}")
         st.caption(job["stage"])
+        if job.get("progress_message"):
+            st.caption(job["progress_message"])
         st.progress(float(job["progress"]))
         if job["total_targets"]:
             st.caption(
