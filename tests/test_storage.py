@@ -4,8 +4,9 @@ import sqlite3
 import pytest
 
 from scripts.storage import (
-    add_event, add_observation, connect, import_legacy_csvs,
-    initialize_database, read_dataset, upsert_device, write_dataset_snapshot, MIGRATIONS,
+    add_event, add_observation, backup_database, connect, import_legacy_csvs,
+    initialize_database, read_dataset, restore_database, upsert_device,
+    write_dataset_snapshot, MIGRATIONS,
 )
 
 
