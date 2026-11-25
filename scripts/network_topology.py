@@ -226,10 +226,12 @@ def build_topology(inventory, profiles=None, intelligence=None,
                 "details": "Configuration relationship only; not a physical link.",
             })
 
-    # Only a direct, verified Windows WLAN association may create an AP-client edge.
-    seen_associations = set()
+    # Only the latest direct, verified WLAN association per client is a
+    # current topology edge. Older observations remain in the local history CSV
+    # and must not be drawn as if the client were still attached to old APs.
+    latest_by_client = {}
     if not ap_relationships.empty:
-        for _, row in ap_relationships.iterrows():
+        for position, (_, row) in enumerate(ap_relationships.iterrows()):
             if (
                 str(row.get("verification_status", "")).strip().lower() != "verified"
                 or str(row.get("evidence_type", "")).strip().lower() != "direct_association"
@@ -240,56 +242,66 @@ def build_topology(inventory, profiles=None, intelligence=None,
             if not client_mac or not ap_bssid:
                 continue
 
-            association = (client_mac, ap_bssid)
-            if association in seen_associations:
-                continue
-            seen_associations.add(association)
+            observed_at = str(row.get("observed_at", "")).strip()
+            parsed_time = pd.to_datetime(observed_at, utc=True, errors="coerce")
+            # Preserve file order as a deterministic fallback for missing or
+            # malformed timestamps; the later row wins ties.
+            sort_key = (
+                1 if pd.notna(parsed_time) else 0,
+                parsed_time.value if pd.notna(parsed_time) else position,
+                position,
+            )
+            previous = latest_by_client.get(client_mac)
+            if previous is None or sort_key >= previous[0]:
+                latest_by_client[client_mac] = (sort_key, row.to_dict())
 
-            client_id = mac_to_node.get(client_mac, f"MAC:{client_mac}")
-            if client_id not in nodes_by_id:
-                nodes_by_id[client_id] = {
-                    "id": client_id,
-                    "label": str(row.get("client_hostname", "") or "Observed Wi-Fi client"),
-                    "node_type": "wifi_client",
-                    "ip": str(row.get("client_ip", "")),
-                    "mac": client_mac,
-                    "vendor": "",
-                    "status": "current_or_historical_association",
-                    "classification": "Wi-Fi client interface",
-                    "evidence_type": "direct_association",
-                    "evidence_source": str(row.get("source", "") or "Windows WLAN"),
-                    "confidence": "verified",
-                    "details": "Client MAC was reported by the local Windows WLAN interface.",
-                }
-
-            ap_id = f"BSSID:{ap_bssid}"
-            if ap_id not in nodes_by_id:
-                ssid = str(row.get("ssid", "")).strip()
-                nodes_by_id[ap_id] = {
-                    "id": ap_id,
-                    "label": f"{ssid} (AP radio)" if ssid else "Observed AP radio",
-                    "node_type": "access_point_radio",
-                    "ip": "",
-                    "mac": ap_bssid,
-                    "vendor": "",
-                    "status": "associated_ap_radio",
-                    "classification": "BSSID; physical AP identity may differ",
-                    "evidence_type": "direct_association",
-                    "evidence_source": str(row.get("source", "") or "Windows WLAN"),
-                    "confidence": "verified",
-                    "details": "BSSID reported by the connected Windows WLAN interface; this identifies a radio interface, not necessarily the whole AP device.",
-                }
-
-            edges.append({
-                "source": ap_id,
-                "target": client_id,
-                "relation": "wifi_association",
-                "confidence": "verified",
+    for client_mac, (_, row) in latest_by_client.items():
+        ap_bssid = _valid_mac(row.get("ap_bssid", ""))
+        client_id = mac_to_node.get(client_mac, f"MAC:{client_mac}")
+        if client_id not in nodes_by_id:
+            nodes_by_id[client_id] = {
+                "id": client_id,
+                "label": str(row.get("client_hostname", "") or "Observed Wi-Fi client"),
+                "node_type": "wifi_client",
+                "ip": str(row.get("client_ip", "")),
+                "mac": client_mac,
+                "vendor": "",
+                "status": "current_association_observed",
+                "classification": "Wi-Fi client interface",
                 "evidence_type": "direct_association",
                 "evidence_source": str(row.get("source", "") or "Windows WLAN"),
-                "observed_at": str(row.get("observed_at", "")),
-                "details": "Direct association reported by the local Windows WLAN interface.",
-            })
+                "confidence": "verified",
+                "details": "Latest recorded client association from the local Windows WLAN interface; not a live continuous connection check.",
+            }
+
+        ap_id = f"BSSID:{ap_bssid}"
+        if ap_id not in nodes_by_id:
+            ssid = str(row.get("ssid", "")).strip()
+            nodes_by_id[ap_id] = {
+                "id": ap_id,
+                "label": f"{ssid} (AP radio)" if ssid else "Observed AP radio",
+                "node_type": "access_point_radio",
+                "ip": "",
+                "mac": ap_bssid,
+                "vendor": "",
+                "status": "latest_associated_ap_radio",
+                "classification": "BSSID; physical AP identity may differ",
+                "evidence_type": "direct_association",
+                "evidence_source": str(row.get("source", "") or "Windows WLAN"),
+                "confidence": "verified",
+                "details": "BSSID from the latest recorded WLAN association; this identifies a radio interface, not necessarily the whole AP device.",
+            }
+
+        edges.append({
+            "source": ap_id,
+            "target": client_id,
+            "relation": "wifi_association",
+            "confidence": "verified",
+            "evidence_type": "direct_association",
+            "evidence_source": str(row.get("source", "") or "Windows WLAN"),
+            "observed_at": str(row.get("observed_at", "")),
+            "details": "Latest recorded direct association reported by the local Windows WLAN interface; this is not a continuous live-state guarantee.",
+        })
 
     return list(nodes_by_id.values()), edges
 
