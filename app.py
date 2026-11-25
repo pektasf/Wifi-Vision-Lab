@@ -1097,7 +1097,7 @@ with st.sidebar:
 
     st.markdown(
         '<div class="brand-name">WiFi Vision Lab</div>'
-        <div class="brand-description">YEREL AĞ GÖZLEM PLATFORMU</div>,
+        '<div class="brand-description">YEREL AĞ GÖZLEM PLATFORMU</div>',
         unsafe_allow_html=True
     )
 
