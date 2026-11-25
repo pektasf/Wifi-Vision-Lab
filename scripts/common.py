@@ -83,9 +83,10 @@ def write_rows(
             existing_rows = list(reader)
 
     snapshot = [*existing_rows, *new_rows]
-    from scripts.storage import write_dataset_snapshot
+    if path.parent.resolve() == DATA.resolve():
+        from scripts.storage import write_dataset_snapshot
 
-    write_dataset_snapshot(path.name, snapshot)
+        write_dataset_snapshot(path.name, snapshot)
     _atomic_write_rows(path, snapshot, fields)
 
 
@@ -97,7 +98,8 @@ def overwrite_rows(
     """Persist the active SQLite snapshot, then export its CSV compatibility copy."""
     path = Path(path)
     snapshot = list(rows)
-    from scripts.storage import write_dataset_snapshot
+    if path.parent.resolve() == DATA.resolve():
+        from scripts.storage import write_dataset_snapshot
 
-    write_dataset_snapshot(path.name, snapshot)
+        write_dataset_snapshot(path.name, snapshot)
     _atomic_write_rows(path, snapshot, fields)
