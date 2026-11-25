@@ -254,43 +254,43 @@ def render():
                 columns.append(col)
 
         if columns:
-            st.dataframe(
-                filtered[columns],
-                width="stretch",
-                hide_index=True,
-                height=390
-            )
+            st.caption(f"{len(filtered):,} cihaz")
+            records = list(filtered.iterrows())
+            for offset in range(0, len(records), 3):
+                card_cols = st.columns(3)
+                for card_col, (idx, row) in zip(card_cols, records[offset:offset + 3]):
+                    with card_col:
+                        with st.container(border=True):
+                            st.markdown(f"**{str(row.get(name_col, '') or 'İsimsiz cihaz')}**")
+                            st.caption(str(row.get(ip_col, '') or 'IP bilinmiyor'))
+                            st.write(str(row.get("Altyapi rolu", "Belirsiz")))
+                            st.caption(str(row.get("KanIt durumu", "Bilinmiyor")))
 
         if not filtered.empty:
-            st.markdown("**Cihaz inceleme**")
+            @st.dialog("Altyapı cihazı", width="large")
+            def show_infrastructure_device(selected):
+                left, right = st.columns(2)
+                for column, fields in [
+                    (left, [(name_col, "Cihaz adı"), (ip_col, "IP adresi"), (mac_col, "MAC adresi"), (vendor_col, "Üretici")]),
+                    (right, [("model", "Model"), ("firmware", "Firmware"), ("ssid", "SSID"), ("channel", "Kanal"), ("frequency", "Frekans"), ("band", "Bant")]),
+                ]:
+                    with column:
+                        for key, label in fields:
+                            st.markdown(f"**{label}**")
+                            st.write(str(selected.get(key, "") or "Bilinmiyor"))
+                st.caption(f"Rol: {selected['Altyapi rolu']} · Kanıt: {selected['KanIt durumu']}")
+
             selected_index = st.selectbox(
-                "Cihaz sec",
+                "Ayrıntılarını aç",
                 filtered.index.tolist(),
                 format_func=lambda idx: (
-                    str(filtered.loc[idx, name_col] or "Isimsiz cihaz")
-                    + " | "
-                    + str(filtered.loc[idx, ip_col] or "IP yok")
-                )
+                    str(filtered.loc[idx, name_col] or "İsimsiz cihaz")
+                    + " · " + str(filtered.loc[idx, ip_col] or "IP yok")
+                ),
+                key="infrastructure_device_select",
             )
-            selected = filtered.loc[selected_index]
-
-            left, right = st.columns(2)
-            with left:
-                st.markdown("**Kimlik bilgileri**")
-                for label, col in [
-                    ("Cihaz adi", name_col),
-                    ("IP adresi", ip_col),
-                    ("MAC adresi", mac_col),
-                    ("Uretici", vendor_col)
-                ]:
-                    st.write(f"{label}: {selected.get(col, '') or 'Bilinmiyor'}")
-
-            with right:
-                st.markdown("**Teknik bilgiler**")
-                for label in ["model", "firmware", "ssid", "channel", "frequency", "band"]:
-                    st.write(f"{label}: {selected.get(label, '') or 'Bilinmiyor'}")
-                st.write(f"Rol: {selected['Altyapi rolu']}")
-                st.write(f"KanIt: {selected['KanIt durumu']}")
+            if st.button("Seçili cihazın detaylarını aç", key="infrastructure_open_detail"):
+                show_infrastructure_device(filtered.loc[selected_index])
 
         if not devices.empty:
             st.download_button(
