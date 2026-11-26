@@ -82,7 +82,7 @@ def normalize_event_frames(frames: dict[str, pd.DataFrame]) -> pd.DataFrame:
 
     result = pd.DataFrame(records, columns=columns)
     result["_parsed_time"] = pd.to_datetime(
-        result["event_time"], utc=True, errors="coerce"
+        result["event_time"], format="mixed", utc=True, errors="coerce"
     )
     result["_order"] = range(len(result))
     result = result.sort_values(
