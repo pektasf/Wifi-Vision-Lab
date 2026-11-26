@@ -975,79 +975,293 @@ def signal_page():
 def spatial_intelligence_page():
     page_header(
         "Mekânsal Zekâ",
-        "Laptop Wi-Fi donanımının konumlandırma ve pasif algılama için sağlayabildiği verileri denetleyin."
-    )
-    st.info(
-        "Bu ilk denetim yalnızca mevcut laptop'ın sürücü ve arayüz bilgilerini okur. "
-        "Ağ taraması başlatmaz, SSID/BSSID kaydetmez ve adaptör ayarlarını değiştirmez."
+        "Laptop Wi-Fi yetenekleri, yerel kat planı ve mekânsal yerleşim."
     )
 
-    if st.button("Laptop Wi-Fi yeteneklerini denetle", key="spatial_capability_audit"):
-        from scripts.spatial_capabilities import collect_capabilities
-        with st.spinner("Wi-Fi adaptörü ve Windows sürücü bilgileri okunuyor..."):
-            st.session_state["spatial_capability_report"] = collect_capabilities()
-
-    report = st.session_state.get("spatial_capability_report")
-    if not report:
-        st.caption(
-            "Henüz denetim yapılmadı. Başlamak için yukarıdaki butona basın. "
-            "Bu işlem ağ keşfi veya paket yakalama yapmaz."
+    with st.expander("Laptop Wi-Fi donanım denetimi", expanded=False):
+        st.info(
+            "Bu denetim yalnızca laptop'ın sürücü ve arayüz bilgilerini okur. "
+            "Ağ taraması başlatmaz, SSID/BSSID kaydetmez ve adaptör ayarlarını değiştirmez."
         )
+        if st.button("Laptop Wi-Fi yeteneklerini denetle", key="spatial_capability_audit"):
+            from scripts.spatial_capabilities import collect_capabilities
+            with st.spinner("Wi-Fi adaptörü ve Windows sürücü bilgileri okunuyor..."):
+                st.session_state["spatial_capability_report"] = collect_capabilities()
+
+        report = st.session_state.get("spatial_capability_report")
+        if not report:
+            st.caption("Henüz donanım denetimi yapılmadı.")
+        else:
+            st.caption(
+                f"Denetim zamanı: {report.get('generated_at', '-')} | "
+                f"İşletim sistemi: {report.get('operating_system', '-')}"
+            )
+            driver = report.get("driver", {})
+            adapters = report.get("physical_adapters", [])
+            interface = report.get("active_interface", {})
+
+            st.subheader("Wi-Fi adaptörü ve sürücü")
+            if adapters:
+                st.dataframe(pd.DataFrame(adapters), width="stretch", hide_index=True)
+            elif driver:
+                st.write(driver)
+            else:
+                st.warning("Adaptör ayrıntısı alınamadı.")
+
+            if driver:
+                with st.expander("Windows Wi-Fi sürücü ayrıntıları"):
+                    st.json(driver)
+
+            st.subheader("Aktif Wi-Fi arayüzü")
+            if interface:
+                a, b, c = st.columns(3)
+                a.metric("Bağlantı", "Bağlı" if interface.get("connected") else "Bağlı değil")
+                signal = interface.get("signal_percent")
+                b.metric("Sinyal", f"{signal}%" if signal is not None else "Alınamadı")
+                c.metric("Kanal", interface.get("channel") or "Bilinmiyor")
+                st.caption(f"Radyo tipi: {interface.get('radio_type') or 'Bilinmiyor'}")
+            else:
+                st.warning("Aktif arayüz bilgisi alınamadı.")
+
+            capabilities = report.get("capabilities", {})
+            rows = [
+                {
+                    "Yetenek": key.replace("_", " ").upper(),
+                    "Durum": value.get("status", "unknown"),
+                    "Açıklama": value.get("detail", ""),
+                }
+                for key, value in capabilities.items()
+            ]
+            if rows:
+                st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+            with st.expander("Denetim komutlarının durumu"):
+                st.json(report.get("commands", {}))
+
+            st.caption(
+                "Bilinmiyor durumu desteklenmiyor anlamına gelmez. CSI, monitor mode ve RTT "
+                "ancak gerçek donanım/sürücü kanıtıyla doğrulanabilir. Sinyal yüzdesi tek başına "
+                "metre cinsinden mesafe veya başka cihazların konumunu göstermez."
+            )
+
+    st.divider()
+    st.subheader("Yerel kat planı")
+    st.caption(
+        "Kat ölçülerini metre cinsinden tanımlayın; odaları ve erişim noktası gibi "
+        "referansları harita üzerinde elle yerleştirin. Bu bilgiler yalnızca yerel SQLite'ta saklanır."
+    )
+
+    from scripts.spatial_core import (
+        create_floor,
+        list_anchors,
+        list_floors,
+        list_zones,
+        save_anchor,
+        save_zone,
+    )
+
+    with st.form("spatial_create_floor_form", clear_on_submit=True):
+        st.markdown("**Yeni kat oluştur**")
+        floor_name = st.text_input("Kat adı", placeholder="Örn. Zemin kat")
+        floor_col_a, floor_col_b = st.columns(2)
+        with floor_col_a:
+            floor_width = st.number_input(
+                "Genişlik (metre)", min_value=0.1, max_value=10000.0,
+                value=10.0, step=0.5,
+            )
+        with floor_col_b:
+            floor_height = st.number_input(
+                "Yükseklik (metre)", min_value=0.1, max_value=10000.0,
+                value=8.0, step=0.5,
+            )
+        create_floor_clicked = st.form_submit_button("Kat planını kaydet")
+
+    if create_floor_clicked:
+        try:
+            create_floor(floor_name, floor_width, floor_height)
+        except ValueError as exc:
+            st.error(str(exc))
+        else:
+            st.success("Kat planı yerel veritabanına kaydedildi.")
+            st.rerun()
+
+    floors = list_floors()
+    if not floors:
+        st.info("Henüz kat planı yok. Önce bir kat oluşturun.")
         return
 
+    floor_by_id = {floor["floor_id"]: floor for floor in floors}
+    selected_floor_id = st.selectbox(
+        "Düzenlenecek kat",
+        options=list(floor_by_id),
+        format_func=lambda floor_id: floor_by_id[floor_id]["name"],
+        key="spatial_selected_floor",
+    )
+    selected_floor = floor_by_id[selected_floor_id]
+    zones = list_zones(selected_floor_id)
+    anchors = list_anchors(selected_floor_id)
+
     st.caption(
-        f"Denetim zamanı: {report.get('generated_at', '-')} | "
-        f"İşletim sistemi: {report.get('operating_system', '-')}"
+        f"Plan boyutu: {selected_floor['width_m']:g} × "
+        f"{selected_floor['height_m']:g} metre"
     )
 
-    driver = report.get("driver", {})
-    adapters = report.get("physical_adapters", [])
-    interface = report.get("active_interface", {})
+    st.markdown("**Bölge / oda ekle**")
+    with st.form("spatial_create_zone_form", clear_on_submit=True):
+        zone_name = st.text_input("Bölge adı", placeholder="Örn. Salon")
+        z1, z2, z3, z4 = st.columns(4)
+        with z1:
+            zone_x = st.number_input("X (m)", min_value=0.0, max_value=float(selected_floor["width_m"]), value=0.0, step=0.5, key="spatial_zone_x")
+        with z2:
+            zone_y = st.number_input("Y (m)", min_value=0.0, max_value=float(selected_floor["height_m"]), value=0.0, step=0.5, key="spatial_zone_y")
+        with z3:
+            zone_width = st.number_input("Genişlik (m)", min_value=0.1, max_value=float(selected_floor["width_m"]), value=min(3.0, float(selected_floor["width_m"])), step=0.5, key="spatial_zone_width")
+        with z4:
+            zone_height = st.number_input("Yükseklik (m)", min_value=0.1, max_value=float(selected_floor["height_m"]), value=min(3.0, float(selected_floor["height_m"])), step=0.5, key="spatial_zone_height")
+        save_zone_clicked = st.form_submit_button("Bölgeyi kaydet")
 
-    st.subheader("Wi-Fi adaptörü ve sürücü")
-    if adapters:
-        st.dataframe(pd.DataFrame(adapters), width="stretch", hide_index=True)
-    elif driver:
-        st.write(driver)
-    else:
-        st.warning("Adaptör ayrıntısı alınamadı.")
+    if save_zone_clicked:
+        try:
+            save_zone(
+                selected_floor_id, zone_name, zone_x, zone_y,
+                zone_width, zone_height,
+            )
+        except ValueError as exc:
+            st.error(str(exc))
+        else:
+            st.success("Bölge kaydedildi.")
+            st.rerun()
 
-    if driver:
-        with st.expander("Windows Wi-Fi sürücü ayrıntıları", expanded=True):
-            st.json(driver)
+    st.markdown("**Referans noktası / erişim noktası ekle**")
+    with st.form("spatial_create_anchor_form", clear_on_submit=True):
+        anchor_name = st.text_input("Nokta adı", placeholder="Örn. Router - çalışma odası")
+        anchor_type = st.selectbox(
+            "Nokta türü",
+            options=["access_point", "laptop", "sensor", "manual_reference"],
+            format_func=lambda value: {
+                "access_point": "Erişim noktası",
+                "laptop": "Laptop",
+                "sensor": "Sensör",
+                "manual_reference": "Referans noktası",
+            }[value],
+        )
+        a1, a2 = st.columns(2)
+        with a1:
+            anchor_x = st.number_input(
+                "Nokta X (m)", min_value=0.0,
+                max_value=float(selected_floor["width_m"]),
+                value=0.0, step=0.5, key="spatial_anchor_x",
+            )
+        with a2:
+            anchor_y = st.number_input(
+                "Nokta Y (m)", min_value=0.0,
+                max_value=float(selected_floor["height_m"]),
+                value=0.0, step=0.5, key="spatial_anchor_y",
+            )
+        save_anchor_clicked = st.form_submit_button("Noktayı kaydet")
 
-    st.subheader("Aktif Wi-Fi arayüzü")
-    if interface:
-        a, b, c = st.columns(3)
-        a.metric("Bağlantı", "Bağlı" if interface.get("connected") else "Bağlı değil")
-        signal = interface.get("signal_percent")
-        b.metric("Sinyal", f"{signal}%" if signal is not None else "Alınamadı")
-        c.metric("Kanal", interface.get("channel") or "Bilinmiyor")
-        st.caption(f"Radyo tipi: {interface.get('radio_type') or 'Bilinmiyor'}")
-    else:
-        st.warning("Aktif arayüz bilgisi alınamadı.")
+    if save_anchor_clicked:
+        try:
+            save_anchor(
+                selected_floor_id, anchor_name, anchor_type,
+                anchor_x, anchor_y,
+            )
+        except ValueError as exc:
+            st.error(str(exc))
+        else:
+            st.success("Referans noktası kaydedildi.")
+            st.rerun()
 
-    st.subheader("Konumlandırma ve algılama yetenekleri")
-    capabilities = report.get("capabilities", {})
-    rows = [
-        {
-            "Yetenek": key.replace("_", " ").upper(),
-            "Durum": value.get("status", "unknown"),
-            "Açıklama": value.get("detail", ""),
+    zones = list_zones(selected_floor_id)
+    anchors = list_anchors(selected_floor_id)
+    st.markdown("**Kat planı görünümü**")
+    try:
+        import plotly.graph_objects as go
+
+        figure = go.Figure()
+        figure.add_shape(
+            type="rect", x0=0, y0=0,
+            x1=float(selected_floor["width_m"]),
+            y1=float(selected_floor["height_m"]),
+            line={"color": "#334155", "width": 2},
+            fillcolor="rgba(148, 163, 184, 0.04)",
+        )
+        for zone in zones:
+            figure.add_shape(
+                type="rect",
+                x0=float(zone["x_m"]), y0=float(zone["y_m"]),
+                x1=float(zone["x_m"]) + float(zone["width_m"]),
+                y1=float(zone["y_m"]) + float(zone["height_m"]),
+                line={"color": "#2563EB", "width": 2},
+                fillcolor="rgba(37, 99, 235, 0.10)",
+            )
+            figure.add_annotation(
+                x=float(zone["x_m"]) + float(zone["width_m"]) / 2,
+                y=float(zone["y_m"]) + float(zone["height_m"]) / 2,
+                text=str(zone["name"]),
+                showarrow=False,
+                font={"color": "#1E3A8A"},
+            )
+
+        marker_styles = {
+            "access_point": ("Erişim noktası", "diamond", "#DC2626"),
+            "laptop": ("Laptop", "square", "#0F766E"),
+            "sensor": ("Sensör", "circle", "#7C3AED"),
+            "manual_reference": ("Referans", "x", "#475569"),
         }
-        for key, value in capabilities.items()
-    ]
-    if rows:
-        st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+        for anchor_type, (label, symbol, color) in marker_styles.items():
+            group = [item for item in anchors if item["anchor_type"] == anchor_type]
+            if group:
+                figure.add_trace(go.Scatter(
+                    x=[float(item["x_m"]) for item in group],
+                    y=[float(item["y_m"]) for item in group],
+                    mode="markers+text",
+                    text=[str(item["name"]) for item in group],
+                    textposition="top center",
+                    name=label,
+                    marker={"symbol": symbol, "size": 12, "color": color},
+                ))
 
-    with st.expander("Denetim komutlarının durumu"):
-        st.json(report.get("commands", {}))
+        figure.update_xaxes(
+            title_text="X (metre)", range=[0, float(selected_floor["width_m"])],
+            dtick=1, showgrid=True, zeroline=False,
+        )
+        figure.update_yaxes(
+            title_text="Y (metre)",
+            range=[float(selected_floor["height_m"]), 0],
+            dtick=1, showgrid=True, zeroline=False,
+            scaleanchor="x", scaleratio=1,
+        )
+        figure.update_layout(
+            height=520, margin={"l": 10, "r": 10, "t": 20, "b": 10},
+            legend={"orientation": "h"},
+        )
+        st.plotly_chart(figure, use_container_width=True)
+    except ImportError:
+        st.warning("Kat planı çizimi için Plotly kurulu değil.")
 
-    st.caption(
-        "Bilinmiyor durumu desteklenmiyor anlamına gelmez. CSI, monitor mode ve RTT "
-        "ancak gerçek donanım/sürücü kanıtıyla doğrulanabilir. Sinyal yüzdesi tek başına "
-        "metre cinsinden mesafe veya başka cihazların konumunu göstermez."
-    )
+    left, right = st.columns(2)
+    with left:
+        st.markdown("**Bölgeler**")
+        if zones:
+            st.dataframe(
+                pd.DataFrame(zones)[
+                    ["name", "x_m", "y_m", "width_m", "height_m"]
+                ],
+                width="stretch", hide_index=True,
+            )
+        else:
+            st.caption("Henüz bölge eklenmedi.")
+    with right:
+        st.markdown("**Referans noktaları**")
+        if anchors:
+            st.dataframe(
+                pd.DataFrame(anchors)[
+                    ["name", "anchor_type", "x_m", "y_m", "source"]
+                ],
+                width="stretch", hide_index=True,
+            )
+        else:
+            st.caption("Henüz referans noktası eklenmedi.")
 
 
 def reports_page():

@@ -69,7 +69,7 @@ Implemented as local SQLite schema version 3 and the scripts/spatial_core.py mod
 - Zone lookup returns assigned, unassigned, or ambiguous; overlapping zones are never silently resolved.
 - Existing device and observation records are preserved by the additive database migration.
 
-The current core is a tested data/geometry foundation. A floor-plan editor and visual map are still pending.
+A Streamlit floor-plan editor now creates floors, rectangular zones, and manual anchors locally, then renders them on a metric-scale map. Hardware measurements are not required to use this editor.
 
 ## Later implementation phases
 

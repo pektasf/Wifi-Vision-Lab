@@ -10,6 +10,7 @@ Laptop-only Spatial Intelligence work has started.
 
 - SI-0 capability audit module and Streamlit page are implemented.
 - SI-1 local Spatial Core is implemented: SQLite floor, zone, and anchor records with coordinate validation.
+- SI-1 Streamlit floor-plan editor is implemented for manual floor, zone, and anchor placement.
 - The audit reads Windows Wi-Fi driver/interface metadata and physical adapter details.
 - The audit is read-only: it does not scan nearby networks, capture packets, alter adapter settings, or store SSID/BSSID.
 - CSI, monitor mode, and Wi-Fi RTT/FTM remain unknown until verified against the actual laptop adapter and driver.
