@@ -190,10 +190,24 @@ def resolve_hostnames(ips):
         return {}
 
 
+def format_network_diagnostics(net):
+    """Format selected local adapter context for the scan's local output."""
+    gateway = str(net.get("gateway") or "").strip() or "yok (varsayılan ağ geçidi yok)"
+    return (
+        "Tarama ağ bağlamı: "
+        f"adaptör={str(net.get('adapter') or 'bilinmiyor')}; "
+        f"IPv4={str(net.get('ip') or 'bilinmiyor')}; "
+        f"alt ağ={str(net.get('network') or 'bilinmiyor')}; "
+        f"ağ geçidi={gateway}; "
+        f"arayüz indeksi={str(net.get('interface_index') or 'bilinmiyor')}"
+    )
+
+
 def scan(scan_cidr=None, approved=False, confirmation=None, interface_alias=None):
     print("[1/4] Aktif ag algilaniyor...", flush=True)
     selected_alias = interface_alias or os.getenv("WIFI_VISION_INTERFACE_ALIAS", "").strip() or None
     net = get_network(selected_alias)
+    print(format_network_diagnostics(net), flush=True)
     active_network = net["network"]
 
     requested_cidr = (

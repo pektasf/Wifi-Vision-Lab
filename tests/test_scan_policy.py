@@ -210,3 +210,37 @@ def test_get_network_rejects_stale_adapter_selection(monkeypatch):
     monkeypatch.setattr(device_inventory, "list_network_interfaces", lambda: [])
     with pytest.raises(RuntimeError, match="no longer|mevcut değil"):
         device_inventory.get_network("Old hosted adapter")
+
+
+
+def test_scan_network_diagnostics_show_selected_adapter_and_gateway():
+    from scripts.device_inventory import format_network_diagnostics
+
+    message = format_network_diagnostics({
+        "adapter": "Local Area Connection* 12",
+        "ip": "192.168.137.1",
+        "network": "192.168.137.0/24",
+        "gateway": "",
+        "interface_index": 19,
+    })
+
+    assert "Local Area Connection* 12" in message
+    assert "192.168.137.1" in message
+    assert "192.168.137.0/24" in message
+    assert "ağ geçidi=yok" in message
+    assert "arayüz indeksi=19" in message
+
+
+def test_scan_network_diagnostics_show_gateway_when_present():
+    from scripts.device_inventory import format_network_diagnostics
+
+    message = format_network_diagnostics({
+        "adapter": "Wi-Fi",
+        "ip": "192.168.1.20",
+        "network": "192.168.1.0/24",
+        "gateway": "192.168.1.1",
+        "interface_index": 7,
+    })
+
+    assert "ağ geçidi=192.168.1.1" in message
+    assert "yok" not in message
