@@ -9,6 +9,7 @@ from scripts.topology_evidence import (
     prepare_verified_edge_options,
     split_topology_edges,
     topology_render_profile,
+    topology_node_lane,
 )
 
 
@@ -144,13 +145,6 @@ def render():
             if ids_col is None:
                 ids_col = "_label"
 
-            lane_config = {
-                "gateway_address": ("Gateway adresi", 3, "diamond", "#8A5A12"),
-                "access_point_radio": ("AP radyosu", 2, "hexagon", "#087F78"),
-                "network_device_candidate": ("Ağ ekipmanı adayı", 1, "square", "#426C8C"),
-                "endpoint": ("Uç cihaz", 0, "circle", "#73827F"),
-                "wifi_client": ("Wi-Fi istemcisi", 0, "circle", "#73827F"),
-            }
             positions = {}
             grouped_nodes = {}
             for _, row in device_nodes.iterrows():
@@ -158,14 +152,13 @@ def render():
                 if not node_id:
                     continue
                 node_type = str(row.get("_type", "unknown")).strip().lower()
-                config = lane_config.get(
-                    node_type, ("Diğer / sınıflandırılmamış", -1, "circle", "#73827F")
-                )
+                config = topology_node_lane(node_type)
                 grouped_nodes.setdefault(config[0], []).append((node_id, row, config))
 
             lane_order = [
-                "Gateway adresi", "AP radyosu", "Ağ ekipmanı adayı",
-                "Uç cihaz", "Diğer / sınıflandırılmamış",
+                "Gateway adresi", "Fiziksel erişim noktası", "AP radyosu",
+                "Switch / Mesh komşusu", "Ağ ekipmanı adayı", "Uç cihaz",
+                "Diğer / sınıflandırılmamış",
             ]
             # Wrap large device groups into rows instead of stretching a single
             # horizontal line. This keeps labels and nodes separated on laptops.
