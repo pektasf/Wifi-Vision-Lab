@@ -16,7 +16,7 @@ SOURCE_FIELDS = ["source", "status", "devices_found", "checked_at", "error"]
 DEVICE_FIELDS = [
     "device_id", "identity_basis", "network_id", "mac",
     "ips", "hostnames", "sources", "source_count",
-    "statuses", "last_seen"
+    "statuses", "evidence_types", "last_seen"
 ]
 
 
@@ -54,6 +54,26 @@ def build_observation_identity_keys(observations):
     return identity_keys
 
 
+def classify_observation_evidence(source, status, mac=""):
+    """Return evidence labels without implying device certainty."""
+    source = str(source or "").strip().casefold()
+    status = str(status or "").strip().casefold()
+    has_mac = bool(str(mac or "").strip())
+
+    if source == "windows_local":
+        evidence = []
+        if status == "responding":
+            evidence.append("icmp_echo_reply")
+        if status == "arp_seen" or has_mac:
+            evidence.append("arp_cache_entry")
+        if evidence:
+            return ";".join(sorted(set(evidence)))
+
+    if source == "windows_arp_cache" or status == "arp_cache":
+        return "arp_cache_entry"
+    return "adapter_reported_observation"
+
+
 def build_device_profiles(observations):
     grouped = {}
     identity_keys = build_observation_identity_keys(observations)
@@ -81,6 +101,7 @@ def build_device_profiles(observations):
                 "hostnames": set(),
                 "sources": set(),
                 "statuses": set(),
+                "evidence_types": set(),
                 "last_seen": ""
             }
 
@@ -97,6 +118,15 @@ def build_device_profiles(observations):
 
         if observation.get("status"):
             item["statuses"].add(observation["status"])
+
+        evidence = observation.get("evidence") or classify_observation_evidence(
+            observation.get("source"), observation.get("status"),
+            observation.get("mac", "")
+        )
+        if evidence:
+            item["evidence_types"].update(
+                value for value in str(evidence).split(";") if value
+            )
 
         observed_at = observation.get("observed_at", "")
         if observed_at > item["last_seen"]:
@@ -115,6 +145,7 @@ def build_device_profiles(observations):
             "sources": ";".join(sorted(item["sources"])),
             "source_count": len(item["sources"]),
             "statuses": ";".join(sorted(item["statuses"])),
+            "evidence_types": ";".join(sorted(item["evidence_types"])),
             "last_seen": item["last_seen"]
         })
 
@@ -163,7 +194,9 @@ class DiscoveryEngine:
                         "status": raw.get("status", ""),
                         "gateway": raw.get("gateway", network.get("gateway", "")),
                         "adapter": raw.get("adapter", network.get("adapter", "")),
-                        "evidence": "Windows local discovery",
+                        "evidence": classify_observation_evidence(
+                            source, raw.get("status", ""), raw.get("mac", "")
+                        ),
                         "raw_data": json.dumps(raw, ensure_ascii=False)
                     })
 
