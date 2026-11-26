@@ -98,7 +98,7 @@ def analyze_dhcp_lease_windows(observations):
             continue
 
         lease_seconds = _seconds(row.get("lease_time_seconds"))
-        if lease_seconds is None:
+        if lease_seconds is None or lease_seconds > 4294967295:
             row["lease_analysis"] = "Geçerli kira süresi yok"
             continue
 
@@ -108,9 +108,15 @@ def analyze_dhcp_lease_windows(observations):
             continue
 
         duration = _seconds(row.get("duration_seconds"), allow_zero=True)
+        if duration is not None and duration > 86400:
+            duration = None
         timing_quality = "transaction_end_estimate" if duration is not None else "first_message_estimate"
-        start = observed + timedelta(seconds=duration or 0)
-        expiry = start + timedelta(seconds=lease_seconds)
+        try:
+            start = observed + timedelta(seconds=duration or 0)
+            expiry = start + timedelta(seconds=lease_seconds)
+        except (OverflowError, ValueError):
+            row["lease_analysis"] = "Kira zaman aralığı hesaplanamadı"
+            continue
 
         row["lease_start_estimate"] = _iso(start)
         row["lease_expiry_estimate"] = _iso(expiry)
@@ -180,12 +186,14 @@ def analyze_dhcp_lease_windows(observations):
                     by_scope.get(current_scope, {}),
                     unknown_scope,
                 ]
-                prior_seen = set(seen_by_scope.get(current_scope, set())) | set(seen_unknown)
+                prior_same_scope = set(seen_by_scope.get(current_scope, set()))
+                prior_unknown_scope = set(seen_unknown)
             else:
                 candidate_buckets = [all_macs]
-                prior_seen = set(seen_unknown)
+                prior_same_scope = set()
+                prior_unknown_scope = set(seen_unknown)
                 for macs in seen_by_scope.values():
-                    prior_seen.update(macs)
+                    prior_unknown_scope.update(macs)
 
             overlapping_mac = ""
             for bucket in candidate_buckets:
@@ -208,12 +216,10 @@ def analyze_dhcp_lease_windows(observations):
                     else "Olası çakışma · ağ kapsamı bilinmiyor"
                 )
                 row["lease_related_observation"] = overlapping_mac
-            elif any(mac != current_mac for mac in prior_seen):
-                row["lease_analysis"] = (
-                    "Önceki farklı MAC kirası sona ermiş · sıralı yeniden kullanım"
-                    if current_scope
-                    else "Farklı MAC sonrası yeniden kullanım · ağ kapsamı bilinmiyor"
-                )
+            elif any(mac != current_mac for mac in prior_same_scope):
+                row["lease_analysis"] = "Önceki farklı MAC kirası sona ermiş · sıralı yeniden kullanım"
+            elif any(mac != current_mac for mac in prior_unknown_scope):
+                row["lease_analysis"] = "Farklı MAC sonrası yeniden kullanım · ağ kapsamı bilinmiyor"
 
             active[lease["index"]] = lease
             add_bucket(all_macs, current_mac, lease["index"])
