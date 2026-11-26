@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import json
 from types import SimpleNamespace
 
 from scripts.spatial_capabilities import (
@@ -131,3 +132,26 @@ def test_macos_capability_report_does_not_claim_rssi_support():
         system_name="Darwin",
     )
     assert report["capabilities"]["rssi_dbm"]["status"] == "not_implemented"
+
+
+
+def test_capability_report_is_json_shareable_without_network_identity():
+    report = collect_capabilities(
+        command_runner=lambda args: SimpleNamespace(
+            returncode=0,
+            stdout=(
+                "Driver : Example Wi-Fi Adapter"
+                if args[:4] == ["netsh", "wlan", "show", "drivers"]
+                else "Name : Wi-Fi\\nState : connected\\nSignal : 75%"
+                if args[:4] == ["netsh", "wlan", "show", "interfaces"]
+                else '[{"Name":"Wi-Fi","InterfaceDescription":"Example Adapter","Status":"Up"}]'
+            ),
+            stderr="",
+        ),
+        system_name="Windows",
+    )
+    exported = json.dumps(report, ensure_ascii=False)
+
+    assert "SSID" not in exported
+    assert "BSSID" not in exported
+    assert "Example Adapter" in exported
