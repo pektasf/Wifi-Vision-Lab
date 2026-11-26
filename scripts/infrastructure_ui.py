@@ -312,17 +312,35 @@ def render():
                 columns.append(col)
 
         if columns:
-            st.caption(f"{len(filtered):,} cihaz")
-            records = list(filtered.iterrows())
-            for offset in range(0, len(records), 3):
-                card_cols = st.columns(3)
-                for card_col, (idx, row) in zip(card_cols, records[offset:offset + 3]):
-                    with card_col:
-                        with st.container(border=True):
-                            st.markdown(f"**{str(row.get(name_col, '') or 'İsimsiz cihaz')}**")
-                            st.caption(str(row.get(ip_col, '') or 'IP bilinmiyor'))
-                            st.write(str(row.get("Altyapi rolu", "Belirsiz")))
-                            st.caption(str(row.get("KanIt durumu", "Bilinmiyor")))
+            display_names = {
+                name_col: "Cihaz",
+                ip_col: "IP adresi",
+                mac_col: "MAC adresi",
+                vendor_col: "Üretici",
+                "model": "Model",
+                "firmware_version": "Firmware",
+                "model_status": "Model kanıtı",
+                "firmware_status": "Firmware kanıtı",
+                "Altyapi rolu": "Altyapı rolü",
+                status_col: "Durum",
+                "KanIt durumu": "Kanıt durumu",
+            }
+            display = filtered[columns].rename(columns={
+                column: display_names.get(
+                    column, str(column).replace("_", " ").title()
+                )
+                for column in columns
+            })
+            st.dataframe(
+                display.head(200),
+                width="stretch",
+                hide_index=True,
+                height=min(520, 58 + 35 * min(len(display), 12)),
+            )
+            if len(display) > 200:
+                st.caption(
+                    "İlk 200 kayıt gösteriliyor. Arama ve rol filtresiyle daraltabilirsiniz."
+                )
 
         if not filtered.empty:
             @st.dialog("Altyapı cihazı", width="large")
