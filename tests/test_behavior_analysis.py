@@ -157,3 +157,65 @@ def test_prepare_temporal_context_handles_empty_or_missing_event_data():
     assert len(result) == 1
     assert result.iloc[0]["ip_change_events"] == ""
     assert result.iloc[0]["history_span_days"] == ""
+
+
+def test_prepare_observation_gaps_reports_recorded_gaps_without_claiming_offline():
+    from scripts.behavior_analysis import prepare_observation_gaps
+
+    history = pd.DataFrame([
+        {"identity_key": "AA:01", "observed_at": "2026-01-01T10:00:00Z"},
+        {"identity_key": "AA:01", "observed_at": "2026-01-01T10:05:00Z"},
+        {"identity_key": "AA:01", "observed_at": "2026-01-01T10:30:00Z"},
+        {"identity_key": "AA:02", "observed_at": "2026-01-01T10:00:00Z"},
+        {"identity_key": "AA:02", "observed_at": "2026-01-01T11:00:00Z"},
+    ])
+    events = pd.DataFrame([{
+        "identity_key": "AA:01", "event_type": "seen_again",
+        "event_time": "2026-01-01T10:30:00Z",
+    }])
+    result = prepare_observation_gaps(history, events)
+    assert result["identity_key"].tolist() == ["AA:02", "AA:01"]
+    assert result["gap_minutes"].tolist() == [60.0, 25.0]
+    assert result["reappearance_event_recorded"].tolist() == [False, True]
+    assert "bağlantı durumu bilinmiyor" in result.iloc[0]["evidence"]
+    assert "offline" not in " ".join(result["evidence"]).casefold()
+
+
+def test_prepare_observation_gaps_ignores_invalid_times_and_duplicate_observations():
+    from scripts.behavior_analysis import prepare_observation_gaps
+
+    history = pd.DataFrame([
+        {"identity_key": "AA:01", "observed_at": "not-a-date"},
+        {"identity_key": "AA:01", "observed_at": "2026-01-01T10:00:00Z"},
+        {"identity_key": "AA:01", "observed_at": "2026-01-01T10:00:00+00:00"},
+        {"identity_key": "AA:01", "observed_at": "2026-01-01T10:20:00Z"},
+        {"identity_key": "", "observed_at": "2026-01-01T12:00:00Z"},
+    ])
+    result = prepare_observation_gaps(history)
+    assert len(result) == 1
+    assert result.iloc[0]["gap_minutes"] == 20.0
+
+
+def test_prepare_observation_gaps_handles_missing_data_and_threshold():
+    from scripts.behavior_analysis import prepare_observation_gaps
+
+    assert prepare_observation_gaps(pd.DataFrame()).empty
+    assert prepare_observation_gaps(pd.DataFrame({
+        "identity_key": ["AA:01"], "observed_at": ["bad"]
+    })).empty
+    history = pd.DataFrame([
+        {"identity_key": "AA:01", "observed_at": "2026-01-01T10:00:00Z"},
+        {"identity_key": "AA:01", "observed_at": "2026-01-01T10:10:00Z"},
+    ])
+    assert prepare_observation_gaps(history, minimum_gap_minutes=10).shape[0] == 1
+    assert prepare_observation_gaps(history, minimum_gap_minutes=10.1).empty
+
+
+def test_prepare_observation_gaps_rejects_invalid_threshold():
+    import pytest
+    from scripts.behavior_analysis import prepare_observation_gaps
+
+    with pytest.raises(ValueError):
+        prepare_observation_gaps(pd.DataFrame(), minimum_gap_minutes=-1)
+    with pytest.raises(ValueError):
+        prepare_observation_gaps(pd.DataFrame(), minimum_gap_minutes="invalid")
