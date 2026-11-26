@@ -1244,7 +1244,10 @@ def events_page():
         filter_event_review_status,
         merge_event_review_states,
         upsert_event_review_state,
+        append_event_review_history,
+        filter_event_review_history,
         EVENT_REVIEW_STATUSES,
+        EVENT_REVIEW_PRIORITIES,
     )
 
     page_header(
@@ -1260,6 +1263,7 @@ def events_page():
     frames = {filename: load(filename) for filename in filenames}
     data = normalize_event_frames(frames)
     review_states = load("event_review_states.csv")
+    review_history = load("event_review_history.csv")
     data = merge_event_review_states(data, review_states)
 
     if data.empty:
@@ -1497,6 +1501,35 @@ def events_page():
         placeholder="Yapılan kontrolü, bulguyu veya sonraki adımı yazın.",
         key=f"event_review_note_{selected['event_key'][:12]}",
     )
+
+    priority_labels = {
+        "low": "Düşük",
+        "normal": "Normal",
+        "high": "Yüksek",
+        "critical": "Kritik",
+    }
+    review_left, review_right = st.columns(2)
+    with review_left:
+        review_priority = st.selectbox(
+            "İş önceliği",
+            options=list(EVENT_REVIEW_PRIORITIES),
+            index=list(EVENT_REVIEW_PRIORITIES).index(
+                str(selected.get("review_priority", "normal") or "normal")
+            ) if str(selected.get("review_priority", "normal") or "normal") in EVENT_REVIEW_PRIORITIES else 1,
+            format_func=lambda value: priority_labels[value],
+            key=f"event_review_priority_{selected['event_key'][:12]}",
+        )
+    with review_right:
+        review_assignee = st.text_input(
+            "Sorumlu kişi / ekip",
+            value=str(selected.get("review_assignee", "") or ""),
+            max_chars=120,
+            placeholder="Örn. Ağ ekibi",
+            key=f"event_review_assignee_{selected['event_key'][:12]}",
+        )
+    st.caption(
+        "Sorumlu alanı yerel serbest metindir; kullanıcı hesabı veya kimlik doğrulaması anlamına gelmez."
+    )
     if st.button(
         "İnceleme durumunu kaydet",
         type="primary",
@@ -1504,20 +1537,67 @@ def events_page():
     ):
         from datetime import datetime
         from scripts.common import DATA, overwrite_rows
+        updated_at = datetime.now().astimezone().isoformat(timespec="seconds")
         updated_states = upsert_event_review_state(
             review_states,
             selected,
             review_status,
             review_note,
-            datetime.now().astimezone().isoformat(timespec="seconds"),
+            updated_at,
+            priority=review_priority,
+            assignee=review_assignee,
+        )
+        updated_history = append_event_review_history(
+            review_history,
+            selected,
+            selected,
+            status=review_status,
+            priority=review_priority,
+            assignee=review_assignee,
+            note=review_note,
+            updated_at=updated_at,
         )
         overwrite_rows(
             DATA / "event_review_states.csv",
             updated_states.to_dict("records"),
-            ["event_key", "status", "note", "updated_at"],
+            ["event_key", "status", "note", "updated_at", "priority", "assignee"],
         )
-        st.success("İnceleme durumu yerel veritabanına kaydedildi.")
+        overwrite_rows(
+            DATA / "event_review_history.csv",
+            updated_history.to_dict("records"),
+            ["action_id", "event_key", "updated_at", "changes", "status",
+             "priority", "assignee", "note"],
+        )
+        st.success("İnceleme, öncelik ve sorumlu bilgisi yerel veritabanına kaydedildi.")
         st.rerun()
+
+    st.markdown("### İşlem geçmişi")
+    selected_history = filter_event_review_history(
+        review_history, str(selected["event_key"])
+    )
+    if selected_history.empty:
+        st.info("Bu olay için henüz inceleme işlem geçmişi yok.")
+    else:
+        history_display = selected_history[[
+            column for column in [
+                "updated_at", "changes", "status", "priority", "assignee", "note"
+            ] if column in selected_history.columns
+        ]].rename(columns={
+            "updated_at": "Zaman",
+            "changes": "Değişen alanlar",
+            "status": "Durum",
+            "priority": "Öncelik",
+            "assignee": "Sorumlu",
+            "note": "Not",
+        })
+        st.dataframe(
+            history_display.head(30),
+            width="stretch",
+            hide_index=True,
+            height=min(360, 58 + 35 * min(len(history_display), 8)),
+        )
+        if len(history_display) > 30:
+            st.caption("En son 30 işlem gösteriliyor.")
 
     st.download_button(
         "Filtrelenmiş olayları CSV indir",

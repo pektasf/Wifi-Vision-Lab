@@ -402,3 +402,91 @@ def test_filter_event_review_status_treats_missing_status_as_new():
     ])
     result = filter_event_review_status(frame, "new")
     assert result["event_type"].tolist() == ["IP_CHANGED"]
+
+
+
+def test_review_state_priority_and_assignee_round_trip_with_legacy_defaults():
+    from scripts.event_timeline import (
+        event_review_key, merge_event_review_states, upsert_event_review_state,
+    )
+
+    event = pd.Series({
+        "source": "Ağ olayları", "event_time": "2026-11-26T09:00:00Z",
+        "event_type": "IP_CHANGED", "identity_key": "AA:01",
+    })
+    key = event_review_key(event)
+    legacy = pd.DataFrame([{
+        "event_key": key, "status": "reviewed", "note": "Kontrol edildi",
+        "updated_at": "2026-11-26T09:10:00Z",
+    }])
+    merged_legacy = merge_event_review_states(pd.DataFrame([event]), legacy)
+    assert merged_legacy.iloc[0]["review_priority"] == "normal"
+    assert merged_legacy.iloc[0]["review_assignee"] == ""
+
+    updated = upsert_event_review_state(
+        legacy, event, "action_required", "AP kontrolü", "2026-11-26T10:00:00Z",
+        priority="high", assignee="Ağ ekibi",
+    )
+    assert len(updated) == 1
+    merged = merge_event_review_states(pd.DataFrame([event]), updated)
+    assert merged.iloc[0]["review_status"] == "action_required"
+    assert merged.iloc[0]["review_priority"] == "high"
+    assert merged.iloc[0]["review_assignee"] == "Ağ ekibi"
+
+
+def test_review_state_rejects_unknown_priority():
+    import pytest
+    from scripts.event_timeline import upsert_event_review_state
+
+    with pytest.raises(ValueError):
+        upsert_event_review_state(pd.DataFrame(), {"event_type": "test"}, "new", priority="urgent")
+
+
+def test_review_history_appends_only_changes_and_deduplicates_retries():
+    from scripts.event_timeline import append_event_review_history, filter_event_review_history
+
+    event = {
+        "source": "Canlı izleme", "event_time": "2026-11-26T09:00:00Z",
+        "event_type": "PING_NOT_RESPONDING", "identity_key": "AA:01",
+    }
+    previous = {"status": "new", "priority": "normal", "assignee": "", "note": ""}
+    kwargs = {
+        "status": "action_required", "priority": "high", "assignee": "Operatör",
+        "note": "AP bağlantısını kontrol et", "updated_at": "2026-11-26T10:00:00Z",
+    }
+    history = append_event_review_history(pd.DataFrame(), event, previous, **kwargs)
+    assert len(history) == 1
+    assert '"priority"' in history.iloc[0]["changes"]
+
+    retried = append_event_review_history(history, event, previous, **kwargs)
+    assert len(retried) == 1
+
+    unchanged = append_event_review_history(
+        history, event,
+        {"status": "action_required", "priority": "high", "assignee": "Operatör",
+         "note": "AP bağlantısını kontrol et"},
+        **kwargs,
+    )
+    assert len(unchanged) == 1
+    assert len(filter_event_review_history(history, history.iloc[0]["event_key"])) == 1
+    assert filter_event_review_history(history, "missing").empty
+
+
+def test_review_history_is_append_only_and_sorted_newest_first():
+    from scripts.event_timeline import append_event_review_history, filter_event_review_history
+
+    event = {"source": "Ağ olayları", "event_time": "2026-11-26T09:00:00Z", "event_type": "IP_CHANGED"}
+    history = pd.DataFrame()
+    history = append_event_review_history(
+        history, event, {"status": "new"}, status="reviewed", priority="normal",
+        assignee="", note="İlk inceleme", updated_at="2026-11-26T09:10:00Z",
+    )
+    history = append_event_review_history(
+        history, event, {"status": "reviewed", "note": "İlk inceleme"},
+        status="resolved", priority="normal", assignee="", note="Tamamlandı",
+        updated_at="2026-11-26T09:20:00Z",
+    )
+    assert len(history) == 2
+    result = filter_event_review_history(history, history.iloc[0]["event_key"])
+    assert result["status"].tolist() == ["resolved", "reviewed"]
+    assert len(history) == 2
