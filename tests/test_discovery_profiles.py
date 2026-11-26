@@ -307,3 +307,41 @@ def test_identity_history_is_bounded_and_deduplicated(tmp_path):
     saved = save_identity_history(rows, history=saved, path=path)
     assert len(saved) == 1
     assert load_identity_history(path) == saved
+
+
+
+def test_same_mac_seen_with_multiple_ips_is_reported_as_noncritical_indicator():
+    from scripts.discovery.identity_signals import analyze_identity_variation
+    history = [{
+        "network_id": "192.168.1.0/24",
+        "ip": "192.168.1.70",
+        "mac": "00:11:22:33:44:55",
+    }]
+    current = [{
+        "network_id": "192.168.1.0/24",
+        "ip": "192.168.1.71",
+        "mac": "00:11:22:33:44:55",
+    }]
+    result = analyze_identity_variation(current, history)
+    item = result["192.168.1.0/24|mac|00:11:22:33:44:55"]
+    assert item["identity_assessment"] == "indicator"
+    assert item["identity_signals"] == "mac_seen_with_multiple_ips"
+
+
+def test_ip_only_observation_inherits_unambiguous_mac_identity_and_signal():
+    from scripts.discovery.identity_signals import analyze_identity_variation
+    observations = [
+        {
+            "network_id": "192.168.1.0/24",
+            "ip": "192.168.1.80",
+            "mac": "00:11:22:33:44:55",
+        },
+        {
+            "network_id": "192.168.1.0/24",
+            "ip": "192.168.1.80",
+            "mac": "",
+        },
+    ]
+    result = analyze_identity_variation(observations)
+    item = result["192.168.1.0/24|mac|00:11:22:33:44:55"]
+    assert item["identity_signals"] == "mac_not_observed"
