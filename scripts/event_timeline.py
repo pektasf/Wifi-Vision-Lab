@@ -269,14 +269,27 @@ def upsert_event_review_state(
                 current[column] = ""
         current = current[list(EVENT_REVIEW_COLUMNS)]
     key = event_review_key(event)
+    normalized_note = str(note or "").strip()
+    normalized_assignee = str(assignee or "").strip()
+    existing = current[current["event_key"].astype(str) == key]
+    if not existing.empty:
+        previous = existing.iloc[-1]
+        unchanged = (
+            str(previous.get("status", "new") or "new") == status
+            and str(previous.get("note", "") or "").strip() == normalized_note
+            and str(previous.get("priority", "normal") or "normal") == priority
+            and str(previous.get("assignee", "") or "").strip() == normalized_assignee
+        )
+        if unchanged:
+            return current
     current = current[current["event_key"].astype(str) != key]
     row = {
         "event_key": key,
         "status": status,
-        "note": str(note or "").strip(),
+        "note": normalized_note,
         "updated_at": str(updated_at or ""),
         "priority": priority,
-        "assignee": str(assignee or "").strip(),
+        "assignee": normalized_assignee,
     }
     return pd.concat([current, pd.DataFrame([row])], ignore_index=True)
 
