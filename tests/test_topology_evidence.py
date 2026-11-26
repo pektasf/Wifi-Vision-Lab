@@ -480,3 +480,42 @@ def test_unverified_or_invalid_ap_device_identity_does_not_group_radios():
         nodes, edges = build_topology(inventory, ap_relationships=relationships)
         assert not any(node["node_type"] == "access_point_device" for node in nodes)
         assert not any(edge["relation"] == "radio_of" for edge in edges)
+
+
+def test_verified_lldp_neighbor_creates_verified_topology_edge():
+    from scripts.topology_evidence import prepare_verified_neighbor_edges
+    records = pd.DataFrame([{
+        "protocol": "lldp", "local_mac": "AA:BB:CC:DD:EE:01",
+        "neighbor_mac": "AA:BB:CC:DD:EE:02",
+        "verification_status": "verified",
+        "evidence_type": "lldp_neighbor_advertisement",
+        "evidence_source": "local_lldp_export", "local_port": "Gi1/0/1",
+        "neighbor_port": "eth0",
+    }])
+    assert prepare_verified_neighbor_edges(records)[0]["relation"] == "lldp_neighbor"
+    inventory = pd.DataFrame([{"ip": "192.168.1.2", "mac": "AA:BB:CC:DD:EE:01", "subnet": "192.168.1.0/24"}])
+    nodes, edges = build_topology(inventory, neighbor_relationships=records)
+    edge = next(edge for edge in edges if edge["relation"] == "lldp_neighbor")
+    assert edge["confidence"] == "verified"
+    assert edge["source"] == "192.168.1.2"
+    assert edge["target"] == "MAC:AA:BB:CC:DD:EE:02"
+
+
+def test_cdp_and_trusted_mesh_controller_evidence_are_supported():
+    from scripts.topology_evidence import prepare_verified_neighbor_edges
+    records = pd.DataFrame([
+        {"protocol": "cdp", "local_mac": "AA:BB:CC:DD:EE:01", "neighbor_mac": "AA:BB:CC:DD:EE:02", "verification_status": "verified", "evidence_type": "cdp_neighbor_advertisement"},
+        {"protocol": "mesh_controller", "local_mac": "AA:BB:CC:DD:EE:02", "neighbor_mac": "AA:BB:CC:DD:EE:03", "verification_status": "verified", "evidence_type": "controller_verified_mesh_relationship", "source_trust": "trusted"},
+    ])
+    assert [row["relation"] for row in prepare_verified_neighbor_edges(records)] == ["cdp_neighbor", "mesh_peer"]
+
+
+def test_unverified_untrusted_or_invalid_neighbor_records_are_rejected():
+    from scripts.topology_evidence import prepare_verified_neighbor_edges
+    records = pd.DataFrame([
+        {"protocol": "lldp", "local_mac": "AA:BB:CC:DD:EE:01", "neighbor_mac": "AA:BB:CC:DD:EE:02", "verification_status": "inferred", "evidence_type": "lldp_neighbor_advertisement"},
+        {"protocol": "mesh_controller", "local_mac": "AA:BB:CC:DD:EE:01", "neighbor_mac": "AA:BB:CC:DD:EE:02", "verification_status": "verified", "evidence_type": "controller_verified_mesh_relationship", "source_trust": "unknown"},
+        {"protocol": "guess", "local_mac": "AA:BB:CC:DD:EE:01", "neighbor_mac": "AA:BB:CC:DD:EE:02", "verification_status": "verified", "evidence_type": "lldp_neighbor_advertisement"},
+        {"protocol": "lldp", "local_mac": "bad", "neighbor_mac": "AA:BB:CC:DD:EE:02", "verification_status": "verified", "evidence_type": "lldp_neighbor_advertisement"},
+    ])
+    assert prepare_verified_neighbor_edges(records) == []
