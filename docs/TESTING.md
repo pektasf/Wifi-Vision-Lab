@@ -107,3 +107,10 @@ adapter or invoking live WLAN APIs.
 - Verify RSSI values are validated and BSSIDs are pseudonymised before returning results.
 - Cover missing `iw`, missing interfaces, empty cache, permission errors, and per-interface outcomes.
 - Confirm Linux capability reporting does not claim that CSI or passive sensing is available.
+
+
+## Capability report export
+
+- Verify the local compatibility report serializes as JSON.
+- Verify the export does not include SSID, BSSID, or network names.
+- Verify adapter/driver and platform capability details remain available.
