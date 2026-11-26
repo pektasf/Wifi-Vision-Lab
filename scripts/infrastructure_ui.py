@@ -43,6 +43,36 @@ def assign_identity_keys(combined, ip_col, mac_col):
     return result
 
 
+def build_network_context_summary(frame):
+    """Return display-safe values for the latest local adapter snapshot."""
+    if frame is None or frame.empty:
+        return None
+
+    row = frame.iloc[-1]
+    dhcp_state = str(row.get("dhcp_enabled", "")).strip().casefold()
+    dhcp_labels = {
+        "enabled": "Etkin",
+        "disabled": "Devre dışı",
+        "unknown": "Bilinmiyor",
+    }
+    return {
+        "captured_at": str(row.get("captured_at", "") or "Bilinmiyor"),
+        "adapter": str(row.get("adapter", "") or "Bilinmiyor"),
+        "interface_index": str(row.get("interface_index", "") or "Bilinmiyor"),
+        "local_ipv4": str(row.get("local_ipv4", "") or "Bilinmiyor"),
+        "network_cidr": str(row.get("network_cidr", "") or "Bilinmiyor"),
+        "gateway": str(row.get("gateway", "") or "Yok"),
+        "dhcp_status": dhcp_labels.get(dhcp_state, "Bilinmiyor"),
+        "dhcp_server": str(row.get("dhcp_server", "") or "Bilinmiyor"),
+        "dhcp_lease_obtained": str(
+            row.get("dhcp_lease_obtained", "") or "Bilinmiyor"
+        ),
+        "dhcp_lease_expires": str(
+            row.get("dhcp_lease_expires", "") or "Bilinmiyor"
+        ),
+    }
+
+
 def render():
     inventory = read_data("device_inventory.csv")
     nodes = read_data("topology_nodes.csv")
@@ -50,6 +80,7 @@ def render():
     wifi = read_data("wifi_connection.csv")
     access_points = read_data("wifi_access_points.csv")
     ap_client_history = read_data("ap_client_relationships.csv")
+    network_context = read_data("network_context.csv")
 
     st.markdown(
         '<div class="wv-page-header"><h1>Ağ altyapısı</h1>'
@@ -57,6 +88,33 @@ def render():
         'kanıt düzeyleriyle birlikte incele.</p></div>',
         unsafe_allow_html=True,
     )
+
+    context = build_network_context_summary(network_context)
+    if context:
+        st.markdown("### Son seçili ağ adaptörü")
+        context_columns = st.columns(4)
+        context_columns[0].metric("Adaptör", context["adapter"])
+        context_columns[1].metric("Yerel IPv4", context["local_ipv4"])
+        context_columns[2].metric("Alt ağ", context["network_cidr"])
+        context_columns[3].metric("Ağ geçidi", context["gateway"])
+        with st.expander("DHCP ve kiralama ayrıntıları"):
+            detail_left, detail_right = st.columns(2)
+            with detail_left:
+                st.markdown(f"**DHCP durumu:** {context['dhcp_status']}")
+                st.markdown(f"**DHCP sunucusu:** {context['dhcp_server']}")
+                st.markdown(f"**Arayüz indeksi:** {context['interface_index']}")
+            with detail_right:
+                st.markdown(
+                    f"**Kira başlangıcı:** {context['dhcp_lease_obtained']}"
+                )
+                st.markdown(
+                    f"**Kira bitişi:** {context['dhcp_lease_expires']}"
+                )
+                st.markdown(f"**Son kayıt:** {context['captured_at']}")
+        st.caption(
+            "Bu bilgiler bilgisayarın seçili yerel adaptörüne aittir; "
+            "router üzerindeki tüm DHCP istemci kayıtlarını temsil etmez."
+        )
 
     if inventory.empty and nodes.empty and classification.empty:
         st.warning("Altyapi envanteri icin henuz veri bulunamadi.")
@@ -476,7 +534,8 @@ def render():
             "topology_nodes.csv",
             "device_classification.csv",
             "wifi_connection.csv",
-            "wifi_access_points.csv"
+            "wifi_access_points.csv",
+            "network_context.csv"
         ]:
             path = DATA / filename
             st.write(
