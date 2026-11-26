@@ -5,6 +5,7 @@ import streamlit as st
 from scripts.topology_evidence import (
     extract_selected_node_id,
     prepare_association_history,
+    prepare_relationship_history,
     prepare_verified_edge_options,
     split_topology_edges,
 )
@@ -344,17 +345,36 @@ def render():
                 )
 
     if not verified_edges.empty:
-        st.subheader("Doğrulanmış ilişki ayrıntısı")
+        st.subheader("Bağlantı seçimi ve kanıt geçmişi")
         edge_options = prepare_verified_edge_options(
             verified_edges, edge_from, edge_to
         )
         selected_index = st.selectbox(
-            "Incelenecek baglanti",
+            "İncelenecek doğrulanmış bağlantı",
             options=[option["index"] for option in edge_options],
             format_func=lambda index: edge_options[index]["label"],
             key="topology_verified_edge_detail",
         )
         selected_edge = verified_edges.reset_index(drop=True).iloc[selected_index]
+        selected_source = str(selected_edge.get(edge_from, "")).strip()
+        selected_target = str(selected_edge.get(edge_to, "")).strip()
+
+        detail_ids_col = first_column(device_nodes, ["id", "ip", "mac"]) or "_label"
+        node_labels = {}
+        if detail_ids_col in device_nodes.columns:
+            node_labels = {
+                str(row.get(detail_ids_col, "")).strip(): str(row.get("_label", "")).strip()
+                for _, row in device_nodes.iterrows()
+                if str(row.get(detail_ids_col, "")).strip()
+            }
+        source_label = node_labels.get(selected_source, selected_source)
+        target_label = node_labels.get(selected_target, selected_target)
+        st.markdown(f"**{source_label}** → **{target_label}**")
+        st.caption(
+            "Seçim, kaynak kayıttaki yönü korur. Aşağıdaki geçmiş aynı iki uç arasındaki "
+            "tüm kayıtları gösterir; ters yönlü kayıtlar da ayrıca belirtilir."
+        )
+
         left, right = st.columns(2)
         with left:
             st.markdown("**Kanıt kaynağı**")
@@ -368,6 +388,30 @@ def render():
             st.write(str(selected_edge.get("observed_at", "") or "Bilinmiyor"))
         if str(selected_edge.get("details", "")).strip():
             st.caption(str(selected_edge.get("details")))
+
+        pair_history = prepare_relationship_history(
+            edges, selected_source, selected_target, edge_from, edge_to
+        )
+        if not pair_history.empty:
+            history_columns = [
+                column for column in [
+                    edge_from, edge_to, relation_col, confidence_col,
+                    "evidence_type", "evidence_source", "observed_at", "details",
+                ] if column and column in pair_history.columns
+            ]
+            st.markdown("**Bu iki cihaz arasındaki kayıt geçmişi**")
+            st.caption(
+                f"{len(pair_history):,} ilişki kaydı · En yeni gözlem üstte · "
+                "Yalnızca doğrulanmış kayıtlar haritada çizilir."
+            )
+            st.dataframe(
+                pair_history[history_columns],
+                width="stretch",
+                hide_index=True,
+                height=min(320, 58 + 35 * min(len(pair_history), 7)),
+            )
+        else:
+            st.info("Seçilen iki cihaz için ilişki geçmişi bulunamadı.")
 
     st.divider()
     st.markdown("### Cihaz envanteri")
