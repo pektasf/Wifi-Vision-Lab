@@ -311,8 +311,9 @@ def test_relationship_history_includes_both_directions_and_sorts_newest_first():
     result = prepare_relationship_history(edges, "ap", "client", "source", "target")
 
     assert len(result) == 2
-    assert result["relation"].tolist() == ["wifi_association", "other_observation"]
-    assert result.iloc[1]["source"] == "client"
+    # 08:30Z is later than 10:00 at UTC+03:00 (07:00Z).
+    assert result["relation"].tolist() == ["other_observation", "wifi_association"]
+    assert result.iloc[0]["source"] == "client"
 
 
 def test_relationship_history_preserves_file_order_without_timestamps():
