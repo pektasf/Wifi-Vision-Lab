@@ -25,6 +25,61 @@ def classify_network_adapter(hardware_interface, adapter="", description=""):
     return "virtual_wlan" if any(marker in text for marker in markers) else "virtual_or_software"
 
 
+
+
+def normalize_network_adapter_rows(data):
+    """Normalize Get-NetAdapter JSON while preserving unknown metadata."""
+    if isinstance(data, dict):
+        data = [data]
+    rows = []
+    for item in data or []:
+        hardware_text = str(item.get("HardwareInterface") or "").strip().casefold()
+        hardware = True if hardware_text == "true" else False if hardware_text == "false" else None
+        name = str(item.get("Name") or item.get("Adapter") or "Unknown")
+        description = str(item.get("InterfaceDescription") or "")
+        rows.append({
+            "adapter": name,
+            "adapter_description": description,
+            "mac": str(item.get("MacAddress") or "").strip().upper().replace("-", ":"),
+            "status": str(item.get("Status") or "Unknown"),
+            "hardware_interface": hardware,
+            "adapter_kind": classify_network_adapter(hardware, name, description),
+            "media_type": str(item.get("MediaType") or ""),
+            "ndis_physical_medium": str(item.get("NdisPhysicalMedium") or ""),
+            "link_speed": str(item.get("LinkSpeed") or ""),
+            "interface_index": str(item.get("ifIndex") or ""),
+        })
+    return rows
+
+
+def list_network_adapters():
+    """Enumerate local Windows adapters, including hidden and non-IP adapters."""
+    if platform.system() != "Windows":
+        raise RuntimeError("Yerel ağ adaptörleri şu anda Windows içindir.")
+    ps = (
+        "Get-NetAdapter -IncludeHidden | "
+        "Select-Object Name,InterfaceDescription,MacAddress,Status,"
+        "HardwareInterface,MediaType,NdisPhysicalMedium,LinkSpeed,ifIndex | "
+        "ConvertTo-Json -Compress"
+    )
+    try:
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", ps],
+            capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=15,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as exc:
+        raise RuntimeError(f"Yerel ağ adaptörleri sorgulanamadı: {exc}") from exc
+    if result.returncode or not result.stdout.strip():
+        detail = result.stderr.strip() or "Ağ adaptörü kaydı bulunamadı."
+        raise RuntimeError(detail[:300])
+    try:
+        data = json.loads(result.stdout.strip().splitlines()[-1])
+        return normalize_network_adapter_rows(data)
+    except (json.JSONDecodeError, TypeError, ValueError) as exc:
+        raise RuntimeError("Windows ağ adaptörü listesi okunamadı.") from exc
+
+
 def list_network_interfaces():
     """Return local IPv4 interfaces, including Windows hosted-network adapters."""
     if platform.system() != "Windows":
