@@ -38,7 +38,8 @@ The audit reads:
 
 The audit does not run a nearby-network scan, capture packets, change adapter
 settings, or persist SSID/BSSID data. The UI only runs the audit after the user
-clicks its button.
+clicks its button. It can export a JSON compatibility report for review or
+sharing; the report excludes SSID/BSSID and network names.
 
 The report distinguishes measured facts from unknown capabilities:
 
