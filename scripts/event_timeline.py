@@ -1,6 +1,9 @@
 """Normalize local network observations into one searchable event timeline."""
 from __future__ import annotations
 
+import hashlib
+import json
+
 import pandas as pd
 
 EVENT_SOURCES = {
@@ -162,3 +165,86 @@ def related_event_context(
         "_context_time", ascending=False, kind="stable"
     ).drop(columns=["_context_time"])
     return result.reset_index(drop=True)
+
+
+EVENT_REVIEW_STATUSES = ("new", "reviewed", "action_required", "resolved")
+EVENT_REVIEW_COLUMNS = ("event_key", "status", "note", "updated_at")
+
+
+def event_review_key(event: pd.Series | dict) -> str:
+    """Build a deterministic local review key from normalized event evidence."""
+    import hashlib
+    import json
+
+    values = [
+        str(event.get(field, "") or "").strip()
+        for field in (
+            "source", "event_time", "event_type", "identity_key",
+            "ip", "old_value", "new_value", "details", "subject",
+        )
+    ]
+    payload = json.dumps(values, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def merge_event_review_states(
+    events: pd.DataFrame,
+    states: pd.DataFrame | None,
+) -> pd.DataFrame:
+    """Attach persisted review metadata without mutating normalized evidence."""
+    result = events.copy() if events is not None else pd.DataFrame()
+    if result.empty:
+        for column in ("event_key", "review_status", "review_note", "review_updated_at"):
+            result[column] = pd.Series(dtype="object")
+        return result
+    result["event_key"] = result.apply(event_review_key, axis=1)
+    if states is None or states.empty or not {"event_key", "status"}.issubset(states.columns):
+        result["review_status"] = "new"
+        result["review_note"] = ""
+        result["review_updated_at"] = ""
+        return result
+
+    valid = states.copy()
+    valid["event_key"] = valid["event_key"].fillna("").astype(str)
+    valid = valid.drop_duplicates("event_key", keep="last").set_index("event_key")
+    result["review_status"] = result["event_key"].map(valid["status"]).fillna("new")
+    result["review_note"] = (
+        result["event_key"].map(valid["note"]).fillna("")
+        if "note" in valid.columns else ""
+    )
+    result["review_updated_at"] = (
+        result["event_key"].map(valid["updated_at"]).fillna("")
+        if "updated_at" in valid.columns else ""
+    )
+    invalid = ~result["review_status"].isin(EVENT_REVIEW_STATUSES)
+    result.loc[invalid, "review_status"] = "new"
+    return result
+
+
+def upsert_event_review_state(
+    states: pd.DataFrame | None,
+    event: pd.Series | dict,
+    status: str,
+    note: str = "",
+    updated_at: str = "",
+) -> pd.DataFrame:
+    """Return a complete replacement snapshot with one event review state updated."""
+    if status not in EVENT_REVIEW_STATUSES:
+        raise ValueError(f"Unsupported event review status: {status}")
+    if states is None or states.empty:
+        current = pd.DataFrame(columns=EVENT_REVIEW_COLUMNS)
+    else:
+        current = states.copy()
+        for column in EVENT_REVIEW_COLUMNS:
+            if column not in current.columns:
+                current[column] = ""
+        current = current[list(EVENT_REVIEW_COLUMNS)]
+    key = event_review_key(event)
+    current = current[current["event_key"].astype(str) != key]
+    row = {
+        "event_key": key,
+        "status": status,
+        "note": str(note or "").strip(),
+        "updated_at": str(updated_at or ""),
+    }
+    return pd.concat([current, pd.DataFrame([row])], ignore_index=True)

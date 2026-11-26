@@ -295,3 +295,17 @@ def test_backup_rejects_same_source_and_destination(tmp_path):
 
     with pytest.raises(ValueError):
         backup_database(source, source)
+
+
+def test_event_review_state_dataset_round_trips_in_local_sqlite(tmp_path):
+    db_path = tmp_path / "wifi.db"
+    rows = [{
+        "event_key": "review-key-001",
+        "status": "action_required",
+        "note": "Check local router logs",
+        "updated_at": "2026-11-26T10:00:00+03:00",
+    }]
+
+    write_dataset_snapshot("event_review_states.csv", rows, db_path)
+
+    assert read_dataset("event_review_states.csv", db_path) == rows

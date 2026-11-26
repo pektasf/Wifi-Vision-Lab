@@ -72,3 +72,13 @@ integrity check. Restore verifies the backup integrity and schema version,
 refuses to overwrite an existing database, and applies any supported schema
 upgrade after copying. Keep backups on trusted local storage; they contain
 sensitive local network inventory and observations.
+
+
+## Event review workflow
+
+The Event Center stores review metadata in the local SQLite dataset
+`event_review_states.csv`: a deterministic event key, review status, operator
+note, and local update timestamp. The original event source rows are not
+modified. The dataset uses the same SQLite snapshot and CSV compatibility
+export path as other application datasets. Review metadata remains local and
+must not be committed or shared with network observation data.

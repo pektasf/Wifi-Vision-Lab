@@ -290,3 +290,78 @@ def test_related_event_context_rejects_negative_or_invalid_window():
         related_event_context(frame, frame.iloc[0], window_minutes=-1)
     with pytest.raises(ValueError):
         related_event_context(frame, frame.iloc[0], window_minutes="invalid")
+
+
+def test_event_review_key_is_deterministic_and_uses_event_source_context():
+    from scripts.event_timeline import event_review_key
+
+    event = pd.Series({
+        "source": "Canlı izleme", "event_time": "2026-11-26T09:00:00Z",
+        "event_type": "PING_NOT_RESPONDING", "identity_key": "AA:01",
+        "ip": "192.0.2.1", "details": "Ping timeout",
+    })
+    assert event_review_key(event) == event_review_key(event.to_dict())
+    changed = event.copy()
+    changed["source"] = "Ağ olayları"
+    assert event_review_key(event) != event_review_key(changed)
+
+
+def test_merge_event_review_states_preserves_notes_and_defaults_unknown_events():
+    from scripts.event_timeline import merge_event_review_states, event_review_key
+
+    events = pd.DataFrame([
+        {"source": "Canlı izleme", "event_time": "2026-11-26T09:00:00Z",
+         "event_type": "PING_NOT_RESPONDING", "identity_key": "AA:01"},
+        {"source": "Ağ olayları", "event_time": "2026-11-26T08:00:00Z",
+         "event_type": "IP_CHANGED", "identity_key": "AA:01"},
+    ])
+    states = pd.DataFrame([{
+        "event_key": event_review_key(events.iloc[0]),
+        "status": "action_required", "note": "Router tarafını kontrol et",
+        "updated_at": "2026-11-26T09:10:00+03:00",
+    }])
+    result = merge_event_review_states(events, states)
+    assert result["review_status"].tolist() == ["action_required", "new"]
+    assert result.iloc[0]["review_note"] == "Router tarafını kontrol et"
+    assert result.iloc[1]["review_note"] == ""
+
+
+def test_upsert_event_review_state_updates_existing_record_without_duplicates():
+    from scripts.event_timeline import upsert_event_review_state, event_review_key
+
+    event = pd.Series({
+        "source": "Canlı izleme", "event_time": "2026-11-26T09:00:00Z",
+        "event_type": "PING_NOT_RESPONDING", "identity_key": "AA:01",
+    })
+    states = pd.DataFrame([{
+        "event_key": event_review_key(event), "status": "reviewed",
+        "note": "Old note", "updated_at": "old",
+    }])
+    result = upsert_event_review_state(
+        states, event, "resolved", "Kontrol edildi", "2026-11-26T10:00:00Z"
+    )
+    assert len(result) == 1
+    assert result.iloc[0]["status"] == "resolved"
+    assert result.iloc[0]["note"] == "Kontrol edildi"
+
+
+def test_upsert_event_review_state_rejects_unknown_status():
+    import pytest
+    from scripts.event_timeline import upsert_event_review_state
+
+    with pytest.raises(ValueError):
+        upsert_event_review_state(pd.DataFrame(), {"event_type": "test"}, "closed")
+
+
+def test_merge_event_review_states_handles_empty_and_invalid_legacy_state():
+    from scripts.event_timeline import merge_event_review_states
+
+    events = pd.DataFrame([{
+        "source": "Ağ olayları", "event_time": "2026-11-26T09:00:00Z",
+        "event_type": "IP_CHANGED",
+    }])
+    assert merge_event_review_states(pd.DataFrame(), pd.DataFrame()).empty
+    result = merge_event_review_states(events, pd.DataFrame([{
+        "event_key": "wrong", "status": "unsupported", "note": "legacy",
+    }]))
+    assert result.iloc[0]["review_status"] == "new"
