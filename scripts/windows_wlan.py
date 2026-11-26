@@ -62,14 +62,16 @@ _INTERFACE_STATES = {
 def _decode_interface_description(value) -> str:
     """Decode the fixed-width Windows WCHAR[256] field on every host ABI."""
     try:
-        return bytes(value).decode("utf-16-le", errors="replace").split("\\x00", 1)[0].strip()
+        return bytes(value).decode("utf-16-le", errors="replace").split("\x00", 1)[0].strip()
     except (TypeError, UnicodeError):
         return "Unknown Wi-Fi adapter"
 
 
 def _interface_state_name(value: int) -> str:
     return _INTERFACE_STATES.get(int(value), "unknown")
-\n\nclass _WLAN_INTERFACE_INFO_LIST(ctypes.Structure):
+
+
+class _WLAN_INTERFACE_INFO_LIST(ctypes.Structure):
     _fields_ = [
         ("dwNumberOfItems", _DWORD),
         ("dwIndex", _DWORD),
