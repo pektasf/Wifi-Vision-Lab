@@ -18,7 +18,7 @@ excluded from Git.
 
 ## Migration and compatibility
 
-Schema version 2 adds `dataset_snapshots` and `dataset_rows`. Each dataset is
+Schema version 2 adds `dataset_snapshots` and `dataset_rows`. Schema version 3 adds local `spatial_floors`, `spatial_zones`, and `spatial_anchors` tables for Spatial Intelligence. Both migrations are additive and preserve existing records. Each dataset is
 stored as an ordered JSON row snapshot. The migration is additive and retains
 the existing devices, observations, events, legacy_records, and csv_imports
 tables. Existing schema version 1 databases are upgraded without dropping
@@ -50,7 +50,7 @@ Run:
 
     python -m pytest -q
 
-Tests cover idempotent initialization, schema-v1 upgrade, generic dataset
+Tests cover idempotent initialization, schema-v1 and schema-v2 upgrades, spatial floor/zone/anchor validation and persistence, generic dataset
 round-trips, empty snapshots, legacy CSV preservation, and deduplication.
 
 

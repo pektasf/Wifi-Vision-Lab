@@ -58,14 +58,20 @@ The report distinguishes measured facts from unknown capabilities:
 - Command failures are reported without crashing the application.
 - The audit makes no claim that passive human/object detection is available.
 
+## SI-1 — local Spatial Core
+
+Implemented as local SQLite schema version 3 and the scripts/spatial_core.py module.
+
+- Local floor-plan dimensions in metres.
+- Rectangular zones bounded by their parent floor.
+- Manually placed access-point, laptop, sensor, and reference anchors.
+- Validation for finite coordinates, positive dimensions, floor boundaries, and anchor types.
+- Zone lookup returns assigned, unassigned, or ambiguous; overlapping zones are never silently resolved.
+- Existing device and observation records are preserved by the additive database migration.
+
+The current core is a tested data/geometry foundation. A floor-plan editor and visual map are still pending.
+
 ## Later implementation phases
-
-### SI-1 — Spatial core
-
-- Local floor-plan and zone definitions.
-- Coordinate system and manually placed AP/anchor points.
-- Sensor and measurement-source registry.
-- Evidence provenance, confidence, and estimated-versus-verified status.
 
 ### SI-2 — Laptop-observable device positioning
 
