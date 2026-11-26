@@ -21,6 +21,7 @@ from scripts.discovery.evidence_timeline import (
     correlate_inventory_observation,
 )
 from scripts.discovery.dhcp_lease_analysis import analyze_dhcp_lease_windows
+from scripts.discovery.wireless_dhcp_correlation import correlate_wireless_dhcp_observations
 
 
 DATA = Path(__file__).resolve().parent.parent / "data" / "processed"
@@ -694,6 +695,76 @@ def render():
             st.caption(
                 "Kira analizi için ACK, atanmış IP, geçerli lease_time ve zaman "
                 "damgası içeren Zeek kayıtları gerekir."
+            )
+
+    if not wireless_evidence.empty and not zeek_evidence.empty:
+        st.markdown("### Wi-Fi ↔ DHCP zaman yakınlığı")
+        st.caption(
+            "Aynı normalize MAC adresinin Kismet ve Zeek kayıtlarında varsayılan "
+            "±5 dakika içinde görülmesini listeler. Bu ilişki fiziksel cihaz/kişi "
+            "kimliğini kanıtlamaz; kaynak kayıtlar birleştirilmez. BSSID yalnızca "
+            "erişim noktası bağlamıdır."
+        )
+        correlation_window = st.selectbox(
+            "Zaman yakınlığı",
+            options=[60, 180, 300, 600, 900],
+            index=2,
+            format_func=lambda value: f"±{value // 60} dakika" if value % 60 == 0 else f"±{value} saniye",
+            key="wireless_dhcp_correlation_window",
+        )
+        try:
+            wireless_dhcp_pairs = correlate_wireless_dhcp_observations(
+                wireless_evidence.to_dict("records"),
+                zeek_evidence.to_dict("records"),
+                window_seconds=correlation_window,
+            )
+        except ValueError as exc:
+            st.error(f"Wi-Fi / DHCP ilişkilendirmesi yapılamadı: {exc}")
+            wireless_dhcp_pairs = []
+        if wireless_dhcp_pairs:
+            pairs_frame = pd.DataFrame(wireless_dhcp_pairs)
+            pair_metrics = st.columns(3)
+            pair_metrics[0].metric("Zaman yakın eşleşmesi", len(pairs_frame))
+            pair_metrics[1].metric(
+                "Randomized MAC işaretli",
+                int(pairs_frame["randomized_mac"].eq("true").sum()),
+            )
+            pair_metrics[2].metric(
+                "Ağ kapsamı bilinmiyor",
+                int(pairs_frame["correlation_status"].eq("exact_mac_time_near_scope_unknown").sum()),
+            )
+            pair_labels = {
+                "wireless_observed_at": "Kismet gözlem zamanı",
+                "dhcp_observed_at": "DHCP gözlem zamanı",
+                "mac": "Birebir MAC",
+                "time_delta_seconds": "Zaman farkı (sn)",
+                "wireless_bssid_context": "AP BSSID bağlamı",
+                "wireless_signal_dbm": "Wi-Fi sinyali (dBm)",
+                "dhcp_assigned_ip": "DHCP atanan IP",
+                "dhcp_server_ip": "DHCP sunucusu",
+                "wireless_network_scope": "Kismet ağ kapsamı",
+                "dhcp_network_scope": "DHCP ağ kapsamı",
+                "randomized_mac": "Randomized MAC",
+                "correlation_status": "İlişki durumu",
+                "interpretation": "Yorum",
+            }
+            st.dataframe(
+                pairs_frame[[column for column in pair_labels if column in pairs_frame.columns]].rename(columns=pair_labels),
+                width="stretch",
+                hide_index=True,
+                height=min(420, 58 + 35 * min(len(pairs_frame), 10)),
+            )
+            st.caption(
+                "MAC adresinin aynı olması ve zaman yakınlığı yalnızca iki kaynak "
+                "gözlemini ilişkilendirir. Randomized MAC, farklı ağ kapsamı, "
+                "sensör saat farkı ve aynı adresin başka cihazlarda kullanılması "
+                "sonucu belirsizleştirebilir. Eşleşme bulunmaması da cihazın "
+                "kablosuz ağda olmadığı anlamına gelmez."
+            )
+        else:
+            st.info(
+                "Seçilen zaman penceresinde aynı MAC adresiyle eşleşen Kismet / "
+                "Zeek kaydı bulunamadı. Bu, cihazın ağda olmadığına dair kanıt değildir."
             )
 
     identity_timeline = build_identity_evidence_timeline(
