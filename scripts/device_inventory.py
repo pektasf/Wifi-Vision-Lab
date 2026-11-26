@@ -199,7 +199,8 @@ def resolve_hostnames(ips):
 
 def scan(scan_cidr=None, approved=False, confirmation=None, interface_alias=None):
     print("[1/4] Aktif ag algilaniyor...", flush=True)
-    selected_alias = interface_alias or os.getenv("WIFI_VISION_INTERFACE_ALIAS", "").strip() or None\n    net = get_network(selected_alias)
+    selected_alias = interface_alias or os.getenv("WIFI_VISION_INTERFACE_ALIAS", "").strip() or None
+    net = get_network(selected_alias)
     active_network = net["network"]
 
     requested_cidr = (
