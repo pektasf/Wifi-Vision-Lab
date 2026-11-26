@@ -77,7 +77,7 @@ def build_scan_targets(
             active_network_cidr or network_cidr, strict=True
         )
         local = ipaddress.ip_address(local_ip)
-        gateway = ipaddress.ip_address(gateway_ip)
+        gateway = (\n            ipaddress.ip_address(gateway_ip) if str(gateway_ip or "").strip() else None\n        )
     except ValueError as exc:
         raise ValueError(
             "A valid IPv4 target CIDR, active network, local IP and gateway are required."
@@ -85,7 +85,7 @@ def build_scan_targets(
 
     if (
         network.version != 4 or active_network.version != 4
-        or local.version != 4 or gateway.version != 4
+        or local.version != 4 or (gateway is not None and gateway.version != 4)
     ):
         raise ValueError("Only IPv4 local network discovery is supported.")
 
