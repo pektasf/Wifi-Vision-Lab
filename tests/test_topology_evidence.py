@@ -272,3 +272,25 @@ def test_verified_edge_options_are_empty_without_usable_edge_schema():
     assert prepare_verified_edge_options(
         pd.DataFrame([{"source": "a", "target": "b"}]), None, None
     ) == []
+
+
+
+def test_extract_selected_node_id_from_plotly_selection():
+    from scripts.topology_evidence import extract_selected_node_id
+
+    selection = {"selection": {"points": [{"customdata": "192.168.1.20"}]}}
+
+    assert extract_selected_node_id(selection) == "192.168.1.20"
+
+
+def test_extract_selected_node_id_handles_attribute_objects_and_empty_selection():
+    from types import SimpleNamespace
+    from scripts.topology_evidence import extract_selected_node_id
+
+    selection = SimpleNamespace(selection=SimpleNamespace(
+        points=[SimpleNamespace(customdata=["BSSID:AA:BB:CC:DD:EE:99"])]
+    ))
+
+    assert extract_selected_node_id(selection) == "BSSID:AA:BB:CC:DD:EE:99"
+    assert extract_selected_node_id({"selection": {"points": []}}) == ""
+    assert extract_selected_node_id(None) == ""
