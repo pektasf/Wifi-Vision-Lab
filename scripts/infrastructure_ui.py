@@ -96,6 +96,9 @@ def build_network_context_summary(frame):
 
 def render():
     inventory = read_data("device_inventory.csv")
+    inventory_index = build_inventory_identity_index(
+        inventory.to_dict("records") if not inventory.empty else []
+    )
     nodes = read_data("topology_nodes.csv")
     classification = read_data("device_classification.csv")
     wifi = read_data("wifi_connection.csv")
@@ -245,10 +248,6 @@ def render():
 
     endpoint_evidence = read_data("endpoint_adapter_evidence.csv")
     if not endpoint_evidence.empty:
-        inventory_index = build_inventory_identity_index(
-            inventory.to_dict("records") if not inventory.empty else []
-        )
-
         def endpoint_inventory_match(row):
             method, _ = correlate_inventory_observation(
                 row, inventory_index,
@@ -278,8 +277,9 @@ def render():
         )
         st.caption(
             "Endpoint kayıtları endpoint_reported kanıtıdır; kriptografik olarak "
-            "doğrulanmış cihaz kimliği sayılmaz. Eşleşme, yalnızca IP veya MAC "
-            "gözlemiyle ilişki kurar; gerçek kişi kimliğini belirlemez."
+            "doğrulanmış cihaz kimliği sayılmaz. IP eşleşmesi yalnızca iki tarafta "
+            "aynı açık ağ kapsamı varsa yapılır; kapsam yoksa IP eşleşmesi varsayılmaz. "
+            "Bu kayıtlar gerçek kişi kimliğini belirlemez."
         )
 
     st.markdown("### Kismet kablosuz gözlem içe aktarımı")
