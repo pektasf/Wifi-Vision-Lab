@@ -1,5 +1,3 @@
-import sqlite3
-
 import pytest
 
 from scripts.spatial_core import (
@@ -13,13 +11,20 @@ from scripts.spatial_core import (
     validate_floor,
     validate_rectangle,
 )
-from scripts.storage import connect, initialize_database
+from scripts.storage import MIGRATIONS, connect, initialize_database
 
 
 def test_schema_v2_upgrades_to_spatial_schema_without_losing_data(tmp_path):
     db_path = tmp_path / "legacy-v2.db"
-    initialize_database(db_path)
     with connect(db_path) as connection:
+        connection.executescript(MIGRATIONS[1])
+        connection.executescript(MIGRATIONS[2])
+        connection.execute(
+            "INSERT INTO schema_migrations(version, applied_at) VALUES (1, 'legacy')"
+        )
+        connection.execute(
+            "INSERT INTO schema_migrations(version, applied_at) VALUES (2, 'legacy')"
+        )
         connection.execute(
             "INSERT INTO dataset_snapshots(dataset, row_count, updated_at) VALUES (?, ?, ?)",
             ("keep.csv", 0, "before-migration"),
