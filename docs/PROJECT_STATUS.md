@@ -21,6 +21,7 @@ Laptop-only Spatial Intelligence work has started.
 - Calibrated indoor positioning and passive presence/motion sensing are not implemented yet.
 - The Windows BSS collector is driver-dependent; the UI distinguishes missing interfaces, empty BSS results, permission/service/driver errors, and partial results rather than fabricating measurements.
 - Per-adapter diagnostics show each local Wi-Fi interface description, Windows state, BSS-list status, and error code; adapter descriptions are not persisted with measurements.
+- Windows and Linux RSSI results now include measurement-age metadata when the driver exposes timestamps; the UI warns when timestamped records are older than 120 seconds.
 - The capability audit can export a JSON compatibility report without SSID/BSSID or network names for troubleshooting different laptop models.
 - The app is not tied to one laptop model. Windows devices are evaluated at runtime; actual RSSI availability varies by Wi-Fi chipset, driver, Windows WLAN service, and cached BSS data.
 - Capability reporting distinguishes backend implementation from per-device results. Windows and Linux have driver/tool-dependent RSSI backends; macOS is explicitly marked not implemented.
