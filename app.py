@@ -308,6 +308,7 @@ def dashboard_page():
 
     inventory = load("device_inventory.csv")
     findings = load("behavior_findings.csv")
+    profiles = load("device_profiles.csv")
     event_frames = {
         filename: load(filename)
         for filename in [
@@ -1121,6 +1122,39 @@ def behavior_page():
         mime="text/csv",
         key="behavior_export",
     )
+
+
+    from scripts.behavior_analysis import prepare_temporal_context
+
+    temporal = prepare_temporal_context(profiles)
+    st.divider()
+    st.markdown("### Zamansal cihaz geçmişi")
+    st.caption(
+        "Aşağıdaki kayıtlar önceki taramalarda aynı cihaz kimliği için görülen IP adreslerini "
+        "özetler. DHCP ve ağ yapılandırması değişiklikleri normal olabilir; IP değişimi tek başına "
+        "güvenlik tehdidi veya saldırı kanıtı değildir."
+    )
+    if temporal.empty:
+        st.info("Henüz birden fazla IP adresiyle gözlemlenmiş cihaz geçmişi bulunmuyor.")
+    else:
+        temporal_display = temporal.rename(columns={
+            "identity_key": "Cihaz kimliği",
+            "hostname": "Cihaz adı",
+            "ip_history": "Gözlemlenen IP geçmişi",
+            "ip_change_count": "IP geçiş sayısı",
+            "observation_count": "Gözlem sayısı",
+            "first_seen": "İlk gözlem",
+            "last_seen": "Son gözlem",
+        })
+        st.caption(f"{len(temporal):,} cihazın geçmişinde birden fazla IP adresi var.")
+        st.dataframe(
+            temporal_display.head(200),
+            width="stretch",
+            hide_index=True,
+            height=min(420, 58 + 35 * min(len(temporal_display), 10)),
+        )
+        if len(temporal_display) > 200:
+            st.caption("İlk 200 kayıt gösteriliyor.")
 
 
 
