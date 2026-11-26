@@ -113,3 +113,28 @@ def test_active_interface_must_be_rfc1918_private():
             "192.168.10.0/24", "100.64.10.20", "100.64.10.1",
             active_network_cidr="100.64.10.0/24",
         )
+
+
+
+def test_hosted_network_interface_without_gateway_is_allowed():
+    targets, truncated = build_scan_targets(
+        "192.168.137.0/24",
+        "192.168.137.1",
+        "",
+        max_hosts=20,
+        active_network_cidr="192.168.137.0/24",
+    )
+
+    assert len(targets) == 20
+    assert targets[0] == "192.168.137.1"
+    assert truncated is True
+
+
+def test_gateway_is_validated_when_present():
+    with pytest.raises(ValueError, match="default gateway"):
+        build_scan_targets(
+            "192.168.137.0/24",
+            "192.168.137.1",
+            "192.168.138.1",
+            active_network_cidr="192.168.137.0/24",
+        )
