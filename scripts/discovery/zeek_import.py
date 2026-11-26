@@ -19,7 +19,10 @@ MAX_ZEEK_RECORDS = 100000
 
 def _ip(value):
     try:
-        return str(ipaddress.IPv4Address(str(value).strip()))
+        address = ipaddress.IPv4Address(str(value).strip())
+        if address.is_unspecified or address.is_multicast or address.is_loopback or address.is_reserved:
+            return ""
+        return str(address)
     except (TypeError, ValueError):
         return ""
 
