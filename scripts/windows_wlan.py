@@ -44,6 +44,33 @@ class _WLAN_INTERFACE_INFO(ctypes.Structure):
     ]
 
 
+
+
+
+_INTERFACE_STATES = {
+    0: "not_ready",
+    1: "connected",
+    2: "ad_hoc_network_formed",
+    3: "disconnecting",
+    4: "disconnected",
+    5: "associating",
+    6: "discovering",
+    7: "authenticating",
+}
+
+
+def _decode_interface_description(value) -> str:
+    """Decode the fixed-width Windows WCHAR[256] field on every host ABI."""
+    try:
+        return bytes(value).decode("utf-16-le", errors="replace").split("\x00", 1)[0].strip()
+    except (TypeError, UnicodeError):
+        return "Unknown Wi-Fi adapter"
+
+
+def _interface_state_name(value: int) -> str:
+    return _INTERFACE_STATES.get(int(value), "unknown")
+
+
 class _WLAN_INTERFACE_INFO_LIST(ctypes.Structure):
     _fields_ = [
         ("dwNumberOfItems", _DWORD),
@@ -182,6 +209,7 @@ def _query_bss_entries(api) -> dict[str, object]:
         "interfaces_queried": 0,
         "interfaces_with_entries": 0,
         "interface_error_codes": [],
+        "interfaces": [],
     }
     try:
         result = api.WlanEnumInterfaces(client_handle, None, ctypes.byref(interface_list))
@@ -209,14 +237,31 @@ def _query_bss_entries(api) -> dict[str, object]:
                 None,
                 ctypes.byref(bss_list),
             )
+            interface_info = interface_ptr.contents
+            interface_report = {
+                "name": _decode_interface_description(
+                    interface_info.strInterfaceDescription
+                ),
+                "state": _interface_state_name(interface_info.isState),
+                "status": "error" if result != 0 else "empty_bss_list",
+                "bss_entries": 0,
+                "error_code": int(result) if result != 0 else None,
+            }
             if result != 0:
                 diagnostics["interface_error_codes"].append(int(result))
+                diagnostics["interfaces"].append(interface_report)
                 continue
             diagnostics["interfaces_queried"] += 1
             if not bss_list:
+                diagnostics["interfaces"].append(interface_report)
                 continue
             try:
                 item_count = int(bss_list.contents.dwNumberOfItems)
+                interface_report["bss_entries"] = item_count
+                interface_report["status"] = (
+                    "available" if item_count else "empty_bss_list"
+                )
+                diagnostics["interfaces"].append(interface_report)
                 if item_count:
                     diagnostics["interfaces_with_entries"] += 1
                 bss_address = ctypes.addressof(bss_list.contents)
@@ -321,6 +366,7 @@ def collect_windows_rssi_measurements(
         "interfaces_seen": query["interfaces_seen"],
         "interfaces_queried": query["interfaces_queried"],
         "interfaces_with_entries": query["interfaces_with_entries"],
+        "interfaces": query.get("interfaces", []),
         "errors": errors,
         "collection_mode": "read_only_bss_list_no_wlan_scan_call",
         "privacy": {

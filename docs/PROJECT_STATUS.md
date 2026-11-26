@@ -20,6 +20,8 @@ Laptop-only Spatial Intelligence work has started.
 - CSI, monitor mode, and Wi-Fi RTT/FTM remain unknown until verified against the actual laptop adapter and driver.
 - Calibrated indoor positioning and passive presence/motion sensing are not implemented yet.
 - The Windows BSS collector is driver-dependent; the UI distinguishes missing interfaces, empty BSS results, permission/service/driver errors, and partial results rather than fabricating measurements.
+- Per-adapter diagnostics show each local Wi-Fi interface description, Windows state, BSS-list status, and error code; adapter descriptions are not persisted with measurements.
+- The app is not tied to one laptop model. Windows devices are evaluated at runtime; actual RSSI availability varies by Wi-Fi chipset, driver, Windows WLAN service, and cached BSS data.
 - Capability reporting distinguishes a Windows RSSI backend being implemented from a specific adapter successfully returning measurements; Linux/macOS RSSI is explicitly marked not implemented.
 
 Roadmap: see SPATIAL_INTELLIGENCE.md.

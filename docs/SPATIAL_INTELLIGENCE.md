@@ -121,7 +121,7 @@ Do not infer the position of every other network client from the laptop's own RS
 
 - No cloud processing or external telemetry.
 - No automatic network scan as part of the capability audit.
-- The Windows RSSI query does not call WlanScan; freshness depends on the WLAN service/driver BSS list.
+- The Windows RSSI query does not call WlanScan; freshness depends on the WLAN service/driver BSS list. The result includes a per-interface diagnostic (adapter description, Windows interface state, BSS-list availability, and API error code) so different laptop Wi-Fi adapters can be evaluated independently. Adapter descriptions are shown locally and are not persisted with RSSI fingerprints.
 - Never persist or display raw SSID/BSSID from the native BSS list; use installation-local pseudonymous AP aliases.
 - No packet injection, deauthentication, or disruption.
 - No SSID/BSSID in the capability report.
