@@ -138,3 +138,75 @@ def test_gateway_is_validated_when_present():
             "192.168.138.1",
             active_network_cidr="192.168.137.0/24",
         )
+
+
+
+def test_windows_interface_listing_includes_hosted_network_without_gateway(monkeypatch):
+    import json
+    from types import SimpleNamespace
+
+    from scripts import device_inventory
+
+    payload = [
+        {
+            "IP": "192.168.1.20", "Prefix": 24, "Gateway": "192.168.1.1",
+            "Adapter": "Wi-Fi", "InterfaceIndex": 7,
+        },
+        {
+            "IP": "192.168.137.1", "Prefix": 24, "Gateway": "",
+            "Adapter": "Local Area Connection* 12", "InterfaceIndex": 19,
+        },
+    ]
+    monkeypatch.setattr(device_inventory.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(
+        device_inventory.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(
+            returncode=0, stdout=json.dumps(payload), stderr=""
+        ),
+    )
+
+    interfaces = device_inventory.list_network_interfaces()
+
+    assert len(interfaces) == 2
+    assert interfaces[0]["adapter"] == "Wi-Fi"
+    hosted = interfaces[1]
+    assert hosted["adapter"] == "Local Area Connection* 12"
+    assert hosted["ip"] == "192.168.137.1"
+    assert hosted["network"] == "192.168.137.0/24"
+    assert hosted["gateway"] == ""
+    assert hosted["has_default_gateway"] is False
+
+
+def test_get_network_can_select_hosted_network_adapter(monkeypatch):
+    from scripts import device_inventory
+
+    interfaces = [
+        {
+            "ip": "192.168.1.20", "gateway": "192.168.1.1",
+            "adapter": "Wi-Fi", "interface_index": 7,
+            "network": "192.168.1.0/24", "has_default_gateway": True,
+        },
+        {
+            "ip": "192.168.137.1", "gateway": "",
+            "adapter": "Local Area Connection* 12", "interface_index": 19,
+            "network": "192.168.137.0/24", "has_default_gateway": False,
+        },
+    ]
+    monkeypatch.setattr(device_inventory, "list_network_interfaces", lambda: interfaces)
+
+    selected = device_inventory.get_network("Local Area Connection* 12")
+
+    assert selected["adapter"] == "Local Area Connection* 12"
+    assert selected["ip"] == "192.168.137.1"
+    assert selected["network"] == "192.168.137.0/24"
+    assert selected["gateway"] == ""
+    assert selected["has_default_gateway"] is False
+
+
+def test_get_network_rejects_stale_adapter_selection(monkeypatch):
+    from scripts import device_inventory
+
+    monkeypatch.setattr(device_inventory, "list_network_interfaces", lambda: [])
+    with pytest.raises(RuntimeError, match="no longer|mevcut değil"):
+        device_inventory.get_network("Old hosted adapter")
