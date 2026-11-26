@@ -3204,7 +3204,16 @@ with st.sidebar:
                 key="scan_interface_alias",
                 format_func=lambda alias: (
                     f"{alias} · {interface_options[alias]['ip']} · "
-                    f"{interface_options[alias]['network']}"
+                    f"{interface_options[alias]['network']} · "
+                    + (
+                        "Sanal WLAN"
+                        if interface_options[alias].get("adapter_kind") == "virtual_wlan"
+                        else "Sanal/yazılım adaptörü"
+                        if interface_options[alias].get("adapter_kind") == "virtual_or_software"
+                        else "Fiziksel adaptör"
+                        if interface_options[alias].get("adapter_kind") == "physical"
+                        else "Adaptör türü bilinmiyor"
+                    )
                     + (" · Varsayılan ağ geçidi" if interface_options[alias]["has_default_gateway"]
                        else " · Ağ geçidi yok")
                 ),
