@@ -635,7 +635,7 @@ def detail_page():
 
 
 def events_page():
-    from scripts.event_timeline import normalize_event_frames
+    from scripts.event_timeline import normalize_event_frames, summarize_event_severity
 
     st.title("Ag Olaylari")
     st.caption("Cihaz, ag, canli izleme ve davranis bulgularini tek bir yerel zaman cizelgesinde inceleyin.")
@@ -657,6 +657,18 @@ def events_page():
     c1.metric("Toplam olay", f"{len(data):,}")
     c2.metric("Olay kaynagi", f"{data['source'].nunique():,}")
     c3.metric("Farkli olay turu", f"{data['event_type'].nunique():,}")
+
+    severity_counts = summarize_event_severity(data)
+    known_levels = ("critical", "warning", "review", "info")
+    severity_columns = st.columns(4)
+    for column, level in zip(severity_columns, known_levels):
+        column.metric(level.title(), f"{severity_counts.get(level, 0):,}")
+    other_count = sum(
+        count for level, count in severity_counts.items()
+        if level not in known_levels
+    )
+    if other_count:
+        st.caption(f"Diger/ozel onem seviyeleri: {other_count:,}")
 
     st.divider()
     st.subheader("Olay zaman cizelgesi")
