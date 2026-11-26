@@ -555,6 +555,11 @@ def render():
         local_mac_count = int(
             zeek_evidence["mac_address_type"].eq("locally_administered").sum()
         )
+        scope_mismatch_count = int(
+            zeek_evidence["evidence_status"].astype(str).str.contains(
+                "network_scope_address_mismatch", regex=False
+            ).sum()
+        )
         assigned_count = int(
             zeek_evidence["assigned_ip"].astype(str).str.strip().ne("").sum()
         )
@@ -566,6 +571,11 @@ def render():
         zeek_metrics[1].metric("Atanmış IP", assigned_count)
         zeek_metrics[2].metric("Farklı MAC", distinct_mac_count)
         zeek_metrics[3].metric("Yerel yönetimli MAC", local_mac_count)
+        if scope_mismatch_count:
+            st.warning(
+                f"{scope_mismatch_count} DHCP kaydının IP adresi girilen ağ kapsamının dışında. "
+                "Bu kayıtlar için ağ kapsamı eşleştirmede kullanılmadı."
+            )
 
         zeek_evidence["inventory_match"] = zeek_evidence.apply(
             lambda row: {
