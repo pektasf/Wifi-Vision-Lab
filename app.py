@@ -810,6 +810,47 @@ def history_page():
         height=520
     )
 
+    from scripts.behavior_analysis import prepare_observation_gaps
+
+    st.divider()
+    st.subheader("Gözlem aralıkları ve yeniden görünme")
+    st.caption(
+        "Bu bölüm aynı cihaz kimliği için ardışık kayıtlı gözlemler arasındaki süreyi gösterir. "
+        "Uzun bir kayıt aralığı cihazın çevrimdışı kaldığını kanıtlamaz; tarama yapılmaması, "
+        "kapsama değişikliği veya gözlem kaybı da aynı sonucu doğurabilir."
+    )
+    observation_events = load("device_events.csv")
+    observation_gaps = prepare_observation_gaps(history, observation_events)
+    if observation_gaps.empty:
+        st.info("Eşik değeri aşan ardışık gözlem aralığı bulunamadı.")
+    else:
+        gap_display = observation_gaps.rename(columns={
+            "identity_key": "Cihaz kimliği",
+            "previous_observation": "Önceki gözlem",
+            "next_observation": "Yeniden gözlem",
+            "gap_minutes": "Gözlem aralığı (dakika)",
+            "reappearance_event_recorded": "Yeniden görünme olayı kayıtlı",
+            "evidence": "Kanıt / sınırlama",
+        })
+        gap_metrics = st.columns(3)
+        gap_metrics[0].metric("Gözlem aralığı", f"{len(gap_display):,}")
+        gap_metrics[1].metric(
+            "Kayıtlı yeniden görünme olayı",
+            int(observation_gaps["reappearance_event_recorded"].sum()),
+        )
+        gap_metrics[2].metric(
+            "En uzun aralık (dakika)",
+            f"{observation_gaps['gap_minutes'].max():,.1f}",
+        )
+        st.dataframe(
+            gap_display.head(200),
+            width="stretch",
+            hide_index=True,
+            height=min(420, 58 + 35 * min(len(gap_display), 10)),
+        )
+        if len(gap_display) > 200:
+            st.caption("İlk 200 aralık gösteriliyor.")
+
     st.download_button(
         "Ge\u00e7mi\u015f kay\u0131tlar\u0131n\u0131 CSV indir",
         result.to_csv(index=False).encode("utf-8-sig"),
@@ -971,6 +1012,7 @@ def behavior_page():
         "Mevcut envanterdeki adres eşleşmelerini ve inceleme gerektiren tutarsızlıkları kanıtlarıyla gözden geçir.",
     )
     inventory = load("device_inventory.csv")
+    profiles = load("device_profiles.csv")
     findings = load("behavior_findings.csv")
 
     action_col, note_col = st.columns([1, 2.2])

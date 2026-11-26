@@ -183,3 +183,72 @@ def prepare_ip_change_history(events: pd.DataFrame) -> pd.DataFrame:
         "_sort_time", ascending=False, na_position="last", kind="stable"
     )
     return result[columns].reset_index(drop=True)
+
+
+def prepare_observation_gaps(
+    history: pd.DataFrame,
+    events: pd.DataFrame | None = None,
+    minimum_gap_minutes: float = 10,
+) -> pd.DataFrame:
+    """Summarize intervals between stored observations, not device downtime."""
+    columns = [
+        "identity_key", "previous_observation", "next_observation",
+        "gap_minutes", "reappearance_event_recorded", "evidence",
+    ]
+    try:
+        threshold = float(minimum_gap_minutes)
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError("minimum_gap_minutes must be a non-negative number")
+    if pd.isna(threshold) or threshold < 0:
+        raise ValueError("minimum_gap_minutes must be a non-negative number")
+    if history is None or history.empty or not {"identity_key", "observed_at"}.issubset(history.columns):
+        return pd.DataFrame(columns=columns)
+
+    frame = history[["identity_key", "observed_at"]].copy()
+    frame["identity_key"] = frame["identity_key"].fillna("").astype(str).str.strip()
+    frame["_time"] = pd.to_datetime(frame["observed_at"], utc=True, errors="coerce")
+    frame = frame[frame["identity_key"].ne("") & frame["_time"].notna()]
+    frame = frame.drop_duplicates(["identity_key", "_time"])
+    if frame.empty:
+        return pd.DataFrame(columns=columns)
+
+    recorded: set[tuple[str, pd.Timestamp]] = set()
+    required = {"identity_key", "event_type", "event_time"}
+    if events is not None and not events.empty and required.issubset(events.columns):
+        event_frame = events.copy()
+        event_frame["identity_key"] = event_frame["identity_key"].fillna("").astype(str).str.strip()
+        event_frame = event_frame[
+            event_frame["event_type"].fillna("").astype(str).str.casefold().eq("seen_again")
+        ].copy()
+        event_frame["_time"] = pd.to_datetime(event_frame["event_time"], utc=True, errors="coerce")
+        recorded = {
+            (str(row["identity_key"]), row["_time"])
+            for _, row in event_frame.iterrows()
+            if str(row["identity_key"]).strip() and pd.notna(row["_time"])
+        }
+
+    gaps = []
+    for identity, group in frame.groupby("identity_key", sort=True):
+        times = group.sort_values("_time", kind="stable")["_time"].tolist()
+        for previous, current in zip(times, times[1:]):
+            minutes = (current - previous).total_seconds() / 60
+            if minutes < threshold:
+                continue
+            event_recorded = (identity, current) in recorded
+            gaps.append({
+                "identity_key": identity,
+                "previous_observation": previous.isoformat(),
+                "next_observation": current.isoformat(),
+                "gap_minutes": round(minutes, 1),
+                "reappearance_event_recorded": event_recorded,
+                "evidence": (
+                    "Kayıtlı seen_again olayı mevcut; yalnızca yeniden gözlemlenmeyi doğrular."
+                    if event_recorded else
+                    "Ardışık kayıt zamanları arasında gözlem aralığı var; bağlantı durumu bilinmiyor."
+                ),
+                "_sort_time": current,
+            })
+    gaps.sort(key=lambda item: item["_sort_time"], reverse=True)
+    for item in gaps:
+        item.pop("_sort_time", None)
+    return pd.DataFrame(gaps, columns=columns)
