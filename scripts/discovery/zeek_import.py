@@ -109,16 +109,17 @@ def normalize_zeek_dhcp_export(content, imported_at="", network_id=""):
     one IPv4 network. It is never inferred from the DHCP server address.
     """
     network_id = str(network_id or "").strip()
+    network_scope = None
     if network_id:
         if len(network_id) > 64:
             raise ValueError("Ağ kapsamı 64 karakterden uzun olamaz.")
         try:
-            network = ipaddress.ip_network(network_id, strict=False)
+            network_scope = ipaddress.ip_network(network_id, strict=False)
         except ValueError as exc:
             raise ValueError("Ağ kapsamı geçerli bir IPv4 CIDR olmalıdır.") from exc
-        if network.version != 4:
+        if network_scope.version != 4:
             raise ValueError("Ağ kapsamı IPv4 CIDR olmalıdır.")
-        network_id = str(network)
+        network_id = str(network_scope)
     if isinstance(content, bytes):
         if len(content) > MAX_ZEEK_BYTES:
             raise ValueError("Zeek dosyası 20 MB sınırını aşıyor.")
@@ -144,6 +145,14 @@ def normalize_zeek_dhcp_export(content, imported_at="", network_id=""):
         assigned_ip = _ip(record.get("assigned_addr"))
         requested_ip = _ip(record.get("requested_addr"))
         server_ip = _ip(record.get("server_addr"))
+        record_network_id = network_id
+        scope_check_ip = assigned_ip or client_ip or requested_ip
+        scope_mismatch = bool(
+            network_scope and scope_check_ip
+            and ipaddress.IPv4Address(scope_check_ip) not in network_scope
+        )
+        if scope_mismatch:
+            record_network_id = ""
         hostname = str(record.get("host_name") or "").strip()
         client_fqdn = _text(record.get("client_fqdn"))
         domain = _text(record.get("domain"))
@@ -182,6 +191,8 @@ def normalize_zeek_dhcp_export(content, imported_at="", network_id=""):
             evidence.append("dhcp_server_software_reported")
         if local_mac:
             evidence.append("locally_administered_mac")
+        if scope_mismatch:
+            evidence.append("network_scope_address_mismatch")
 
         output.append({
             "imported_at": imported_at,
@@ -191,7 +202,7 @@ def normalize_zeek_dhcp_export(content, imported_at="", network_id=""):
             "assigned_ip": assigned_ip,
             "requested_ip": requested_ip,
             "server_ip": server_ip,
-            "network_id": network_id,
+            "network_id": record_network_id,
             "mac": mac,
             "hostname": hostname,
             "client_fqdn": client_fqdn,
