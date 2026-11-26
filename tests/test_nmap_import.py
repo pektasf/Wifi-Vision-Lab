@@ -29,7 +29,8 @@ def test_nmap_xml_import_extracts_host_mac_ip_and_arp_evidence():
     assert row["host_state"] == "up"
     assert row["host_reason"] == "arp-response"
     assert row["mac_vendor"] == "Example Vendor"
-    assert row["evidence_status"] == "nmap_host_up;nmap_arp_response"
+    assert row["mac_address_type"] == "locally_administered"
+    assert row["evidence_status"] == "nmap_host_up;nmap_arp_response;locally_administered_mac"
     assert row["imported_at"] == "2026-11-26T10:00:00+00:00"
 
 
@@ -59,7 +60,7 @@ def test_nmap_xml_import_does_not_extract_ports_or_services():
     assert set(row) == {
         "imported_at", "scan_started_at", "observed_at", "source",
         "ip", "mac", "hostname", "host_state", "host_reason",
-        "mac_vendor", "evidence_status",
+        "mac_vendor", "mac_address_type", "evidence_status",
     }
 
 
@@ -94,3 +95,13 @@ def test_nmap_xml_import_rejects_files_over_size_limit():
 
     with pytest.raises(ValueError, match="10 MB"):
         normalize_nmap_xml(b" " * (MAX_NMAP_XML_BYTES + 1))
+
+
+
+def test_nmap_xml_import_ignores_malformed_ipv4_address():
+    xml = """<nmaprun scanner="nmap">
+      <host><status state="up"/>
+        <address addr="999.999.1.1" addrtype="ipv4"/>
+      </host>
+    </nmaprun>"""
+    assert normalize_nmap_xml(xml) == []
