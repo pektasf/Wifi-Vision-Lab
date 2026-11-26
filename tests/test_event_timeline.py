@@ -1,3 +1,5 @@
+import warnings
+
 import pandas as pd
 
 from scripts.event_timeline import normalize_event_frames
@@ -41,16 +43,22 @@ def test_normalizes_supported_event_sources_and_sorts_newest_first():
     assert "_parsed_time" not in result.columns
 
 
-def test_normalizer_keeps_missing_dates_last_and_preserves_stable_order():
+def test_normalizer_keeps_missing_dates_last_without_parse_warnings():
     frame = pd.DataFrame([
         {"timestamp": "bad", "ip": "first", "event": "unknown"},
         {"timestamp": "2026-02-01T10:00:00Z", "ip": "newer", "event": "up"},
+        {"timestamp": "2026-02-01T11:00:00+01:00", "ip": "same-instant", "event": "up"},
         {"timestamp": "bad", "ip": "second", "event": "unknown"},
     ])
 
-    result = normalize_event_frames({"network_events.csv": frame})
+    with warnings.catch_warnings(record=True) as captured:
+        warnings.simplefilter("always")
+        result = normalize_event_frames({"network_events.csv": frame})
 
-    assert result["subject"].tolist() == ["newer", "first", "second"]
+    assert result["subject"].tolist() == [
+        "same-instant", "newer", "first", "second"
+    ]
+    assert captured == []
 
 
 def test_empty_event_sources_return_expected_columns():
