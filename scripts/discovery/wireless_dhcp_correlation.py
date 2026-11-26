@@ -74,58 +74,61 @@ def correlate_wireless_dhcp_observations(
         if mac and observed is not None:
             dhcp.append((index, row, mac, observed))
 
+    from bisect import bisect_left, bisect_right
+
     by_mac = {}
     for item in wireless:
         by_mac.setdefault(item[2], []).append(item)
+    for items in by_mac.values():
+        items.sort(key=lambda item: item[3])
+        timestamps = [item[3].timestamp() for item in items]
+        items[:] = [(item, timestamps[index]) for index, item in enumerate(items)]
 
     pairs = []
     for dhcp_index, dhcp_row, mac, dhcp_time in dhcp:
-        for wireless_index, wireless_row, wireless_mac, wireless_time in by_mac.get(mac, []):
+        items = by_mac.get(mac, [])
+        center = dhcp_time.timestamp()
+        left = bisect_left(items, center - window, key=lambda item: item[1])
+        right = bisect_right(items, center + window, key=lambda item: item[1])
+        for (wireless_index, wireless_row, wireless_mac, wireless_time), _ in items[left:right]:
             delta = abs((dhcp_time - wireless_time).total_seconds())
-            if delta > window:
-                continue
-
             wireless_scope = _scope(wireless_row)
             dhcp_scope = _scope(dhcp_row)
             if wireless_scope and dhcp_scope and wireless_scope != dhcp_scope:
                 continue
 
-            random_flag = str(
-                wireless_row.get("randomized_mac", "")
-            ).strip().casefold()
-            if random_flag not in {"true", "false"}:
-                random_flag = "unknown"
-
-            if random_flag == "true":
-                status = "exact_mac_time_near_randomized_mac"
-                interpretation = (
-                    "Randomized MAC işaretli adresin zaman yakınlığı; "
-                    "fiziksel cihaz kimliği doğrulanmaz"
-                )
+            random_flag = str(wireless_row.get('randomized_mac', '')).strip().casefold()
+            if random_flag not in {'true', 'false'}:
+                random_flag = 'unknown'
+            if random_flag == 'true':
+                status = 'exact_mac_time_near_randomized_mac'
+                interpretation = 'Randomized MAC işaretli adresin zaman yakınlığı; fiziksel cihaz kimliği doğrulanmaz'
             elif wireless_scope and dhcp_scope:
-                status = "exact_mac_time_near_scope_match"
-                interpretation = "MAC ve zaman yakın; açık ağ kapsamı da eşleşiyor"
+                status = 'exact_mac_time_near_scope_match'
+                interpretation = 'MAC ve zaman yakın; açık ağ kapsamı da eşleşiyor'
             else:
-                status = "exact_mac_time_near_scope_unknown"
-                interpretation = "MAC ve zaman yakın; ağ kapsamı eksik"
+                status = 'exact_mac_time_near_scope_unknown'
+                interpretation = 'MAC ve zaman yakın; ağ kapsamı eksik'
 
             pairs.append({
-                "wireless_observed_at": str(wireless_row.get("observed_at") or wireless_row.get("ts") or ""),
-                "dhcp_observed_at": str(dhcp_row.get("observed_at") or dhcp_row.get("ts") or ""),
-                "mac": mac,
-                "time_delta_seconds": round(delta, 3),
-                "wireless_bssid_context": normalize_mac(wireless_row.get("last_bssid")),
-                "wireless_signal_dbm": str(wireless_row.get("signal_dbm", "") or ""),
-                "dhcp_assigned_ip": str(dhcp_row.get("assigned_ip", "") or ""),
-                "dhcp_server_ip": str(dhcp_row.get("server_ip", "") or ""),
-                "wireless_network_scope": wireless_scope,
-                "dhcp_network_scope": dhcp_scope,
-                "randomized_mac": random_flag,
-                "correlation_status": status,
-                "interpretation": interpretation,
-                "wireless_source_index": wireless_index,
-                "dhcp_source_index": dhcp_index,
+                'wireless_observed_at': str(wireless_row.get('observed_at') or wireless_row.get('ts') or ''),
+                'dhcp_observed_at': str(dhcp_row.get('observed_at') or dhcp_row.get('ts') or ''),
+                'mac': mac,
+                'time_delta_seconds': round(delta, 3),
+                'wireless_bssid_context': normalize_mac(wireless_row.get('last_bssid')),
+                'wireless_signal_dbm': str(wireless_row.get('signal_dbm', '') or ''),
+                'dhcp_assigned_ip': str(dhcp_row.get('assigned_ip', '') or ''),
+                'dhcp_server_ip': str(dhcp_row.get('server_ip', '') or ''),
+                'wireless_network_scope': wireless_scope,
+                'dhcp_network_scope': dhcp_scope,
+                'randomized_mac': random_flag,
+                'correlation_status': status,
+                'interpretation': interpretation,
+                'wireless_source_index': wireless_index,
+                'dhcp_source_index': dhcp_index,
             })
+            if len(pairs) >= max_pairs:
+                return pairs
 
-    pairs.sort(key=lambda row: (row["time_delta_seconds"], row["dhcp_observed_at"]), reverse=False)
-    return pairs[:max_pairs]
+    pairs.sort(key=lambda row: (row['time_delta_seconds'], row['dhcp_observed_at']))
+    return pairs
