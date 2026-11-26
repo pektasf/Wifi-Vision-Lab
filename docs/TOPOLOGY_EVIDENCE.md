@@ -83,3 +83,14 @@ adapter's subnet context to that address. This edge is always context_only and
 uses network_context.csv as its local source. It does not prove server identity,
 a physical link, or provide the router's DHCP client lease table. Disabled,
 unknown, or invalid DHCP values do not create a DHCP server node or edge.
+
+
+### Physical AP identity and radio grouping
+
+BSSIDs remain separate radio nodes by default. A physical AP node and
+`radio_of` edge are created only when relationship data contains a valid
+`ap_device_mac`, `device_identity_verification=verified`, and
+`device_identity_evidence=direct_ap_device_identity`. SSID similarity, shared
+vendor OUI, and BSSID proximity are not identity evidence. The Windows WLAN
+client association collector currently reports BSSID, not a physical AP base
+MAC or controller identity, so it does not populate these fields by itself.
