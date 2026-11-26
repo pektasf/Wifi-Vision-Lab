@@ -10,6 +10,9 @@ from scripts.discovery.endpoint_adapter_evidence import (
 from scripts.discovery.kismet_import import (
     KISMET_WIRELESS_FIELDS, normalize_kismet_export, MAX_KISMET_BYTES,
 )
+from scripts.discovery.nmap_import import (
+    NMAP_DISCOVERY_FIELDS, normalize_nmap_xml, MAX_NMAP_XML_BYTES,
+)
 
 
 DATA = Path(__file__).resolve().parent.parent / "data" / "processed"
@@ -363,6 +366,81 @@ def render():
         "uygun sürücü gerektirir. Windows dahili adaptörlerinde bu destek sınırlı "
         "olabilir; bu içe aktarma için ayrı bir yetkili Linux/Kismet sensörü de kullanılabilir."
     )
+
+    st.markdown("### Nmap ağ keşif kanıtı")
+    st.caption(
+        "Yalnızca yetkili olarak yaptığınız Nmap keşif taramalarının XML çıktısını "
+        "içe aktarın. Uygulama Nmap komutu çalıştırmaz ve port taraması başlatmaz."
+    )
+    nmap_upload = st.file_uploader(
+        "Nmap XML dosyası",
+        type=["xml"],
+        key="nmap_xml_upload",
+    )
+    if nmap_upload and st.button(
+        "Nmap kayıtlarını içe aktar",
+        key="nmap_xml_import",
+    ):
+        try:
+            if nmap_upload.size > MAX_NMAP_XML_BYTES:
+                raise ValueError("Nmap XML dosyası 10 MB sınırını aşıyor.")
+            imported = normalize_nmap_xml(
+                nmap_upload.getvalue(),
+                imported_at=pd.Timestamp.now(tz="UTC").isoformat(),
+            )
+            if not imported:
+                st.warning("Nmap XML dosyasında IP veya MAC adresi içeren host kaydı bulunamadı.")
+            else:
+                existing = read_data("nmap_observations.csv")
+                combined = (
+                    existing.to_dict("records") if not existing.empty else []
+                )
+                seen = {
+                    (
+                        row.get("scan_started_at", ""), row.get("ip", ""),
+                        row.get("mac", ""), row.get("host_state", ""),
+                    )
+                    for row in combined
+                }
+                for row in imported:
+                    key = (
+                        row["scan_started_at"], row["ip"],
+                        row["mac"], row["host_state"],
+                    )
+                    if key not in seen:
+                        combined.append(row)
+                        seen.add(key)
+                combined = combined[-50000:]
+                overwrite_rows(
+                    DATA / "nmap_observations.csv",
+                    combined,
+                    NMAP_DISCOVERY_FIELDS,
+                )
+                st.success(
+                    f"{len(imported)} Nmap host gözlemi yerel olarak içe aktarıldı."
+                )
+        except (UnicodeDecodeError, ValueError, OSError) as exc:
+            st.error(f"Nmap XML içe aktarılamadı: {exc}")
+
+    nmap_evidence = read_data("nmap_observations.csv")
+    if not nmap_evidence.empty:
+        up_count = int(nmap_evidence["host_state"].eq("up").sum())
+        mac_count = int(nmap_evidence["mac"].astype(str).str.strip().ne("").sum())
+        nmap_metrics = st.columns(3)
+        nmap_metrics[0].metric("Nmap host kaydı", len(nmap_evidence))
+        nmap_metrics[1].metric("Yanıt veren host", up_count)
+        nmap_metrics[2].metric("MAC gözlemi", mac_count)
+        st.dataframe(
+            nmap_evidence,
+            width="stretch",
+            hide_index=True,
+            height=min(420, 58 + 35 * min(len(nmap_evidence), 10)),
+        )
+        st.caption(
+            "Nmap'in yerel Ethernet ağında aldığı MAC yanıtları güçlü yerel ağ "
+            "kanıtıdır; yönlendirilmiş ağlarda MAC görünmeyebilir. Bu kayıtlar "
+            "envanterle otomatik fiziksel kimlik birleştirmesi yapmaz."
+        )
 
     if inventory.empty and nodes.empty and classification.empty:
         st.warning("Altyapi envanteri icin henuz veri bulunamadi.")
