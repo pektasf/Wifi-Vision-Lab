@@ -99,3 +99,18 @@ separate evidence and displays them for review. It does not use either field
 as a network/subnet identifier, merge devices, or treat them as proof that
 two observations came from the same physical endpoint. Subscriber ID is
 intentionally not retained.
+
+
+## Explicit network scope for a single capture
+
+During import, an optional IPv4 CIDR can be assigned to the file when the
+operator knows that the capture contains records from one network only.
+WiFi Vision Lab validates and canonicalizes this value, then stores it as
+network context on each imported record. This enables the lease analyzer to
+compare observations only when their explicitly supplied scopes match.
+
+Leave the field blank for captures containing multiple VLANs/subnets or when
+the capture scope is unknown. The application does not derive a subnet from
+the DHCP server address, client address, or relay identifiers. A wrong
+operator-supplied CIDR can create misleading comparisons, so the field should
+only be set when the capture's scope is known independently.
