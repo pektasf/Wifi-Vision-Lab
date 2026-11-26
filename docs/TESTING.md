@@ -90,3 +90,11 @@ GitHub Actions also runs the Windows WLAN ABI, platform capability, and app
 syntax tests on `windows-latest`. These tests validate Windows ctypes structure
 layout and the Windows-specific contracts without requiring a physical Wi-Fi
 adapter or invoking live WLAN APIs.
+
+
+## Per-adapter WLAN diagnostics
+
+- Decode Windows fixed-width UTF-16 adapter descriptions independent of host ABI.
+- Report each Wi-Fi interface state and whether its BSS list is available, empty, or errored.
+- Keep adapter diagnostics ephemeral; do not persist adapter descriptions with RSSI fingerprints.
+- Ensure RSSI output continues to exclude raw SSID/BSSID values.
