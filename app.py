@@ -1277,7 +1277,7 @@ def spatial_intelligence_page():
                     st.error(f"Windows RSSI ölçümü alınamadı: {exc}")
                 else:
                     if capture["status"] == "available":
-                        measurement_text = "\\n".join(
+                        measurement_text = "\n".join(
                             f"{alias},{rssi}"
                             for alias, rssi in capture["measurements"].items()
                         )
