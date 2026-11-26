@@ -135,3 +135,44 @@ def test_zeek_dhcp_import_does_not_emit_invalid_epoch_timestamps(timestamp):
         "mac": "00:11:22:33:44:55",
     }]))
     assert rows[0]["observed_at"] == ""
+
+
+
+def test_zeek_dhcp_import_preserves_optional_relay_and_software_evidence():
+    rows = normalize_zeek_dhcp_export(json.dumps([{
+        "ts": "2026-11-26T10:00:00Z",
+        "client_addr": "192.168.1.42",
+        "server_addr": "192.168.1.1",
+        "assigned_addr": "192.168.1.42",
+        "mac": "00:11:22:33:44:55",
+        "host_name": "relay-client",
+        "domain": "example.local",
+        "client_software": "device-vendor-class",
+        "server_software": "dhcp-server-class",
+        "circuit_id": "switch-7/port-18",
+        "agent_remote_id": "relay-remote-identifier",
+        "msg_types": ["DISCOVER", "OFFER", "REQUEST", "ACK"],
+        "lease_time": 3600,
+    }]))
+    row = rows[0]
+    assert row["domain"] == "example.local"
+    assert row["client_software"] == "device-vendor-class"
+    assert row["server_software"] == "dhcp-server-class"
+    assert row["relay_circuit_id"] == "switch-7/port-18"
+    assert row["relay_agent_remote_id"] == "relay-remote-identifier"
+    assert "dhcp_relay_circuit_id_observed" in row["evidence_status"]
+    assert "dhcp_relay_remote_id_observed" in row["evidence_status"]
+    assert "dhcp_client_software_reported" in row["evidence_status"]
+    assert "dhcp_server_software_reported" in row["evidence_status"]
+
+
+def test_zeek_dhcp_import_bounds_optional_text_and_removes_control_characters():
+    rows = normalize_zeek_dhcp_export(json.dumps([{
+        "mac": "00:11:22:33:44:55",
+        "circuit_id": "relay\nport\t" + ("x" * 400),
+        "agent_remote_id": "remote\ridentifier",
+    }]))
+    row = rows[0]
+    assert row["relay_circuit_id"].startswith("relayport")
+    assert len(row["relay_circuit_id"]) == 256
+    assert row["relay_agent_remote_id"] == "remoteidentifier"
