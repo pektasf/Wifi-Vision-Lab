@@ -16,7 +16,7 @@ SOURCE_FIELDS = ["source", "status", "devices_found", "checked_at", "error"]
 DEVICE_FIELDS = [
     "device_id", "identity_basis", "network_id", "mac",
     "ips", "hostnames", "sources", "source_count",
-    "statuses", "last_seen"
+    "statuses", "evidence_types", "last_seen"
 ]
 
 
@@ -95,6 +95,7 @@ def build_device_profiles(observations):
                 "hostnames": set(),
                 "sources": set(),
                 "statuses": set(),
+                "evidence_types": set(),
                 "last_seen": ""
             }
 
@@ -111,6 +112,12 @@ def build_device_profiles(observations):
 
         if observation.get("status"):
             item["statuses"].add(observation["status"])
+
+        evidence = observation.get("evidence") or classify_observation_evidence(
+            observation.get("source"), observation.get("status")
+        )
+        if evidence:
+            item["evidence_types"].add(evidence)
 
         observed_at = observation.get("observed_at", "")
         if observed_at > item["last_seen"]:
@@ -129,6 +136,7 @@ def build_device_profiles(observations):
             "sources": ";".join(sorted(item["sources"])),
             "source_count": len(item["sources"]),
             "statuses": ";".join(sorted(item["statuses"])),
+            "evidence_types": ";".join(sorted(item["evidence_types"])),
             "last_seen": item["last_seen"]
         })
 
