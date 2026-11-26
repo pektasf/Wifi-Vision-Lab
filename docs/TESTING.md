@@ -66,3 +66,11 @@ The capability-audit tests are offline and do not inspect the user's live adapte
 - CI does not invoke Wi-Fi scans, packet capture, or live adapter APIs.
 
 - Leave-one-out fingerprint validation excludes each tested reference and separates accuracy from prediction coverage.
+
+
+## Windows WLAN RSSI collector
+
+- Validate Windows WLAN SDK structure sizes without requiring Windows.
+- Test stable HMAC pseudonyms, local key persistence, RSSI range filtering, and duplicate BSSID handling.
+- Test the result contract without exposing SSID/BSSID.
+- CI never calls the native WLAN API, WlanScan, or a live adapter.
