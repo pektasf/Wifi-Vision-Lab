@@ -164,19 +164,29 @@ def render():
                 "Gateway adresi", "AP radyosu", "Ağ ekipmanı adayı",
                 "Uç cihaz", "Diğer / sınıflandırılmamış",
             ]
-            lane_y = {
-                "Gateway adresi": 3,
-                "AP radyosu": 2,
-                "Ağ ekipmanı adayı": 1,
-                "Uç cihaz": 0,
-                "Diğer / sınıflandırılmamış": -1,
+            # Wrap large device groups into rows instead of stretching a single
+            # horizontal line. This keeps labels and nodes separated on laptops.
+            lane_base = {
+                "Gateway adresi": 0,
+                "AP radyosu": -3,
+                "Ağ ekipmanı adayı": -6,
+                "Uç cihaz": -9,
+                "Diğer / sınıflandırılmamış": -12,
             }
+            lane_centers = {}
+            max_columns = 7
             for lane in lane_order:
                 members = grouped_nodes.get(lane, [])
-                count = len(members)
+                if not members:
+                    continue
+                row_count = (len(members) + max_columns - 1) // max_columns
+                lane_centers[lane] = lane_base[lane] - (row_count - 1) * 0.42 / 2
                 for index, (node_id, row, config) in enumerate(members):
-                    x = (index - (count - 1) / 2) * 1.55
-                    positions[node_id] = (x, lane_y[lane])
+                    row_index, column_index = divmod(index, max_columns)
+                    row_size = min(max_columns, len(members) - row_index * max_columns)
+                    x = (column_index - (row_size - 1) / 2) * 2.0
+                    y = lane_base[lane] - row_index * 0.9
+                    positions[node_id] = (x, y)
 
             figure = go.Figure()
             edge_x, edge_y = [], []
@@ -211,7 +221,8 @@ def render():
                     x, y = positions[node_id]
                     x_values.append(x)
                     y_values.append(y)
-                    labels.append(html.escape(str(row.get("_label", node_id))[:24]))
+                    label = str(row.get("_label", node_id)).strip() or node_id
+                    labels.append(html.escape(label[:16] + ("…" if len(label) > 16 else "")))
                     hover.append(
                         f"Cihaz: {html.escape(str(row.get('_label', '')))}<br>"
                         f"IP: {html.escape(str(row.get('_ip', '')))}<br>"
@@ -225,6 +236,7 @@ def render():
                     mode="markers+text",
                     text=labels,
                     textposition="top center",
+                    textfont={"size": 9, "color": "#344744"},
                     hovertext=hover,
                     hoverinfo="text",
                     marker={
@@ -242,7 +254,10 @@ def render():
                     "bu yerleşim fiziksel bağlantı iddiası değildir."
                 )
             figure.update_layout(
-                height=560,
+                height=min(1100, max(440, 250 + 72 * max(
+                    (len(grouped_nodes.get(lane, [])) + max_columns - 1) // max_columns
+                    for lane in lane_order
+                ))),
                 margin={"l": 18, "r": 18, "t": 28, "b": 35},
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="#FFFFFF",
@@ -252,12 +267,14 @@ def render():
                 xaxis={"visible": False, "showgrid": False, "zeroline": False},
                 yaxis={
                     "tickmode": "array",
-                    "tickvals": [3, 2, 1, 0, -1],
-                    "ticktext": lane_order,
-                    "range": [-1.7, 3.8],
+                    "tickvals": [lane_centers[lane] for lane in lane_order if lane in lane_centers],
+                    "ticktext": [lane for lane in lane_order if lane in lane_centers],
+                    "range": [min(positions[node][1] for node in positions) - 1.0,
+                              max(positions[node][1] for node in positions) + 1.4],
                     "showgrid": False,
                     "zeroline": False,
                     "ticks": "",
+                    "automargin": True,
                 },
                 hoverlabel={"bgcolor": "#FFFFFF", "font": {"color": "#182B2A"}},
             )
