@@ -52,3 +52,43 @@ def test_local_virtual_wlan_metadata_is_preserved_in_network_context():
     diagnostics = format_network_diagnostics(net)
     assert "adaptör türü=virtual_wlan" in diagnostics
     assert "Wi-Fi Direct Virtual Adapter" in diagnostics
+
+
+
+def test_normalize_network_adapter_rows_preserves_virtual_wlan_evidence():
+    from scripts.device_inventory import normalize_network_adapter_rows
+    rows = normalize_network_adapter_rows([{
+        "Name": "Local Area Connection* 12",
+        "InterfaceDescription": "Microsoft Wi-Fi Direct Virtual Adapter",
+        "MacAddress": "02-11-22-33-44-55",
+        "Status": "Up",
+        "HardwareInterface": "False",
+        "MediaType": "Native 802.11",
+        "NdisPhysicalMedium": "Wireless LAN",
+        "LinkSpeed": "1 Gbps",
+        "ifIndex": 19,
+    }])
+    assert len(rows) == 1
+    assert rows[0]["adapter_kind"] == "virtual_wlan"
+    assert rows[0]["hardware_interface"] is False
+    assert rows[0]["mac"] == "02:11:22:33:44:55"
+    assert rows[0]["interface_index"] == "19"
+
+
+def test_normalize_network_adapter_rows_accepts_single_object_and_unknown_type():
+    from scripts.device_inventory import normalize_network_adapter_rows
+    rows = normalize_network_adapter_rows({
+        "Name": "Ethernet 3",
+        "InterfaceDescription": "Unknown adapter",
+        "HardwareInterface": "",
+        "Status": "Disabled",
+    })
+    assert len(rows) == 1
+    assert rows[0]["adapter_kind"] == "unknown"
+    assert rows[0]["hardware_interface"] is None
+    assert rows[0]["status"] == "Disabled"
+
+
+def test_normalize_network_adapter_rows_handles_empty_data():
+    from scripts.device_inventory import normalize_network_adapter_rows
+    assert normalize_network_adapter_rows([]) == []
