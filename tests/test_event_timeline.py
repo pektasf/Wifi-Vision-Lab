@@ -551,3 +551,27 @@ def test_format_event_review_changes_handles_empty_malformed_and_unknown_fields(
     assert format_event_review_changes(json.dumps(unknown)) == "Custom Field: before → after"
     malformed_shape = {"status": "not-a-transition"}
     assert format_event_review_changes(json.dumps(malformed_shape)) == json.dumps(malformed_shape)
+
+
+def test_filter_event_review_history_for_events_limits_keys_and_sorts_newest_first():
+    from scripts.event_timeline import filter_event_review_history_for_events
+
+    history = pd.DataFrame([
+        {"event_key": "event-a", "updated_at": "2026-01-01T10:00:00Z", "status": "new"},
+        {"event_key": "event-b", "updated_at": "2026-01-03T10:00:00Z", "status": "reviewed"},
+        {"event_key": "event-a", "updated_at": "2026-01-02T10:00:00Z", "status": "resolved"},
+    ])
+    result = filter_event_review_history_for_events(history, ["event-a"])
+    assert result["event_key"].tolist() == ["event-a", "event-a"]
+    assert result["status"].tolist() == ["resolved", "new"]
+
+
+def test_filter_event_review_history_for_events_handles_empty_and_missing_data():
+    from scripts.event_timeline import filter_event_review_history_for_events
+
+    history = pd.DataFrame([{"event_key": "event-a", "status": "new"}])
+    assert filter_event_review_history_for_events(history, []).empty
+    assert filter_event_review_history_for_events(None, ["event-a"]).empty
+    assert filter_event_review_history_for_events(
+        pd.DataFrame([{"status": "new"}]), ["event-a"]
+    ).empty
