@@ -34,7 +34,9 @@ def validate_measurements(measurements: Mapping[str, object]) -> dict[str, int]:
             numeric = float(raw_value)
         except (TypeError, ValueError) as exc:
             raise ValueError(f"RSSI for {key} must be a number in dBm.") from exc
-        if not math.isfinite(numeric) or not -120 <= numeric <= -1:
+        if not math.isfinite(numeric):
+            raise ValueError(f"RSSI for {key} must be a finite number.")
+        if not -120 <= numeric <= -1:
             raise ValueError(f"RSSI for {key} must be between -120 and -1 dBm.")
         result[key] = int(round(numeric))
     return result
