@@ -32,7 +32,25 @@ def test_timeline_prefers_exact_mac_over_conflicting_ip_match():
     assert rows[0]["inventory_identity_signals"] == "locally_administered_mac"
 
 
-def test_timeline_marks_ip_only_match_as_weaker_correlation():
+def test_timeline_marks_ip_only_match_as_weaker_correlation_when_scope_matches():
+    rows = build_identity_evidence_timeline(
+        inventory=[{
+            "ip": "192.168.1.10", "mac": "00:11:22:33:44:55",
+            "subnet": "192.168.1.0/24",
+        }],
+        local_observations=[{
+            "observed_at": "2026-11-26T10:00:00Z",
+            "network_id": "192.168.1.0/24",
+            "ip": "192.168.1.10",
+            "mac": "",
+            "evidence_status": "host_up",
+        }],
+    )
+    assert rows[0]["correlation_method"] == "exact_ip"
+    assert rows[0]["inventory_match_count"] == 1
+
+
+def test_timeline_does_not_ip_match_when_network_scope_is_missing():
     rows = build_identity_evidence_timeline(
         inventory=[{"ip": "192.168.1.10", "mac": "00:11:22:33:44:55"}],
         nmap_observations=[{
@@ -42,7 +60,51 @@ def test_timeline_marks_ip_only_match_as_weaker_correlation():
             "evidence_status": "nmap_host_up",
         }],
     )
-    assert rows[0]["correlation_method"] == "exact_ip"
+    assert rows[0]["correlation_method"] == "ip_scope_unknown"
+    assert rows[0]["inventory_match_count"] == 0
+
+
+def test_timeline_does_not_ip_match_across_different_networks():
+    rows = build_identity_evidence_timeline(
+        inventory=[{
+            "ip": "192.168.1.10", "mac": "00:11:22:33:44:55",
+            "subnet": "192.168.1.0/24",
+        }],
+        local_observations=[{
+            "network_id": "192.168.2.0/24",
+            "ip": "192.168.1.10",
+            "mac": "",
+        }],
+    )
+    assert rows[0]["correlation_method"] == "network_mismatch"
+    assert rows[0]["inventory_match_count"] == 0
+
+
+def test_timeline_rejects_exact_mac_match_when_explicit_networks_conflict():
+    rows = build_identity_evidence_timeline(
+        inventory=[{
+            "ip": "10.0.0.20", "mac": "00:11:22:33:44:55",
+            "subnet": "10.0.0.0/24",
+        }],
+        local_observations=[{
+            "network_id": "192.168.1.0/24",
+            "ip": "192.168.1.20",
+            "mac": "00:11:22:33:44:55",
+        }],
+    )
+    assert rows[0]["correlation_method"] == "network_mismatch"
+    assert rows[0]["inventory_match_count"] == 0
+
+
+def test_timeline_allows_exact_mac_match_when_scope_is_unavailable():
+    rows = build_identity_evidence_timeline(
+        inventory=[{"mac": "00:11:22:33:44:55", "ip": "192.168.1.10"}],
+        nmap_observations=[{
+            "mac": "00:11:22:33:44:55",
+            "ip": "192.168.1.10",
+        }],
+    )
+    assert rows[0]["correlation_method"] == "exact_mac"
 
 
 def test_timeline_flags_kismet_randomized_mac_without_merging_identity():
@@ -132,7 +194,6 @@ def test_timeline_ignores_observations_without_ip_or_mac():
         zeek_observations=[{"hostname": "only-hostname"}],
     )
     assert rows == []
-
 
 
 def test_timeline_sorts_timestamps_by_instant_not_timezone_string():

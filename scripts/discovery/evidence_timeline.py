@@ -25,6 +25,15 @@ def _normalize_ipv4(value):
         return ""
 
 
+def _network_scope(row):
+    """Return only an explicitly supplied network scope; never infer a subnet."""
+    for field in ("network_id", "subnet", "network"):
+        value = str(row.get(field, "") or "").strip()
+        if value:
+            return value
+    return ""
+
+
 def _records(value):
     if value is None:
         return []
@@ -53,7 +62,12 @@ def build_identity_evidence_timeline(
     zeek_observations=None,
     limit=MAX_TIMELINE_ROWS,
 ):
-    """Correlate exact identifiers for review while keeping source rows separate."""
+    """Correlate exact identifiers conservatively while keeping source rows separate.
+
+    MAC matches are rejected when both records explicitly identify different
+    networks. IP-only matches require an explicit, equal network scope on both
+    sides because an IPv4 address can be reused on another network.
+    """
     inventory_rows = _records(inventory)
     mac_index = {}
     ip_index = {}
@@ -72,15 +86,37 @@ def build_identity_evidence_timeline(
         ip = _normalize_ipv4(ip_value)
         if not mac and not ip:
             return
+
+        scope = _network_scope(row)
+        matches = []
+        correlation = "unmatched"
+
         if mac and mac in mac_index:
-            matches = mac_index[mac]
-            correlation = "exact_mac"
+            candidates = mac_index[mac]
+            matches = [
+                item for item in candidates
+                if not (scope and _network_scope(item)
+                        and scope != _network_scope(item))
+            ]
+            if matches:
+                correlation = "exact_mac"
+            else:
+                correlation = "network_mismatch"
         elif ip and ip in ip_index:
-            matches = ip_index[ip]
-            correlation = "exact_ip"
-        else:
-            matches = []
-            correlation = "unmatched"
+            candidates = ip_index[ip]
+            if not scope or not any(_network_scope(item) for item in candidates):
+                correlation = "ip_scope_unknown"
+            else:
+                matches = [
+                    item for item in candidates
+                    if _network_scope(item) == scope
+                ]
+                if matches:
+                    correlation = "exact_ip"
+                elif any(_network_scope(item) for item in candidates):
+                    correlation = "network_mismatch"
+                else:
+                    correlation = "ip_scope_unknown"
 
         assessments = sorted({
             str(item.get("identity_assessment", "")).strip()
