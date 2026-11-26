@@ -54,15 +54,21 @@ def build_observation_identity_keys(observations):
     return identity_keys
 
 
-def classify_observation_evidence(source, status):
-    """Return a precise evidence label without implying device certainty."""
+def classify_observation_evidence(source, status, mac=""):
+    """Return evidence labels without implying device certainty."""
     source = str(source or "").strip().casefold()
     status = str(status or "").strip().casefold()
+    has_mac = bool(str(mac or "").strip())
 
-    if source == "windows_local" and status == "responding":
-        return "icmp_echo_reply"
-    if source == "windows_local" and status == "arp_seen":
-        return "arp_cache_entry"
+    if source == "windows_local":
+        evidence = []
+        if status == "responding":
+            evidence.append("icmp_echo_reply")
+        if status == "arp_seen" or has_mac:
+            evidence.append("arp_cache_entry")
+        if evidence:
+            return ";".join(sorted(set(evidence)))
+
     if source == "windows_arp_cache" or status == "arp_cache":
         return "arp_cache_entry"
     return "adapter_reported_observation"
@@ -185,7 +191,7 @@ class DiscoveryEngine:
                         "status": raw.get("status", ""),
                         "gateway": raw.get("gateway", network.get("gateway", "")),
                         "adapter": raw.get("adapter", network.get("adapter", "")),
-                        "evidence": classify_observation_evidence(source, raw.get("status", "")),
+                        "evidence": classify_observation_evidence(\n                            source, raw.get("status", ""), raw.get("mac", "")\n                        ),
                         "raw_data": json.dumps(raw, ensure_ascii=False)
                     })
 
