@@ -220,9 +220,11 @@ def build_identity_evidence_timeline(
             row.get("assigned_ip") or row.get("client_ip"),
             row.get("hostname") or row.get("client_fqdn"),
             row.get("evidence_status"),
-            f"DHCP sunucusu: {row.get('server_ip', '')} · Mesajlar: {row.get('message_types', '')} "
-            f"· Relay circuit: {row.get('relay_circuit_id', '')} "
-            f"· Relay remote ID: {row.get('relay_agent_remote_id', '')}",
+            f"DHCP sunucusu: {row.get('server_ip', '')} · Mesajlar: {row.get('message_types', '')}"
+            + (f" · Relay circuit: {row.get('relay_circuit_id', '')}"
+               if row.get("relay_circuit_id") else "")
+            + (f" · Relay remote ID: {row.get('relay_agent_remote_id', '')}"
+               if row.get("relay_agent_remote_id") else ""),
         )
 
     timeline.sort(key=lambda item: _time_sort_key(item["observed_at"]), reverse=True)
