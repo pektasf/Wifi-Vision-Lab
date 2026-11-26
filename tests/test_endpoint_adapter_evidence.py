@@ -85,3 +85,17 @@ def test_endpoint_payload_ignores_rows_without_valid_mac_or_ip():
         }],
     }
     assert normalize_endpoint_adapter_payload(payload) == []
+
+
+
+def test_endpoint_adapter_import_ignores_ipv6_values():
+    payload = {
+        "schema_version": 1,
+        "collector": "wifi_vision_endpoint",
+        "adapters": [{
+            "name": "Wi-Fi",
+            "mac": "",
+            "ipv4_addresses": ["2001:db8::1"],
+        }],
+    }
+    assert normalize_endpoint_adapter_payload(payload) == []
