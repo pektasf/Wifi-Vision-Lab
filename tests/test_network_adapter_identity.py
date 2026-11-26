@@ -30,3 +30,25 @@ def test_virtual_wlan_classification_requires_non_hardware_adapter():
     assert classify_network_adapter(
         True, "Wi-Fi Direct", "Wi-Fi Direct"
     ) == "physical"
+
+
+
+def test_local_virtual_wlan_metadata_is_preserved_in_network_context():
+    from scripts.device_inventory import build_network_context_row, format_network_diagnostics
+    net = {
+        "adapter": "Local Area Connection* 12",
+        "adapter_description": "Microsoft Wi-Fi Direct Virtual Adapter",
+        "adapter_kind": "virtual_wlan",
+        "hardware_interface": False,
+        "interface_index": 19,
+        "ip": "192.168.137.1",
+        "network": "192.168.137.0/24",
+        "gateway": "",
+        "dhcp_enabled": False,
+    }
+    row = build_network_context_row(net, captured_at="2026-11-26T10:00:00+03:00")
+    assert row["adapter_kind"] == "virtual_wlan"
+    assert row["adapter_description"] == "Microsoft Wi-Fi Direct Virtual Adapter"
+    diagnostics = format_network_diagnostics(net)
+    assert "adaptör türü=virtual_wlan" in diagnostics
+    assert "Wi-Fi Direct Virtual Adapter" in diagnostics
