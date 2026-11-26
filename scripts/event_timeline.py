@@ -92,3 +92,31 @@ def normalize_event_frames(frames: dict[str, pd.DataFrame]) -> pd.DataFrame:
         kind="stable",
     )
     return result.drop(columns=["_parsed_time", "_order"]).reset_index(drop=True)
+
+
+
+def filter_event_timeline(
+    frame: pd.DataFrame,
+    *,
+    search: str = "",
+    source: str = "",
+    severity: str = "",
+    event_type: str = "",
+) -> pd.DataFrame:
+    """Apply exact category filters and a literal, case-insensitive text search."""
+    if frame is None:
+        return pd.DataFrame()
+    result = frame.copy()
+    sentinels = {"source": "Tüm kaynaklar", "severity": "Tüm seviyeler", "event_type": "Tüm olay türleri"}
+    for column, selected in (("source", source), ("severity", severity), ("event_type", event_type)):
+        if selected and selected != sentinels[column]:
+            if column not in result.columns:
+                return result.iloc[0:0].copy()
+            result = result[result[column].fillna("").astype(str) == str(selected)]
+    term = str(search or "").strip()
+    if term:
+        mask = result.astype(str).apply(
+            lambda column: column.str.contains(term, case=False, na=False, regex=False)
+        ).any(axis=1)
+        result = result[mask]
+    return result.reset_index(drop=True)
