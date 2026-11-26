@@ -2255,6 +2255,7 @@ def reports_page():
         PERIODS,
         filter_events_by_period,
         summarize_report_counts,
+        local_timestamp_iso,
     )
 
     page_header(
@@ -2471,7 +2472,7 @@ def reports_page():
     report_payload = {
         "report": "WiFi Vision Lab local network summary",
         "period": selected_period,
-        "generated_at": pd.Timestamp.now().astimezone().isoformat(),
+        "generated_at": local_timestamp_iso(),
         "counts": summary,
         "inventory_status": {
             "responding": inventory_summary["responding"],

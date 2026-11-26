@@ -16,6 +16,11 @@ PERIODS = {
 TIME_FIELDS = ("event_time", "timestamp", "observed_at", "time")
 
 
+def local_timestamp_iso() -> str:
+    """Return the current local time as an ISO-8601 timestamp with its UTC offset."""
+    return pd.Timestamp.now(tz="UTC").to_pydatetime().astimezone().isoformat()
+
+
 def filter_events_by_period(
     events: pd.DataFrame,
     period: str,
