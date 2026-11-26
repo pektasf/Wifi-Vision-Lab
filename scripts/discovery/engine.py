@@ -120,10 +120,13 @@ def build_device_profiles(observations):
             item["statuses"].add(observation["status"])
 
         evidence = observation.get("evidence") or classify_observation_evidence(
-            observation.get("source"), observation.get("status")
+            observation.get("source"), observation.get("status"),
+            observation.get("mac", "")
         )
         if evidence:
-            item["evidence_types"].add(evidence)
+            item["evidence_types"].update(
+                value for value in str(evidence).split(";") if value
+            )
 
         observed_at = observation.get("observed_at", "")
         if observed_at > item["last_seen"]:
