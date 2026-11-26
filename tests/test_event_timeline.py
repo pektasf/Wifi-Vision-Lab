@@ -64,3 +64,25 @@ def test_empty_event_sources_return_expected_columns():
         "event_time", "event_type", "subject", "severity",
         "old_value", "new_value", "details", "source",
     ]
+
+
+def test_known_event_types_receive_inferred_severity_and_explicit_value_wins():
+    frames = {
+        "device_events.csv": pd.DataFrame([
+            {"event_time": "2026-03-01T10:00:00Z", "event_type": "ip_changed"},
+            {"event_time": "2026-03-01T09:00:00Z", "event_type": "new_device"},
+            {"event_time": "2026-03-01T08:00:00Z", "event_type": "ping_not_responding", "severity": "critical"},
+        ]),
+        "network_events.csv": pd.DataFrame([
+            {"timestamp": "2026-03-01T07:00:00Z", "event": "NOT_IN_LATEST_SCAN", "ip": "192.168.1.2"},
+        ]),
+        "behavior_findings.csv": pd.DataFrame([
+            {"timestamp": "2026-03-01T06:00:00Z", "type": "MULTIPLE_IPS_SAME_MAC"},
+        ]),
+    }
+
+    result = normalize_event_frames(frames)
+
+    assert result["severity"].tolist() == [
+        "warning", "info", "critical", "warning", "review"
+    ]
