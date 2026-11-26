@@ -128,8 +128,12 @@ def test_endpoint_adapter_evidence_falls_back_to_exact_ip_only():
     from scripts.discovery.endpoint_adapter_evidence import (
         enrich_inventory_with_endpoint_adapters,
     )
-    inventory = [{"ip": "192.168.1.20", "mac": "00:11:22:33:44:55"}]
+    inventory = [{
+        "ip": "192.168.1.20", "mac": "00:11:22:33:44:55",
+        "subnet": "192.168.1.0/24",
+    }]
     endpoint = [{
+        "network_id": "192.168.1.0/24",
         "endpoint_ip": "192.168.1.20",
         "endpoint_mac": "00:11:22:33:44:66",
         "adapter_name": "Wi-Fi",
@@ -148,6 +152,42 @@ def test_endpoint_adapter_evidence_does_not_attach_when_no_exact_identity_matche
         [{"ip": "192.168.1.20", "mac": "00:11:22:33:44:55"}],
         [{
             "endpoint_ip": "192.168.1.21",
+            "endpoint_mac": "00:11:22:33:44:66",
+            "adapter_kind": "virtual_wlan",
+        }],
+    )
+    assert result[0]["endpoint_adapter_kind"] == ""
+    assert result[0]["endpoint_match_method"] == ""
+
+
+
+def test_endpoint_adapter_evidence_does_not_fall_back_to_ip_without_network_scope():
+    from scripts.discovery.endpoint_adapter_evidence import (
+        enrich_inventory_with_endpoint_adapters,
+    )
+    result = enrich_inventory_with_endpoint_adapters(
+        [{"ip": "192.168.1.20", "mac": "00:11:22:33:44:55",
+          "subnet": "192.168.1.0/24"}],
+        [{
+            "endpoint_ip": "192.168.1.20",
+            "endpoint_mac": "00:11:22:33:44:66",
+            "adapter_kind": "virtual_wlan",
+        }],
+    )
+    assert result[0]["endpoint_adapter_kind"] == ""
+    assert result[0]["endpoint_match_method"] == ""
+
+
+def test_endpoint_adapter_evidence_does_not_fall_back_across_networks():
+    from scripts.discovery.endpoint_adapter_evidence import (
+        enrich_inventory_with_endpoint_adapters,
+    )
+    result = enrich_inventory_with_endpoint_adapters(
+        [{"ip": "192.168.1.20", "mac": "00:11:22:33:44:55",
+          "subnet": "192.168.1.0/24"}],
+        [{
+            "network_id": "192.168.2.0/24",
+            "endpoint_ip": "192.168.1.20",
             "endpoint_mac": "00:11:22:33:44:66",
             "adapter_kind": "virtual_wlan",
         }],
