@@ -108,7 +108,8 @@ def test_non_windows_report_does_not_execute_commands():
     assert report["operating_system"] == "Linux"
     assert report["physical_adapters"] == []
     assert report["commands"]["netsh_drivers"]["available"] is False
-    assert report["capabilities"]["rssi_dbm"]["status"] == "not_implemented"
+    assert report["capabilities"]["rssi_dbm"]["status"] == "collector_available_tool_driver_dependent"
+    assert "cached BSS RSSI" in report["capabilities"]["rssi_dbm"]["detail"]
 
 
 
@@ -119,3 +120,14 @@ def test_windows_capability_report_distinguishes_rssi_backend_from_netsh_percent
     )
     assert report["capabilities"]["rssi_dbm"]["status"] == "collector_available_driver_dependent"
     assert "not converted to dBm" in report["capabilities"]["rssi_dbm"]["detail"]
+
+
+
+def test_macos_capability_report_does_not_claim_rssi_support():
+    report = collect_capabilities(
+        command_runner=lambda _args: (_ for _ in ()).throw(
+            AssertionError("macOS audit should not call Windows or Linux commands")
+        ),
+        system_name="Darwin",
+    )
+    assert report["capabilities"]["rssi_dbm"]["status"] == "not_implemented"

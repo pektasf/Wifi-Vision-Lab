@@ -98,3 +98,12 @@ adapter or invoking live WLAN APIs.
 - Report each Wi-Fi interface state and whether its BSS list is available, empty, or errored.
 - Keep adapter diagnostics ephemeral; do not persist adapter descriptions with RSSI fingerprints.
 - Ensure RSSI output continues to exclude raw SSID/BSSID values.
+
+
+## Linux WLAN collector
+
+- Parse `iw dev` interface listings and cached `iw dev <interface> scan dump` BSS entries.
+- Confirm the collector never invokes an active scan command.
+- Verify RSSI values are validated and BSSIDs are pseudonymised before returning results.
+- Cover missing `iw`, missing interfaces, empty cache, permission errors, and per-interface outcomes.
+- Confirm Linux capability reporting does not claim that CSI or passive sensing is available.

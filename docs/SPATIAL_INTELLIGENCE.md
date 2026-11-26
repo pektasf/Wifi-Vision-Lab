@@ -89,7 +89,7 @@ Leave-one-out validation is now available in the UI. It excludes each tested sam
 
 **Windows RSSI collection (initial read-only implementation):** the app can query the Windows Native WLAN API BSS list and read driver-reported RSSI in dBm. It does not call WlanScan, connect to an AP, or change adapter settings. Raw SSID/BSSID values are used only in memory to derive stable installation-local HMAC aliases; the key is stored under the ignored local data directory. Freshness depends on the Windows WLAN service and adapter driver. The collector distinguishes no Wi-Fi interface, an empty BSS list, access/service/driver errors, and partial results across multiple interfaces.
 
-Linux and macOS retain the common app functionality, but their native RSSI collectors are not implemented yet. The platform capability report must show this as not implemented rather than implying the hardware is unsupported. On Windows, the capability audit reports the RSSI backend as implemented but driver-dependent; it does not claim that every adapter will return BSS measurements.
+Linux uses the `iw dev <interface> scan dump` command to read cached BSS results only; the app never issues an active scan. macOS retains the common app functionality, but its native RSSI collector is not implemented yet. Platform capability reports must distinguish an unimplemented backend from unsupported hardware. On Windows, the capability audit reports the RSSI backend as implemented but driver-dependent; it does not claim that every adapter will return BSS measurements.
 
 **Still pending:** repeated surveys across time/orientation, independent held-out validation, a reliable error bound, and native RSSI collectors for Linux/macOS.
 
@@ -121,7 +121,7 @@ Do not infer the position of every other network client from the laptop's own RS
 
 - No cloud processing or external telemetry.
 - No automatic network scan as part of the capability audit.
-- The Windows RSSI query does not call WlanScan; freshness depends on the WLAN service/driver BSS list. The result includes a per-interface diagnostic (adapter description, Windows interface state, BSS-list availability, and API error code) so different laptop Wi-Fi adapters can be evaluated independently. Adapter descriptions are shown locally and are not persisted with RSSI fingerprints.
+- The Windows RSSI query does not call WlanScan; freshness depends on the WLAN service/driver BSS list. Linux reads the kernel's cached BSS list using `iw ... scan dump` and does not trigger a new scan. The result includes a per-interface diagnostic (adapter description, Windows interface state, BSS-list availability, and API error code) so different laptop Wi-Fi adapters can be evaluated independently. Adapter descriptions are shown locally and are not persisted with RSSI fingerprints.
 - Never persist or display raw SSID/BSSID from the native BSS list; use installation-local pseudonymous AP aliases.
 - No packet injection, deauthentication, or disruption.
 - No SSID/BSSID in the capability report.
