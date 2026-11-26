@@ -168,7 +168,14 @@ def related_event_context(
 
 
 EVENT_REVIEW_STATUSES = ("new", "reviewed", "action_required", "resolved")
-EVENT_REVIEW_COLUMNS = ("event_key", "status", "note", "updated_at")
+EVENT_REVIEW_PRIORITIES = ("low", "normal", "high", "critical")
+EVENT_REVIEW_COLUMNS = (
+    "event_key", "status", "note", "updated_at", "priority", "assignee",
+)
+EVENT_REVIEW_HISTORY_COLUMNS = (
+    "action_id", "event_key", "updated_at", "changes", "status",
+    "priority", "assignee", "note",
+)
 
 
 def event_review_key(event: pd.Series | dict) -> str:
@@ -193,15 +200,23 @@ def merge_event_review_states(
 ) -> pd.DataFrame:
     """Attach persisted review metadata without mutating normalized evidence."""
     result = events.copy() if events is not None else pd.DataFrame()
+    review_fields = {
+        "event_key": "",
+        "review_status": "new",
+        "review_note": "",
+        "review_updated_at": "",
+        "review_priority": "normal",
+        "review_assignee": "",
+    }
     if result.empty:
-        for column in ("event_key", "review_status", "review_note", "review_updated_at"):
+        for column, default in review_fields.items():
             result[column] = pd.Series(dtype="object")
         return result
     result["event_key"] = result.apply(event_review_key, axis=1)
     if states is None or states.empty or not {"event_key", "status"}.issubset(states.columns):
-        result["review_status"] = "new"
-        result["review_note"] = ""
-        result["review_updated_at"] = ""
+        for column, default in review_fields.items():
+            if column != "event_key":
+                result[column] = default
         return result
 
     valid = states.copy()
@@ -216,8 +231,18 @@ def merge_event_review_states(
         result["event_key"].map(valid["updated_at"]).fillna("")
         if "updated_at" in valid.columns else ""
     )
+    result["review_priority"] = (
+        result["event_key"].map(valid["priority"]).fillna("normal")
+        if "priority" in valid.columns else "normal"
+    )
+    result["review_assignee"] = (
+        result["event_key"].map(valid["assignee"]).fillna("")
+        if "assignee" in valid.columns else ""
+    )
     invalid = ~result["review_status"].isin(EVENT_REVIEW_STATUSES)
     result.loc[invalid, "review_status"] = "new"
+    invalid_priority = ~result["review_priority"].isin(EVENT_REVIEW_PRIORITIES)
+    result.loc[invalid_priority, "review_priority"] = "normal"
     return result
 
 
@@ -227,10 +252,14 @@ def upsert_event_review_state(
     status: str,
     note: str = "",
     updated_at: str = "",
+    priority: str = "normal",
+    assignee: str = "",
 ) -> pd.DataFrame:
     """Return a complete replacement snapshot with one event review state updated."""
     if status not in EVENT_REVIEW_STATUSES:
         raise ValueError(f"Unsupported event review status: {status}")
+    if priority not in EVENT_REVIEW_PRIORITIES:
+        raise ValueError(f"Unsupported event review priority: {priority}")
     if states is None or states.empty:
         current = pd.DataFrame(columns=EVENT_REVIEW_COLUMNS)
     else:
@@ -246,9 +275,95 @@ def upsert_event_review_state(
         "status": status,
         "note": str(note or "").strip(),
         "updated_at": str(updated_at or ""),
+        "priority": priority,
+        "assignee": str(assignee or "").strip(),
     }
     return pd.concat([current, pd.DataFrame([row])], ignore_index=True)
 
+
+def append_event_review_history(
+    history: pd.DataFrame | None,
+    event: pd.Series | dict,
+    previous_state: pd.Series | dict | None,
+    *,
+    status: str,
+    priority: str,
+    assignee: str,
+    note: str,
+    updated_at: str,
+) -> pd.DataFrame:
+    """Append one deduplicated audit entry describing changed review fields."""
+    if status not in EVENT_REVIEW_STATUSES:
+        raise ValueError(f"Unsupported event review status: {status}")
+    if priority not in EVENT_REVIEW_PRIORITIES:
+        raise ValueError(f"Unsupported event review priority: {priority}")
+
+    previous = previous_state.to_dict() if isinstance(previous_state, pd.Series) else dict(previous_state or {})
+    old_values = {
+        "status": str(previous.get("status", previous.get("review_status", "new")) or "new"),
+        "priority": str(previous.get("priority", previous.get("review_priority", "normal")) or "normal"),
+        "assignee": str(previous.get("assignee", previous.get("review_assignee", "")) or "").strip(),
+        "note": str(previous.get("note", previous.get("review_note", "")) or "").strip(),
+    }
+    new_values = {
+        "status": status,
+        "priority": priority,
+        "assignee": str(assignee or "").strip(),
+        "note": str(note or "").strip(),
+    }
+    changes = {
+        field: {"from": old_values[field], "to": new_values[field]}
+        for field in new_values if old_values[field] != new_values[field]
+    }
+    if not changes:
+        if history is None:
+            return pd.DataFrame(columns=EVENT_REVIEW_HISTORY_COLUMNS)
+        return history.copy()
+
+    key = event_review_key(event)
+    timestamp = str(updated_at or "")
+    changes_json = json.dumps(changes, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    action_id = hashlib.sha256(
+        f"{key}\\0{timestamp}\\0{changes_json}".encode("utf-8")
+    ).hexdigest()
+    current = history.copy() if history is not None else pd.DataFrame()
+    for column in EVENT_REVIEW_HISTORY_COLUMNS:
+        if column not in current.columns:
+            current[column] = ""
+    current = current[list(EVENT_REVIEW_HISTORY_COLUMNS)]
+    if current["action_id"].astype(str).eq(action_id).any():
+        return current
+    row = {
+        "action_id": action_id,
+        "event_key": key,
+        "updated_at": timestamp,
+        "changes": changes_json,
+        "status": status,
+        "priority": priority,
+        "assignee": new_values["assignee"],
+        "note": new_values["note"],
+    }
+    return pd.concat([current, pd.DataFrame([row])], ignore_index=True)
+
+
+def filter_event_review_history(
+    history: pd.DataFrame | None,
+    event_key: str,
+) -> pd.DataFrame:
+    """Return newest-first audit entries for one event key."""
+    if history is None or history.empty or "event_key" not in history.columns:
+        return pd.DataFrame(columns=EVENT_REVIEW_HISTORY_COLUMNS)
+    result = history[history["event_key"].fillna("").astype(str).eq(str(event_key))].copy()
+    if "updated_at" in result.columns:
+        result["_parsed_time"] = pd.to_datetime(
+            result["updated_at"], format="mixed", utc=True, errors="coerce"
+        )
+        result["_order"] = range(len(result))
+        result = result.sort_values(
+            ["_parsed_time", "_order"], ascending=[False, False],
+            na_position="last", kind="stable",
+        ).drop(columns=["_parsed_time", "_order"])
+    return result.reset_index(drop=True)
 
 def filter_event_review_status(
     frame: pd.DataFrame,
