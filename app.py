@@ -298,65 +298,239 @@ def render_device_cards(data, key_prefix="device"):
 
 
 def dashboard_page():
+    from scripts.dashboard_summary import (
+        inventory_status_summary,
+        latest_observation_timestamp,
+        select_attention_events,
+    )
+    from scripts.event_timeline import normalize_event_frames
+
     inventory = load("device_inventory.csv")
-    profiles = load("device_profiles.csv")
-    events = load("device_events.csv")
-    classification = load("device_classification.csv")
-    page_header("Ağ kontrol merkezi", "Ağınızdaki cihazları ve son gözlemleri tek bakışta görün.")
+    findings = load("behavior_findings.csv")
+    event_frames = {
+        filename: load(filename)
+        for filename in [
+            "device_events.csv",
+            "network_events.csv",
+            "live_events.csv",
+            "behavior_findings.csv",
+        ]
+    }
+    timeline = normalize_event_frames(event_frames)
+    summary = inventory_status_summary(inventory)
+    latest = latest_observation_timestamp(inventory, timeline)
 
-    total = len(inventory)
-    responding = 0
-    if "status" in inventory.columns:
-        responding = int(inventory["status"].astype(str).str.lower().isin(
-            ["responding", "online", "active"]
-        ).sum())
-    metrics = st.columns(3)
-    metrics[0].metric("Toplam cihaz", f"{total:,}")
-    metrics[1].metric("Yanıt veren", f"{responding:,}")
-    metrics[2].metric("Diğer / bilinmiyor", f"{max(total - responding, 0):,}")
+    page_header(
+        "Ağ kontrol merkezi",
+        "Yerel ağındaki cihazları, son değişimleri ve inceleme gerektiren kayıtları tek bakışta gör.",
+    )
 
-    latest = "Henüz gözlem yok"
-    timestamp_col = next((c for c in ["timestamp", "observed_at", "last_seen"] if c in inventory.columns), None)
-    if timestamp_col and not inventory.empty:
-        parsed = pd.to_datetime(inventory[timestamp_col], errors="coerce")
-        if parsed.notna().any():
-            latest = parsed.max().strftime("%d.%m.%Y %H:%M")
+    action_left, action_right, freshness_col = st.columns([1, 1, 2.2])
+    with action_left:
+        if st.button(
+            "＋  Yeni tarama",
+            type="primary",
+            width="stretch",
+            key="dashboard_start_scan",
+        ):
+            run_scan()
+    with action_right:
+        if st.button(
+            "Cihaz envanteri  →",
+            width="stretch",
+            key="dashboard_open_devices",
+        ):
+            st.session_state.active_page = PAGES[1]
+            st.rerun()
+    with freshness_col:
+        if latest is not None:
+            local_latest = latest.to_pydatetime().astimezone()
+            st.caption(
+                f"Son kayıtlı gözlem: **{local_latest.strftime('%d.%m.%Y %H:%M:%S')}**"
+            )
+        else:
+            st.caption("Henüz zaman damgalı bir gözlem kaydedilmedi.")
 
-    with st.container(border=True):
-        st.markdown("**Son veri güncellemesi**")
-        st.write(latest)
-        left, right = st.columns(2)
-        with left:
-            if st.button("Yeni tarama", type="primary", width="stretch", key="dashboard_start_scan"):
-                run_scan()
-        with right:
-            if st.button("Cihaz envanterini aç", width="stretch", key="dashboard_open_devices"):
+    st.markdown("### Ağın mevcut görünümü")
+    metrics = st.columns(4)
+    metrics[0].metric("Bilinen cihaz", f"{summary['total']:,}")
+    metrics[1].metric("Yanıt veren", f"{summary['responding']:,}")
+    metrics[2].metric("Olay kaydı", f"{len(timeline):,}")
+    metrics[3].metric("Davranış bulgusu", f"{len(findings):,}")
+
+    chart_col, attention_col = st.columns([1.05, 1.15], gap="large")
+    with chart_col:
+        st.markdown("### Cihaz durum dağılımı")
+        status_counts = summary["status_counts"]
+        if status_counts is None or status_counts.empty:
+            st.info("Durum grafiği için henüz envanter verisi yok.")
+        else:
+            import plotly.graph_objects as go
+
+            labels = [str(value) for value in status_counts.index.tolist()]
+            values = [int(value) for value in status_counts.tolist()]
+
+            def status_color(label):
+                normalized = label.strip().casefold()
+                if normalized in {"online", "active", "responding", "reachable"}:
+                    return "#167A55"
+                if normalized in {
+                    "offline", "down", "unreachable",
+                    "not_responding", "not responding",
+                }:
+                    return "#B84040"
+                if normalized in {"bilinmiyor", "unknown", "n/a", "na"}:
+                    return "#8A5A12"
+                return "#426C8C"
+
+            figure = go.Figure(
+                go.Bar(
+                    x=values,
+                    y=labels,
+                    orientation="h",
+                    marker={"color": [status_color(label) for label in labels]},
+                    text=values,
+                    textposition="outside",
+                    cliponaxis=False,
+                    hovertemplate="%{y}: %{x} cihaz<extra></extra>",
+                )
+            )
+            figure.update_layout(
+                height=max(220, 42 * len(labels) + 70),
+                margin={"l": 8, "r": 34, "t": 8, "b": 38},
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                showlegend=False,
+                font={"family": "Segoe UI, sans-serif", "color": "#182B2A", "size": 12},
+                xaxis={
+                    "title": "Cihaz sayısı",
+                    "rangemode": "tozero",
+                    "showgrid": True,
+                    "gridcolor": "#E7EEEA",
+                    "zeroline": False,
+                },
+                yaxis={"title": "", "automargin": True},
+                bargap=0.34,
+            )
+            st.plotly_chart(figure, width="stretch", config={"displayModeBar": False})
+
+            unknown = summary["unknown"]
+            if unknown:
+                st.caption(
+                    f"{unknown:,} cihazın durumu bilinmiyor. Bu kayıtlar çevrimdışı "
+                    "olarak yorumlanmadı."
+                )
+
+    with attention_col:
+        st.markdown("### İnceleme gerektiren kayıtlar")
+        attention = select_attention_events(timeline, limit=5)
+        if attention.empty:
+            if timeline.empty:
+                st.info(
+                    "Henüz olay geçmişi oluşmadı. İlk tarama ve izleme kayıtlarından "
+                    "sonra burada değişimler görünecek."
+                )
+            else:
+                st.info(
+                    "Kayıtlı olaylarda şu an warning/review seviyesinde bulgu yok. "
+                    "Bu durum tek başına tüm cihazların sağlıklı olduğunu kanıtlamaz."
+                )
+        else:
+            for _, event in attention.iterrows():
+                severity = str(event.get("severity", "info")).casefold()
+                label = {
+                    "critical": "Kritik",
+                    "warning": "Uyarı",
+                    "review": "İncele",
+                }.get(severity, severity.title())
+                subject = str(event.get("subject", "") or "Genel ağ olayı")
+                event_type = str(event.get("event_type", "unknown_event"))
+                event_time = str(event.get("event_time", "") or "Zaman bilinmiyor")
+                old_value = str(event.get("old_value", "") or "")
+                new_value = str(event.get("new_value", "") or "")
+                transition = f"{old_value}  →  {new_value}" if old_value or new_value else ""
+                st.markdown(f"**{label} · {event_type}**")
+                st.write(subject)
+                st.caption(event_time)
+                if transition:
+                    st.caption(transition)
+                st.divider()
+
+    events_col, devices_col = st.columns([1.15, 1], gap="large")
+    with events_col:
+        st.markdown("### Son ağ olayları")
+        if timeline.empty:
+            st.info("Olay zaman çizelgesi henüz boş.")
+        else:
+            event_columns = [
+                column for column in [
+                    "event_time", "event_type", "subject", "severity",
+                    "source", "old_value", "new_value",
+                ] if column in timeline.columns
+            ]
+            recent_events = timeline[event_columns].head(8).rename(columns={
+                "event_time": "Zaman",
+                "event_type": "Olay",
+                "subject": "Cihaz / kimlik",
+                "severity": "Önem",
+                "source": "Kaynak",
+                "old_value": "Önceki değer",
+                "new_value": "Yeni değer",
+            })
+            st.dataframe(
+                recent_events,
+                width="stretch",
+                hide_index=True,
+                height=min(360, 46 + 35 * len(recent_events)),
+            )
+            if st.button("Tüm olayları incele  →", key="dashboard_open_events"):
+                st.session_state.active_page = PAGES[4]
+                st.rerun()
+
+    with devices_col:
+        st.markdown("### Son gözlemlenen cihazlar")
+        if inventory.empty:
+            st.info("Henüz cihaz kaydı yok. Yeni tarama ile yerel envanter oluştur.")
+        else:
+            recent = inventory.copy()
+            timestamp_col = next(
+                (
+                    column for column in ["timestamp", "observed_at", "last_seen"]
+                    if column in recent.columns
+                ),
+                None,
+            )
+            if timestamp_col:
+                recent["_dashboard_time"] = pd.to_datetime(
+                    recent[timestamp_col], utc=True, errors="coerce"
+                )
+                recent = recent.sort_values(
+                    "_dashboard_time", ascending=False, na_position="last"
+                )
+            visible = [
+                column for column in ["hostname", "ip", "mac", "status", "vendor"]
+                if column in recent.columns
+            ]
+            if visible:
+                recent_devices = recent[visible].head(8).rename(columns={
+                    "hostname": "Cihaz",
+                    "ip": "IP adresi",
+                    "mac": "MAC adresi",
+                    "status": "Durum",
+                    "vendor": "Üretici",
+                })
+                st.dataframe(
+                    recent_devices,
+                    width="stretch",
+                    hide_index=True,
+                    height=min(360, 46 + 35 * len(recent_devices)),
+                )
+            else:
+                st.info("Envanter kaydı var ancak gösterilebilir kimlik alanı bulunamadı.")
+            if st.button("Envanterin tamamını aç  →", key="dashboard_open_inventory"):
                 st.session_state.active_page = PAGES[1]
                 st.rerun()
 
-    left, right = st.columns([1.1, 1])
-    with left:
-        st.subheader("Cihaz durumu")
-        if "status" in inventory.columns and not inventory.empty:
-            chart = inventory["status"].replace("", "Bilinmiyor").value_counts().rename_axis("Durum").reset_index(name="Cihaz").set_index("Durum")
-            st.bar_chart(chart, height=230)
-        else:
-            st.info("Durum dağılımı için henüz veri yok.")
-    with right:
-        st.subheader("Envanter özeti")
-        st.metric("Cihaz profili", f"{len(profiles):,}")
-        st.metric("Kayıtlı olay", f"{len(events):,}")
-        st.metric("Üretici kaydı", f"{len(classification):,}")
-
-    st.subheader("Son keşfedilen cihazlar")
-    if inventory.empty:
-        st.info("Henüz cihaz kaydı yok. Yeni tarama başlatabilirsiniz.")
-    else:
-        recent = inventory.copy()
-        if timestamp_col:
-            recent = recent.sort_values(timestamp_col, ascending=False)
-        visible = [c for c in ["ip", "hostname", "status", "vendor"] if c in recent.columns]
-        render_device_cards(recent[visible].head(6) if visible else recent.head(6), "dashboard")
 
 
 def devices_page():
