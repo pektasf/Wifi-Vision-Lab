@@ -87,7 +87,11 @@ A Streamlit floor-plan editor now creates floors, rectangular zones, and manual 
 
 Leave-one-out validation is now available in the UI. It excludes each tested sample from its own reference set and reports accuracy separately from prediction coverage; zones with fewer than two samples are skipped. This is an initial internal check, not independent validation.
 
-**Still pending:** a verified Windows API/driver RSSI collector, repeated surveys across time/orientation, independent held-out validation, and a reliable error bound.
+**Windows RSSI collection (initial read-only implementation):** the app can query the Windows Native WLAN API BSS list and read driver-reported RSSI in dBm. It does not call WlanScan, connect to an AP, or change adapter settings. Raw SSID/BSSID values are used only in memory to derive stable installation-local HMAC aliases; the key is stored under the ignored local data directory. Freshness depends on the Windows WLAN service and adapter driver.
+
+Linux and macOS retain the common app functionality, but their native RSSI collectors are not implemented yet. The platform capability report must show this as not implemented rather than implying the hardware is unsupported.
+
+**Still pending:** repeated surveys across time/orientation, independent held-out validation, a reliable error bound, and native RSSI collectors for Linux/macOS.
 
 Do not infer the position of every other network client from the laptop's own RSSI measurements. Remote-client positioning requires measurements supplied by that client or by compatible AP infrastructure.
 
@@ -117,6 +121,8 @@ Do not infer the position of every other network client from the laptop's own RS
 
 - No cloud processing or external telemetry.
 - No automatic network scan as part of the capability audit.
+- The Windows RSSI query does not call WlanScan; freshness depends on the WLAN service/driver BSS list.
+- Never persist or display raw SSID/BSSID from the native BSS list; use installation-local pseudonymous AP aliases.
 - No packet injection, deauthentication, or disruption.
 - No SSID/BSSID in the capability report.
 - Do not represent signal strength as physical distance without calibration.
@@ -127,6 +133,8 @@ Do not infer the position of every other network client from the laptop's own RS
 
 ## Current status
 
-SI-0 provides a safe capability inventory. It does not yet provide calibrated
-device coordinates, CSI capture, or passive human/object sensing. Those remain
-future phases gated by verified laptop hardware and driver support.
+SI-0 provides a safe capability inventory. SI-2 now has an initial Windows
+read-only BSS RSSI collector, but this is not calibrated positioning and does
+not prove every adapter/driver will return measurements. Linux/macOS RSSI
+collectors, calibrated device coordinates, CSI capture, and passive
+human/object sensing remain future phases gated by platform and hardware support.
