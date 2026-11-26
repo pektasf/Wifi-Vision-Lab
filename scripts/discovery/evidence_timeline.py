@@ -173,4 +173,4 @@ def build_identity_evidence_timeline(
         )
 
     timeline.sort(key=lambda item: item["observed_at"], reverse=True)
-    return timeline[-max(1, min(int(limit), MAX_TIMELINE_ROWS)):]
+    return timeline[:max(1, min(int(limit), MAX_TIMELINE_ROWS))]
