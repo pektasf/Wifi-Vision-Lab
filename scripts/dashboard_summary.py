@@ -66,3 +66,34 @@ def select_attention_events(
     levels = timeline["severity"].fillna("").astype(str).str.casefold()
     selected = timeline[levels.isin({"critical", "warning", "review"})]
     return selected.head(max(int(limit), 0)).copy()
+
+
+
+def summarize_observation_posture(
+    inventory: pd.DataFrame,
+    timeline: pd.DataFrame,
+) -> dict[str, int]:
+    """Summarize recorded observations without inferring that the network is safe."""
+    inventory_summary = inventory_status_summary(inventory)
+    if timeline is None or timeline.empty or "severity" not in timeline.columns:
+        severity_counts = {}
+        event_count = 0 if timeline is None else int(len(timeline))
+    else:
+        levels = timeline["severity"].fillna("").astype(str).str.strip().str.casefold()
+        severity_counts = levels.value_counts().to_dict()
+        event_count = int(len(timeline))
+
+    critical = int(severity_counts.get("critical", 0))
+    warning = int(severity_counts.get("warning", 0))
+    review = int(severity_counts.get("review", 0))
+    return {
+        "devices": int(inventory_summary["total"]),
+        "responding": int(inventory_summary["responding"]),
+        "unresponsive": int(inventory_summary["unresponsive"]),
+        "unknown": int(inventory_summary["unknown"]),
+        "events": event_count,
+        "critical": critical,
+        "warning": warning,
+        "review": review,
+        "attention": critical + warning + review,
+    }

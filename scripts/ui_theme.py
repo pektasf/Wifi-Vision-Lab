@@ -72,13 +72,17 @@ def apply_theme(theme="light"):
             background: var(--wv-surface); border: 1px solid var(--wv-border);
             border-radius: var(--wv-radius-md); box-shadow: 0 1px 2px var(--wv-shadow);
         }}
-        [data-testid="stMetric"] {{ padding: 13px 16px 14px; }}
+        [data-testid="stMetric"] {{
+            padding: 15px 16px 16px;
+            border-top: 3px solid var(--wv-accent);
+            min-height: 108px;
+        }}
         [data-testid="stMetricLabel"] {{
             color: var(--wv-muted) !important; font-size: .78rem !important;
             font-weight: 600 !important; letter-spacing: .01em;
         }}
         [data-testid="stMetricValue"] {{
-            color: var(--wv-text) !important; font-size: 1.58rem !important;
+            color: var(--wv-text) !important; font-size: 1.72rem !important;
             font-weight: 680 !important; letter-spacing: -.035em;
             font-variant-numeric: tabular-nums;
         }}
@@ -177,9 +181,9 @@ def apply_theme(theme="light"):
         }}
         [data-testid="stSidebar"] div.stButton {{ margin: 0; padding: 0; }}
         [data-testid="stSidebar"] div.stButton > button {{
-            width: 100%; min-height: 37px; height: 37px; padding: 5px 11px;
+            width: 100%; min-height: 39px; height: 39px; padding: 5px 11px;
             margin: 1px 0; border-radius: 8px; box-shadow: none;
-            text-align: left; justify-content: flex-start; font-size: .84rem;
+            text-align: left; justify-content: flex-start; font-size: .86rem;
             font-weight: 560; transition: background 120ms ease, color 120ms ease,
             border-color 120ms ease;
         }}
@@ -193,6 +197,10 @@ def apply_theme(theme="light"):
         [data-testid="stSidebar"] div.stButton > button[kind="primary"] {{
             background: var(--wv-accent-soft); border: 1px solid #C7E4DE;
             color: var(--wv-accent-strong); font-weight: 700;
+            box-shadow: inset 3px 0 0 var(--wv-accent);
+        }}
+        [data-testid="stSidebar"] div.stButton > button [data-testid="stIconMaterial"] {{
+            font-size: 1.08rem; margin-right: .35rem;
         }}
         [data-testid="stSidebar"] hr {{ margin: 12px 0; border-color: var(--wv-border); }}
         [data-testid="stSidebar"] .sidebar-footer {{

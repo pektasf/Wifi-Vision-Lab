@@ -61,3 +61,34 @@ def test_localized_unknown_status_is_counted_as_unknown():
     }))
     assert result["unknown"] == 1
     assert result["responding"] == 1
+
+
+
+def test_observation_posture_counts_only_recorded_attention_levels():
+    from scripts.dashboard_summary import summarize_observation_posture
+
+    inventory = pd.DataFrame({"status": ["online", "unknown", "offline"]})
+    timeline = pd.DataFrame({
+        "severity": ["critical", "warning", "review", "info", "", None],
+    })
+    result = summarize_observation_posture(inventory, timeline)
+    assert result == {
+        "devices": 3,
+        "responding": 1,
+        "unresponsive": 1,
+        "unknown": 1,
+        "events": 6,
+        "critical": 1,
+        "warning": 1,
+        "review": 1,
+        "attention": 3,
+    }
+
+
+def test_observation_posture_empty_data_does_not_claim_safe_network():
+    from scripts.dashboard_summary import summarize_observation_posture
+
+    result = summarize_observation_posture(pd.DataFrame(), pd.DataFrame())
+    assert result["devices"] == 0
+    assert result["events"] == 0
+    assert result["attention"] == 0
