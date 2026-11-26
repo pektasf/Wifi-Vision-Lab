@@ -55,8 +55,11 @@ def render():
     inventory = read_data("device_inventory.csv")
     wifi = read_data("wifi_connection.csv")
 
-    st.title("Ag Topolojisi")
-    st.caption("Yerel ag cihazlari, gozlemlenen iliskiler ve altyapi gorunumu")
+    st.markdown(
+        '<div class="wv-page-header"><h1>Ağ topolojisi</h1>'
+        '<p>Gözlemlenen cihazları ve yalnızca doğrulanmış bağlantıları kanıt düzeyiyle incele.</p></div>',
+        unsafe_allow_html=True,
+    )
 
     if nodes.empty and inventory.empty:
         st.warning("Topoloji verisi bulunamadi. Once cihaz kesfi yapilmalidir.")
@@ -114,107 +117,163 @@ def render():
     unverified_count = len(unverified_edges)
 
     a, b, c, d = st.columns(4)
-    a.metric("Toplam cihaz", f"{total:,}")
-    b.metric("Cevap veren", f"{online:,}")
-    c.metric("Gateway / router", f"{gateway_count:,}")
-    d.metric("Dogrulanmis baglanti", f"{e_count:,}")
-
-    e, f, g = st.columns(3)
-    e.metric("Tahmini iliski", f"{inferred_count:,}")
-    f.metric("Ag baglami", f"{context_count:,}")
-    g.metric("Kaniti yetersiz", f"{unverified_count:,}")
-
-    st.divider()
-
-    st.subheader("Ag haritasi")
+    a.metric("Gözlemlenen cihaz", f"{total:,}")
+    b.metric("Yanıt veren", f"{online:,}")
+    c.metric("Doğrulanmış bağlantı", f"{e_count:,}")
+    d.metric("Tahmini ilişki", f"{inferred_count:,}")
     st.caption(
-        "Yalnizca dogrudan dogrulanmis iliskiler baglanti olarak cizilir. "
-        "Ayni tarama kapsaminda gorunmek fiziksel baglanti kaniti degildir."
+        f"Ağ bağlamı: {context_count:,} · Kanıtı yetersiz: {unverified_count:,} · "
+        f"Gateway/router adayı: {gateway_count:,}"
     )
 
-    if e_count and edge_from and edge_to:
+    st.markdown("### İlişki haritası")
+    st.caption(
+        "Düğümler cihaz rolüne göre gruplanır. Çizgiler yalnızca doğrudan doğrulanmış "
+        "ilişkileri gösterir; aynı tarama kapsamı fiziksel bağlantı anlamına gelmez."
+    )
+
+    if total:
         try:
+            import html
             import plotly.graph_objects as go
-            import math
 
             ids_col = first_column(device_nodes, ["id", "ip", "mac"])
             if ids_col is None:
                 ids_col = "_label"
 
-            node_ids = device_nodes[ids_col].astype(str).tolist()
+            lane_config = {
+                "gateway_address": ("Gateway adresi", 3, "diamond", "#8A5A12"),
+                "access_point_radio": ("AP radyosu", 2, "hexagon", "#087F78"),
+                "network_device_candidate": ("Ağ ekipmanı adayı", 1, "square", "#426C8C"),
+                "endpoint": ("Uç cihaz", 0, "circle", "#167A55"),
+                "wifi_client": ("Wi-Fi istemcisi", 0, "circle", "#167A55"),
+            }
             positions = {}
-            count = max(len(node_ids), 1)
-
-            for i, node_id in enumerate(node_ids):
-                angle = 2 * math.pi * i / count
-                positions[node_id] = (math.cos(angle), math.sin(angle))
-
-            edge_x, edge_y = [], []
-            for _, edge in verified_edges.iterrows():
-                s, t = str(edge[edge_from]), str(edge[edge_to])
-                if s in positions and t in positions:
-                    edge_x.extend([positions[s][0], positions[t][0], None])
-                    edge_y.extend([positions[s][1], positions[t][1], None])
-
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=edge_x, y=edge_y,
-                mode="lines",
-                line=dict(width=1.5, color="#94A3B8"),
-                hoverinfo="skip",
-                name="Kayitli iliskiler"
-            ))
-
-            node_x, node_y, hover, labels = [], [], [], []
+            grouped_nodes = {}
             for _, row in device_nodes.iterrows():
-                node_id = str(row[ids_col])
-                if node_id not in positions:
+                node_id = str(row.get(ids_col, "")).strip()
+                if not node_id:
                     continue
-                x, y = positions[node_id]
-                node_x.append(x)
-                node_y.append(y)
-                labels.append(str(row["_label"])[:24])
-                hover.append(
-                    f"Cihaz: {row['_label']}<br>"
-                    f"IP: {row['_ip']}<br>"
-                    f"Tur: {row['_type']}<br>"
-                    f"Durum: {row['_status']}"
+                node_type = str(row.get("_type", "unknown")).strip().lower()
+                config = lane_config.get(
+                    node_type, ("Diğer / sınıflandırılmamış", -1, "circle", "#73827F")
                 )
+                grouped_nodes.setdefault(config[0], []).append((node_id, row, config))
 
-            fig.add_trace(go.Scatter(
-                x=node_x, y=node_y,
-                mode="markers+text",
-                text=labels,
-                textposition="bottom center",
-                hovertext=hover,
-                hoverinfo="text",
-                marker=dict(size=19, color="#2563EB",
-                            line=dict(width=2, color="#FFFFFF")),
-                name="Ag cihazlari"
-            ))
+            lane_order = [
+                "Gateway adresi", "AP radyosu", "Ağ ekipmanı adayı",
+                "Uç cihaz", "Diğer / sınıflandırılmamış",
+            ]
+            lane_y = {
+                "Gateway adresi": 3,
+                "AP radyosu": 2,
+                "Ağ ekipmanı adayı": 1,
+                "Uç cihaz": 0,
+                "Diğer / sınıflandırılmamış": -1,
+            }
+            for lane in lane_order:
+                members = grouped_nodes.get(lane, [])
+                count = len(members)
+                for index, (node_id, row, config) in enumerate(members):
+                    x = (index - (count - 1) / 2) * 1.55
+                    positions[node_id] = (x, lane_y[lane])
 
-            fig.update_layout(
-                height=540,
-                margin=dict(l=20, r=20, t=20, b=45),
+            figure = go.Figure()
+            edge_x, edge_y = [], []
+            if edge_from and edge_to:
+                for _, edge in verified_edges.iterrows():
+                    source_id = str(edge[edge_from]).strip()
+                    target_id = str(edge[edge_to]).strip()
+                    if source_id in positions and target_id in positions:
+                        edge_x.extend([
+                            positions[source_id][0], positions[target_id][0], None
+                        ])
+                        edge_y.extend([
+                            positions[source_id][1], positions[target_id][1], None
+                        ])
+            if edge_x:
+                figure.add_trace(go.Scatter(
+                    x=edge_x,
+                    y=edge_y,
+                    mode="lines",
+                    line={"width": 1.7, "color": "#A8B8B2"},
+                    hoverinfo="skip",
+                    name="Doğrulanmış bağlantı",
+                ))
+
+            for lane in lane_order:
+                members = grouped_nodes.get(lane, [])
+                if not members:
+                    continue
+                config = members[0][2]
+                x_values, y_values, labels, hover = [], [], [], []
+                for node_id, row, _ in members:
+                    x, y = positions[node_id]
+                    x_values.append(x)
+                    y_values.append(y)
+                    labels.append(html.escape(str(row.get("_label", node_id))[:24]))
+                    hover.append(
+                        f"Cihaz: {html.escape(str(row.get('_label', '')))}<br>"
+                        f"IP: {html.escape(str(row.get('_ip', '')))}<br>"
+                        f"Tür: {html.escape(str(row.get('_type', '')))}<br>"
+                        f"Durum: {html.escape(str(row.get('_status', '')))}<br>"
+                        f"MAC: {html.escape(str(row.get(mac_col, '')))}"
+                    )
+                figure.add_trace(go.Scatter(
+                    x=x_values,
+                    y=y_values,
+                    mode="markers+text",
+                    text=labels,
+                    textposition="top center",
+                    hovertext=hover,
+                    hoverinfo="text",
+                    marker={
+                        "size": 19,
+                        "symbol": config[2],
+                        "color": config[3],
+                        "line": {"width": 1.5, "color": "#FFFFFF"},
+                    },
+                    name=lane,
+                ))
+
+            if not edge_x:
+                st.info(
+                    "Henüz doğrulanmış bağlantı yok. Cihazlar rol gruplarında gösteriliyor; "
+                    "bu yerleşim fiziksel bağlantı iddiası değildir."
+                )
+            figure.update_layout(
+                height=560,
+                margin={"l": 18, "r": 18, "t": 28, "b": 35},
                 paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="#FFFFFF",
                 showlegend=True,
-                xaxis=dict(visible=False),
-                yaxis=dict(visible=False),
-                dragmode="pan"
+                legend={"orientation": "h", "y": 1.08, "x": 0},
+                font={"family": "Segoe UI, sans-serif", "color": "#182B2A", "size": 11},
+                xaxis={"visible": False, "showgrid": False, "zeroline": False},
+                yaxis={
+                    "tickmode": "array",
+                    "tickvals": [3, 2, 1, 0, -1],
+                    "ticktext": lane_order,
+                    "range": [-1.7, 3.8],
+                    "showgrid": False,
+                    "zeroline": False,
+                    "ticks": "",
+                },
+                hoverlabel={"bgcolor": "#FFFFFF", "font": {"color": "#182B2A"}},
             )
-            st.plotly_chart(fig, width="stretch")
+            st.plotly_chart(
+                figure, width="stretch", config={"displayModeBar": False}
+            )
         except ImportError:
-            st.info("Grafik kutuphanesi bulunamadi. Baglanti kayitlari tablo olarak gosteriliyor.")
-            st.dataframe(edges, width="stretch", hide_index=True)
+            st.info("Grafik kütüphanesi bulunamadı. Doğrulanmış bağlantılar tablo olarak gösteriliyor.")
+            if not verified_edges.empty:
+                st.dataframe(verified_edges, width="stretch", hide_index=True)
         except Exception as exc:
-            st.warning(f"Ag haritasi olusturulamadi: {exc}")
-            st.dataframe(edges, width="stretch", hide_index=True)
+            st.warning(f"Ağ haritası oluşturulamadı: {exc}")
+            if not verified_edges.empty:
+                st.dataframe(verified_edges, width="stretch", hide_index=True)
     else:
-        st.info(
-            "Henuz cizilebilir baglanti kaydi yok. Cihazlar kesfedilmis olabilir; "
-            "ancak fiziksel veya AP-istemci baglantilari icin dogrulanmis kaynak gerekir."
-        )
+        st.info("Topoloji için henüz cihaz verisi bulunmuyor.")
 
     display_columns = [
         col for col in [
@@ -269,36 +328,69 @@ def render():
             st.caption(str(selected_edge.get("details")))
 
     st.divider()
-    st.subheader("Cihazlar")
-    st.caption("Önemli bilgiler kartlarda; teknik ayrıntılar cihaz penceresinde.")
-    search = st.text_input("Cihaz ara", placeholder="IP, MAC, marka veya cihaz adı", key="topology_device_search")
-    type_options = ["Tüm cihazlar"] + sorted(
-        [x for x in nodes["_type"].dropna().unique().tolist() if x]
-    )
-    selected_type = st.selectbox("Cihaz türü", type_options, key="topology_device_type")
+    st.markdown("### Cihaz envanteri")
+    search_col, type_col = st.columns([2, 1])
+    with search_col:
+        search = st.text_input(
+            "Cihaz ara",
+            placeholder="IP, MAC, marka veya cihaz adı",
+            key="topology_device_search",
+        )
+    with type_col:
+        type_options = ["Tüm cihazlar"] + sorted(
+            [value for value in device_nodes["_type"].dropna().unique().tolist() if value]
+        )
+        selected_type = st.selectbox(
+            "Cihaz rolü", type_options, key="topology_device_type"
+        )
 
     filtered = device_nodes.copy()
     if search.strip():
         mask = filtered.astype(str).apply(
-            lambda col: col.str.contains(search.strip(), case=False, na=False, regex=False)
+            lambda column: column.str.contains(
+                search.strip(), case=False, na=False, regex=False
+            )
         ).any(axis=1)
         filtered = filtered[mask]
     if selected_type != "Tüm cihazlar":
         filtered = filtered[filtered["_type"] == selected_type]
 
-    st.caption(f"{len(filtered):,} cihaz")
-    records = list(filtered.iterrows())
-    for offset in range(0, len(records), 3):
-        columns = st.columns(3)
-        for column, (idx, row) in zip(columns, records[offset:offset + 3]):
-            with column:
-                with st.container(border=True):
-                    st.markdown(f"**{str(row['_label']) or 'İsimsiz cihaz'}**")
-                    st.caption(str(row["_ip"]) or "IP bilinmiyor")
-                    st.write(str(row["_type"]) or "Tür bilinmiyor")
-                    st.caption(str(row["_status"]) or "Durum bilinmiyor")
-                    if st.button("Detayları aç", key=f"topology_detail_{idx}", width="stretch"):
-                        show_topology_device(row)
+    st.caption(f"{len(filtered):,} cihaz eşleşti.")
+    if filtered.empty:
+        st.info("Bu filtrelerle eşleşen cihaz yok.")
+    else:
+        device_columns = [
+            column for column in [
+                "_label", "_ip", mac_col, "_type", vendor_col, "_status",
+            ] if column and column in filtered.columns
+        ]
+        display = filtered[device_columns].rename(columns={
+            "_label": "Cihaz",
+            "_ip": "IP adresi",
+            mac_col: "MAC adresi",
+            "_type": "Rol / tür",
+            vendor_col: "Üretici",
+            "_status": "Durum",
+        })
+        st.dataframe(
+            display.head(200),
+            width="stretch",
+            hide_index=True,
+            height=min(480, 58 + 35 * min(len(display), 11)),
+        )
+        if len(display) > 200:
+            st.caption("İlk 200 cihaz gösteriliyor. Arama ve rol filtresiyle daraltabilirsiniz.")
+        selected_index = st.selectbox(
+            "Detayını incele",
+            options=filtered.index.tolist(),
+            format_func=lambda index: (
+                f"{filtered.loc[index, '_label']} · "
+                f"{filtered.loc[index, '_ip'] or 'IP yok'}"
+            ),
+            key="topology_device_detail_select",
+        )
+        if st.button("Cihaz kanıtlarını aç", key="topology_device_detail_open"):
+            show_topology_device(filtered.loc[selected_index])
 
     st.divider()
     st.subheader("AP-istemci baglanti gecmisi")
