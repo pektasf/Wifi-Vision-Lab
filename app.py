@@ -1617,6 +1617,12 @@ PAGES = [
     "Raporlar"
 ]
 
+NAV_ICONS = {
+    PAGES[0]: "⌂", PAGES[1]: "▦", PAGES[2]: "◷", PAGES[3]: "◉",
+    PAGES[4]: "≋", PAGES[5]: "⌁", PAGES[6]: "⌘", PAGES[7]: "◌",
+    PAGES[8]: "◈", PAGES[9]: "⌖", PAGES[10]: "▤", PAGES[11]: "↗",
+}
+
 NAV_GROUPS = [
     ("GENEL BAKI\u015e", [PAGES[0]]),
     ("C\u0130HAZ Y\u00d6NET\u0130M\u0130", PAGES[1:4]),
@@ -1628,82 +1634,18 @@ NAV_GROUPS = [
 with st.sidebar:
     st.markdown("""
     <style>
-    [data-testid="stSidebar"] {
-        min-width: 270px;
-        max-width: 270px;
-    }
-
+    [data-testid="stSidebar"] { min-width: 258px; max-width: 258px; }
     [data-testid="stSidebar"] > div:first-child {
-        height: 100vh;
-        box-sizing: border-box;
-        overflow-y: auto;
-        padding: 8px 13px 8px 13px;
-    }
-
-    [data-testid="stSidebar"] .brand-name {
-        font-size: 1.15rem; font-weight: 750; letter-spacing: -0.4px;
-        color: #17243A; margin: 0 0 3px 0;
-    }
-    [data-testid="stSidebar"] .brand-description {
-        font-size: .68rem; line-height: 1.45; font-weight: 600;
-        letter-spacing: .25px; color: #718096; margin-bottom: 12px;
-    }
-
-    [data-testid="stSidebar"] .nav-heading { color: #8995A7; font-size: .68rem; font-weight: 700; letter-spacing: .35px; margin: 13px 0 5px 8px; }
-
-    [data-testid="stSidebar"] div.stButton {
-        margin: 0;
-        padding: 0;
-    }
-
-    [data-testid="stSidebar"] div.stButton > button {
-        width: 100%;
-        min-height: 34px;
-        height: 34px;
-        padding: 4px 10px;
-        margin: 0;
-        border-radius: 6px;
-        box-shadow: none;
-        text-align: left;
-        justify-content: flex-start;
-        font-size: 0.87rem;
-        font-weight: 500;
-        transition: background 120ms ease, color 120ms ease;
-    }
-
-    [data-testid="stSidebar"] div.stButton > button[kind="secondary"] {
-        background: transparent; border: 1px solid transparent; color: #526176;
-    }
-    [data-testid="stSidebar"] div.stButton > button[kind="secondary"]:hover {
-        background: #F1F5F9; border-color: #E2E8F0; color: #1D4ED8;
-    }
-    [data-testid="stSidebar"] div.stButton > button[kind="primary"] {
-        background: #EAF2FF; border: 1px solid #D6E6FF; color: #1D4ED8; font-weight: 700;
-    }
-
-    [data-testid="stSidebar"] hr {
-        margin: 9px 0;
-        border-color: var(--wv-border);
-    }
-
-    [data-testid="stSidebar"] .sidebar-footer { font-size: .72rem; line-height: 1.6; color: #8995A7; }
-
-    @media (max-height: 800px) {
-        [data-testid="stSidebar"] .nav-heading {
-            margin-top: 7px;
-            margin-bottom: 2px;
-        }
-        [data-testid="stSidebar"] div.stButton > button {
-            min-height: 31px;
-            height: 31px;
-        }
+        height: 100vh; box-sizing: border-box; overflow-y: auto;
     }
     </style>
     """, unsafe_allow_html=True)
-
     st.markdown(
-        '<div class="brand-name">WiFi Vision Lab</div>'
-        '<div class="brand-description">YEREL AĞ GÖZLEM PLATFORMU</div>',
+        '<div class="wv-brand">'
+        '<span class="wv-brand-mark">W</span>'
+        '<span class="wv-brand-name">WiFi Vision Lab</span>'
+        '<div class="wv-brand-description">LOCAL NETWORK INTELLIGENCE</div>'
+        '</div>',
         unsafe_allow_html=True
     )
 
@@ -1719,7 +1661,7 @@ with st.sidebar:
         for item_index, item in enumerate(items):
             active = st.session_state.active_page == item
             if st.button(
-                item,
+                f"{NAV_ICONS[item]}  {item}",
                 key=f"fixed_nav_{group_index}_{item_index}",
                 type="primary" if active else "secondary",
                 width="stretch"
