@@ -162,10 +162,17 @@ def collect_capabilities(
                 "detail": "Requires a successful active-interface query.",
             },
             "rssi_dbm": {
-                "status": "not_exposed_by_netsh",
+                "status": (
+                    "collector_available_driver_dependent"
+                    if operating_system == "Windows"
+                    else "not_implemented"
+                ),
                 "detail": (
-                    "The standard netsh interface output exposes signal percentage, "
-                    "not calibrated RSSI in dBm."
+                    "Windows Native WLAN API can return driver-reported BSS RSSI in dBm; "
+                    "the adapter/driver may still return no measurements. netsh signal "
+                    "percentage is not converted to dBm."
+                    if operating_system == "Windows"
+                    else "A native RSSI collector for this operating system is not implemented yet."
                 ),
             },
             "monitor_mode": {
@@ -205,6 +212,18 @@ def collect_capabilities(
     }
 
     if operating_system != "Windows":
+        report["capabilities"]["nearby_ap_signal_percent"] = {
+            "status": "not_implemented",
+            "detail": "The current capability audit uses Windows WLAN commands only.",
+        }
+        report["capabilities"]["connected_interface_signal_percent"] = {
+            "status": "not_checked",
+            "detail": "A native collector for this operating system is not implemented yet.",
+        }
+        report["capabilities"]["rssi_dbm"] = {
+            "status": "not_implemented",
+            "detail": "A native RSSI collector for this operating system is not implemented yet.",
+        }
         report["commands"] = {
             "netsh_drivers": {"available": False, "return_code": None},
             "netsh_interfaces": {"available": False, "return_code": None},
