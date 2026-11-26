@@ -9,6 +9,7 @@ from scripts.windows_wlan import (
     collector_availability,
     collect_windows_rssi_measurements,
     normalise_bss_entries,
+    describe_wlan_error,
 )
 
 
@@ -55,7 +56,7 @@ def test_normalise_bss_entries_filters_invalid_rssi_and_deduplicates(tmp_path):
     assert all(":" not in alias for alias in measurements)
 
 
-def test_collector_reports_no_measurements_without_leaking_identifiers(tmp_path):
+def test_collector_report_privacy_and_measurements(tmp_path):
     class FakeFunction:
         def __call__(self, *args):
             raise AssertionError("Native calls are not expected in this test.")
@@ -73,9 +74,13 @@ def test_collector_reports_no_measurements_without_leaking_identifiers(tmp_path)
 
     original_query = windows_wlan._query_bss_entries
     try:
-        windows_wlan._query_bss_entries = lambda _api: [
-            (bytes.fromhex("AABBCCDDEEFF"), -63)
-        ]
+        windows_wlan._query_bss_entries = lambda _api: {
+            "entries": [(bytes.fromhex("AABBCCDDEEFF"), -63)],
+            "interfaces_seen": 1,
+            "interfaces_queried": 1,
+            "interfaces_with_entries": 1,
+            "interface_error_codes": [],
+        }
         report = collect_windows_rssi_measurements(
             key_path=tmp_path / "local.key",
             now=datetime(2026, 11, 26, tzinfo=timezone.utc),
@@ -96,3 +101,71 @@ def test_platform_availability_is_explicit():
     assert collector_availability("Windows")["status"] == "implemented"
     assert collector_availability("Linux")["status"] == "not_implemented"
     assert collector_availability("macOS")["status"] == "not_implemented"
+
+
+
+def test_collector_distinguishes_missing_interface_and_empty_scan_list(tmp_path, monkeypatch):
+    from scripts import windows_wlan
+
+    monkeypatch.setattr(
+        windows_wlan,
+        "_query_bss_entries",
+        lambda _api: {
+            "entries": [],
+            "interfaces_seen": 0,
+            "interfaces_queried": 0,
+            "interfaces_with_entries": 0,
+            "interface_error_codes": [],
+        },
+    )
+    no_adapter = collect_windows_rssi_measurements(
+        key_path=tmp_path / "no-adapter.key", api=object()
+    )
+    assert no_adapter["status"] == "no_wifi_interface"
+
+    monkeypatch.setattr(
+        windows_wlan,
+        "_query_bss_entries",
+        lambda _api: {
+            "entries": [],
+            "interfaces_seen": 1,
+            "interfaces_queried": 1,
+            "interfaces_with_entries": 0,
+            "interface_error_codes": [],
+        },
+    )
+    empty = collect_windows_rssi_measurements(
+        key_path=tmp_path / "empty.key", api=object()
+    )
+    assert empty["status"] == "no_measurements"
+
+
+def test_collector_reports_partial_interface_errors(tmp_path, monkeypatch):
+    from scripts import windows_wlan
+
+    monkeypatch.setattr(
+        windows_wlan,
+        "_query_bss_entries",
+        lambda _api: {
+            "entries": [(bytes.fromhex("AABBCCDDEEFF"), -63)],
+            "interfaces_seen": 2,
+            "interfaces_queried": 1,
+            "interfaces_with_entries": 1,
+            "interface_error_codes": [1062],
+        },
+    )
+    report = collect_windows_rssi_measurements(
+        key_path=tmp_path / "partial.key", api=object()
+    )
+
+    assert report["status"] == "available_with_warnings"
+    assert report["interfaces_seen"] == 2
+    assert report["interfaces_queried"] == 1
+    assert report["errors"][0]["code"] == 1062
+    assert "WLAN AutoConfig" in report["errors"][0]["message"]
+
+
+def test_wlan_error_messages_are_actionable_and_safe():
+    assert "privacy" in describe_wlan_error(5).casefold()
+    assert "WLAN AutoConfig" in describe_wlan_error(1062)
+    assert "0xDEADBEEF" in describe_wlan_error(0xDEADBEEF)
