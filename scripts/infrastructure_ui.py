@@ -128,7 +128,7 @@ def render():
         }:
             return explicit_role
         if explicit_role == "Network equipment candidate":
-            return "Ag ekipmani adayi"
+            return "Ağ ekipmanı adayı"
 
         values = [
             row.get(type_col, ""),
@@ -155,15 +155,15 @@ def render():
             return "Controller"
 
         if "network equipment" in text or "network_device" in text:
-            return "Ag ekipmani adayi"
+            return "Ağ ekipmanı adayı"
 
         vendor = str(row.get(vendor_col, "")).lower()
         if vendor and any(x in vendor for x in [
             "ruijie", "tp-link", "ubiquiti", "mikrotik", "cisco", "huawei"
         ]):
-            return "Ag ekipmani adayi"
+            return "Ağ ekipmanı adayı"
 
-        return "Diger / Belirsiz"
+        return "Diğer / Belirsiz"
 
     devices["Altyapi rolu"] = devices.apply(role_for, axis=1)
 
@@ -174,28 +174,28 @@ def render():
         ).lower()
         classification_value = str(row.get(class_col, "")).lower()
 
-        if role == "Diger / Belirsiz":
-            return "Siniflandirilmamis"
-        if role == "Ag ekipmani adayi":
+        if role == "Diğer / Belirsiz":
+            return "Sınıflandırılmamış"
+        if role == "Ağ ekipmanı adayı":
             if str(row.get("role_evidence_type", "")).strip() == "vendor_only":
-                return "Yalnizca uretici bilgisi; cihaz rolu dogrulanmadi"
-            return "Uretici veya tahmini siniflandirma"
+                return "Yalnızca üretici bilgisi; cihaz rolü doğrulanmadı"
+            return "Üretici veya tahmini sınıflandırma"
         if str(row.get("role_evidence_type", "")).strip() == "hostname_role_hint":
-            return "Hostname ipucuna dayali tahmin"
+            return "Hostname ipucuna dayalı tahmin"
         if str(row.get("role_evidence_type", "")).strip() == "hostname_model_family_inference":
-            return "Model ailesi ipucuna dayali tahmin"
+            return "Model ailesi ipucuna dayalı tahmin"
         if "manufacturer-based inference" in category or "inferred" in classification_value:
-            return "Tahmini siniflandirma"
-        return "Kayitli siniflandirma"
+            return "Tahmini sınıflandırma"
+        return "Kayıtlı sınıflandırma"
 
     devices["KanIt durumu"] = devices.apply(evidence_for, axis=1)
 
     total = len(devices)
     infrastructure = devices[
-        devices["Altyapi rolu"] != "Diger / Belirsiz"
+        devices["Altyapi rolu"] != "Diğer / Belirsiz"
     ]
     candidates = devices[
-        devices["Altyapi rolu"] == "Ag ekipmani adayi"
+        devices["Altyapi rolu"] == "Ağ ekipmanı adayı"
     ]
 
     a, b, c, d = st.columns(4)
@@ -275,29 +275,41 @@ def render():
     with inventory_tab:
         st.subheader("Ag ekipmani envanteri")
 
-        search = st.text_input(
-            "Envanterde ara",
-            placeholder="IP, MAC, marka, model veya cihaz adi"
-        )
-
-        role_options = ["Tum roller"] + sorted(
+        filters = st.columns([2, 1, 1])
+        with filters[0]:
+            search = st.text_input(
+                "Envanterde ara",
+                placeholder="IP, MAC, marka, model veya cihaz adı",
+                key="infrastructure_inventory_search",
+            )
+        role_options = ["Tüm roller"] + sorted(
             devices["Altyapi rolu"].dropna().unique().tolist()
         )
-        selected_role = st.selectbox("Altyapi rolu", role_options)
+        with filters[1]:
+            selected_role = st.selectbox(
+                "Altyapı rolü", role_options, key="infrastructure_role_filter"
+            )
+        evidence_options = ["Tüm kanıtlar"] + sorted(
+            devices["KanIt durumu"].dropna().unique().tolist()
+        )
+        with filters[2]:
+            selected_evidence = st.selectbox(
+                "Kanıt durumu", evidence_options,
+                key="infrastructure_evidence_filter",
+            )
 
         filtered = devices.copy()
         if search.strip():
             mask = filtered.astype(str).apply(
                 lambda col: col.str.contains(
-                    search.strip(), case=False, na=False
+                    search.strip(), case=False, na=False, regex=False
                 )
             ).any(axis=1)
             filtered = filtered[mask]
-
-        if selected_role != "Tum roller":
-            filtered = filtered[
-                filtered["Altyapi rolu"] == selected_role
-            ]
+        if selected_role != "Tüm roller":
+            filtered = filtered[filtered["Altyapi rolu"] == selected_role]
+        if selected_evidence != "Tüm kanıtlar":
+            filtered = filtered[filtered["KanIt durumu"] == selected_evidence]
 
         st.caption(f"{len(filtered):,} kayit listeleniyor.")
 
