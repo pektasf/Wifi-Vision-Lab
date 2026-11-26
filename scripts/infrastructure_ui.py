@@ -625,6 +625,9 @@ def render():
     if identity_timeline:
         st.markdown("### Birleşik kimlik kanıtı zaman çizelgesi")
         timeline_frame = pd.DataFrame(identity_timeline)
+        matched_count = int(
+            timeline_frame["correlation_method"].isin(["exact_mac", "exact_ip"]).sum()
+        )
         timeline_frame["correlation_method"] = timeline_frame[
             "correlation_method"
         ].map({
@@ -634,9 +637,6 @@ def render():
             "ip_scope_unknown": "IP eşleşmedi · ağ kapsamı bilinmiyor",
             "network_mismatch": "Eşleşmedi · farklı ağ kapsamı",
         }).fillna("Bilinmiyor")
-        matched_count = int(
-            timeline_frame["correlation_method"].ne("Envanter eşleşmesi yok").sum()
-        )
         randomized_count = int(
             timeline_frame["identity_indicator"].eq("Kismet randomized MAC").sum()
         )
