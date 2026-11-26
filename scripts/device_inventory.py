@@ -20,12 +20,14 @@ def list_network_interfaces():
         "$dhcp=@{}; "
         "Get-CimInstance Win32_NetworkAdapterConfiguration -Filter "
         "\"IPEnabled=True\" | ForEach-Object { "
-        "$dhcp[[int]$_.InterfaceIndex]=$_ }; "
+        "$key=($_.MACAddress -replace '[:-]','').ToUpperInvariant(); "
+        "if($key){$dhcp[$key]=$_} }; "
         "$items = @(Get-NetIPConfiguration | "
         "Where-Object {$_.IPv4Address} | ForEach-Object { "
         "$gateway = ''; "
         "if($_.IPv4DefaultGateway){$gateway=$_.IPv4DefaultGateway.NextHop}; "
-        "$cfg=$dhcp[[int]$_.InterfaceIndex]; "
+        "$key=($_.NetAdapter.MacAddress -replace '[:-]','').ToUpperInvariant(); "
+        "$cfg=$dhcp[$key]; "
         "$dhcpEnabled=''; $dhcpServer=''; $leaseObtained=''; $leaseExpires=''; "
         "if($cfg){ "
         "$dhcpEnabled=[string][bool]$cfg.DHCPEnabled; "
@@ -79,7 +81,11 @@ def list_network_interfaces():
                 "interface_index": int(row.get("InterfaceIndex") or 0),
                 "network": str(interface.network),
                 "has_default_gateway": bool(gateway),
-                "dhcp_enabled": str(row.get("DHCPEnabled") or "").strip().casefold() == "true",
+                "dhcp_enabled": (
+                    str(row.get("DHCPEnabled") or "").strip().casefold() == "true"
+                    if str(row.get("DHCPEnabled") or "").strip().casefold()
+                    in {"true", "false"} else None
+                ),
                 "dhcp_server": str(row.get("DHCPServer") or "").strip(),
                 "dhcp_lease_obtained": str(row.get("DHCPLeaseObtained") or "").strip(),
                 "dhcp_lease_expires": str(row.get("DHCPLeaseExpires") or "").strip(),
@@ -217,6 +223,12 @@ def resolve_hostnames(ips):
 def format_network_diagnostics(net):
     """Format selected local adapter context for the scan's local output."""
     gateway = str(net.get("gateway") or "").strip() or "yok (varsayılan ağ geçidi yok)"
+    dhcp_enabled = net.get("dhcp_enabled")
+    dhcp_status = (
+        "etkin" if dhcp_enabled is True
+        else "devre dışı" if dhcp_enabled is False
+        else "bilinmiyor"
+    )
     return (
         "Tarama ağ bağlamı: "
         f"adaptör={str(net.get('adapter') or 'bilinmiyor')}; "
@@ -224,7 +236,7 @@ def format_network_diagnostics(net):
         f"alt ağ={str(net.get('network') or 'bilinmiyor')}; "
         f"ağ geçidi={gateway}; "
         f"arayüz indeksi={str(net.get('interface_index') or 'bilinmiyor')}; "
-        f"DHCP={'etkin' if net.get('dhcp_enabled') else 'devre dışı/bilinmiyor'}; "
+        f"DHCP={dhcp_status}; "
         f"DHCP sunucusu={str(net.get('dhcp_server') or 'bilinmiyor')}; "
         f"kira başlangıcı={str(net.get('dhcp_lease_obtained') or 'bilinmiyor')}; "
         f"kira bitişi={str(net.get('dhcp_lease_expires') or 'bilinmiyor')}"
