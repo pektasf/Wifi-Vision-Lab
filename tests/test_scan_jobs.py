@@ -205,3 +205,19 @@ def test_cancel_running_job_terminates_child_processes(tmp_path):
     while time.monotonic() < deadline and _process_is_running(child_pid):
         time.sleep(0.05)
     assert not _process_is_running(child_pid), "child process survived scan cancellation"
+
+
+
+def test_background_job_receives_selected_interface_alias(tmp_path):
+    project = make_project(
+        tmp_path,
+        "import os\nprint(os.getenv('WIFI_VISION_INTERFACE_ALIAS', ''), flush=True)\n",
+    )
+    manager = ScanJobManager()
+    job = wait_for_terminal(
+        manager,
+        manager.start(project, interface_alias="Local Area Connection* 12"),
+    )
+
+    assert job["status"] == "completed"
+    assert job["output"] == ["Local Area Connection* 12"]
