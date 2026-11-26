@@ -294,3 +294,45 @@ def test_extract_selected_node_id_handles_attribute_objects_and_empty_selection(
     assert extract_selected_node_id(selection) == "BSSID:AA:BB:CC:DD:EE:99"
     assert extract_selected_node_id({"selection": {"points": []}}) == ""
     assert extract_selected_node_id(None) == ""
+
+
+def test_relationship_history_includes_both_directions_and_sorts_newest_first():
+    from scripts.topology_evidence import prepare_relationship_history
+
+    edges = pd.DataFrame([
+        {"source": "ap", "target": "client", "relation": "wifi_association",
+         "observed_at": "2026-01-01T10:00:00+03:00", "confidence": "verified"},
+        {"source": "client", "target": "ap", "relation": "other_observation",
+         "observed_at": "2026-01-01T08:30:00Z", "confidence": "context_only"},
+        {"source": "ap", "target": "other", "relation": "unrelated",
+         "observed_at": "2026-01-01T12:00:00Z"},
+    ])
+
+    result = prepare_relationship_history(edges, "ap", "client", "source", "target")
+
+    assert len(result) == 2
+    assert result["relation"].tolist() == ["wifi_association", "other_observation"]
+    assert result.iloc[1]["source"] == "client"
+
+
+def test_relationship_history_preserves_file_order_without_timestamps():
+    from scripts.topology_evidence import prepare_relationship_history
+
+    edges = pd.DataFrame([
+        {"source": "a", "target": "b", "relation": "first"},
+        {"source": "b", "target": "a", "relation": "second"},
+    ])
+
+    result = prepare_relationship_history(edges, "a", "b", "source", "target")
+
+    assert result["relation"].tolist() == ["second", "first"]
+
+
+def test_relationship_history_is_empty_for_missing_pair_or_schema():
+    from scripts.topology_evidence import prepare_relationship_history
+
+    edges = pd.DataFrame([{"source": "a", "target": "b"}])
+
+    assert prepare_relationship_history(edges, "", "b", "source", "target").empty
+    assert prepare_relationship_history(edges, "a", "missing", "source", "target").empty
+    assert prepare_relationship_history(edges, "a", "b", None, "target").empty
