@@ -166,27 +166,24 @@ def render():
             ]
             # Wrap large device groups into rows instead of stretching a single
             # horizontal line. This keeps labels and nodes separated on laptops.
-            lane_base = {
-                "Gateway adresi": 0,
-                "AP radyosu": -3,
-                "Ağ ekipmanı adayı": -6,
-                "Uç cihaz": -9,
-                "Diğer / sınıflandırılmamış": -12,
-            }
             lane_centers = {}
             max_columns = 7
+            lane_cursor = 0.0
+            total_layout_rows = 0
             for lane in lane_order:
                 members = grouped_nodes.get(lane, [])
                 if not members:
                     continue
                 row_count = (len(members) + max_columns - 1) // max_columns
-                lane_centers[lane] = lane_base[lane] - (row_count - 1) * 0.42 / 2
+                total_layout_rows += row_count
+                lane_centers[lane] = lane_cursor - (row_count - 1) * 0.75 / 2
                 for index, (node_id, row, config) in enumerate(members):
                     row_index, column_index = divmod(index, max_columns)
                     row_size = min(max_columns, len(members) - row_index * max_columns)
                     x = (column_index - (row_size - 1) / 2) * 2.0
-                    y = lane_base[lane] - row_index * 0.9
+                    y = lane_cursor - row_index * 1.5
                     positions[node_id] = (x, y)
+                lane_cursor -= row_count * 1.5 + 1.8
 
             figure = go.Figure()
             edge_x, edge_y = [], []
@@ -254,10 +251,7 @@ def render():
                     "bu yerleşim fiziksel bağlantı iddiası değildir."
                 )
             figure.update_layout(
-                height=min(1100, max(440, 250 + 72 * max(
-                    (len(grouped_nodes.get(lane, [])) + max_columns - 1) // max_columns
-                    for lane in lane_order
-                ))),
+                height=min(1600, max(440, 260 + 88 * total_layout_rows)),
                 margin={"l": 18, "r": 18, "t": 28, "b": 35},
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="#FFFFFF",
