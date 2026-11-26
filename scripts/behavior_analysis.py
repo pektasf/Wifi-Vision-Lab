@@ -87,3 +87,34 @@ def run(
 
 if __name__ == "__main__":
     print(len(run()))
+
+
+
+def prepare_temporal_context(profiles: pd.DataFrame) -> pd.DataFrame:
+    """Prepare observed device history without treating address changes as threats."""
+    columns = [
+        "identity_key", "hostname", "ip_history", "ip_change_count",
+        "observation_count", "first_seen", "last_seen",
+    ]
+    if profiles is None or profiles.empty:
+        return pd.DataFrame(columns=columns)
+    if "identity_key" not in profiles.columns:
+        return pd.DataFrame(columns=columns)
+
+    result = profiles.copy()
+    for column in columns:
+        if column not in result.columns:
+            result[column] = ""
+    result["_ip_change_count"] = pd.to_numeric(
+        result["ip_change_count"], errors="coerce"
+    ).fillna(0)
+    result["_observation_count"] = pd.to_numeric(
+        result["observation_count"], errors="coerce"
+    ).fillna(0)
+    result = result[result["_ip_change_count"] > 0].copy()
+    result = result.sort_values(
+        ["_ip_change_count", "_observation_count", "identity_key"],
+        ascending=[False, False, True],
+        kind="stable",
+    )
+    return result[columns].reset_index(drop=True)
