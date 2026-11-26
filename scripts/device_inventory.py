@@ -67,14 +67,7 @@ def list_network_interfaces():
     except (KeyError, ValueError, json.JSONDecodeError, TypeError) as exc:
         raise RuntimeError("Windows IPv4 arayüz bilgisi okunamadı.") from exc
 
-    return sorted(
-        interfaces,
-        key=lambda item: (
-            not item["has_default_gateway"],
-            item["interface_index"],
-            item["adapter"].casefold(),
-        ),
-    )
+    return interfaces
 
 
 def get_network(interface_alias=None):
