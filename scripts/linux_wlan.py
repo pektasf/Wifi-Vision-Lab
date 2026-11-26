@@ -25,11 +25,11 @@ def parse_iw_interfaces(output: str) -> list[str]:
     return list(dict.fromkeys(_INTERFACE_RE.findall(output or "")))
 
 
-def parse_iw_scan_dump(output: str) -> list[tuple[bytes, int]]:
+def parse_iw_scan_dump(output: str) -> list[tuple[bytes, int, float | None]]:
     """Extract BSSID/RSSI pairs only; callers must pseudonymise before return."""
     text = output or ""
     starts = list(_BSS_RE.finditer(text))
-    entries: list[tuple[bytes, int]] = []
+    entries: list[tuple[bytes, int, float | None]] = []
     for index, match in enumerate(starts):
         end = starts[index + 1].start() if index + 1 < len(starts) else len(text)
         block = text[match.end():end]
@@ -41,8 +41,10 @@ def parse_iw_scan_dump(output: str) -> list[tuple[bytes, int]]:
             rssi = int(round(float(signal.group(1))))
         except (ValueError, OverflowError):
             continue
+        age_match = _LAST_SEEN_RE.search(block)
+        age_seconds = float(age_match.group(1)) if age_match else None
         if len(bssid) == 6 and -120 <= rssi <= -1:
-            entries.append((bssid, rssi))
+            entries.append((bssid, rssi, age_seconds))
     return entries
 
 
@@ -123,7 +125,7 @@ def collect_linux_rssi_measurements(
             "collection_mode": "read_only_cached_bss_list_no_scan",
         }
 
-    raw_entries: list[tuple[bytes, int]] = []
+    raw_entries: list[tuple[bytes, int, float | None]] = []
     interface_reports = []
     errors = []
     for interface in interfaces:
@@ -163,12 +165,18 @@ def collect_linux_rssi_measurements(
         })
 
     measurements = {}
+    measurement_ages = {}
     if raw_entries:
         key = _load_local_alias_key(key_path)
-        for bssid, rssi in raw_entries:
+        for bssid, rssi, age_seconds in raw_entries:
             alias = _alias_for_bssid(bssid, key)
             measurements[alias] = max(rssi, measurements.get(alias, -120))
+            if age_seconds is not None:
+                measurement_ages[alias] = min(
+                    age_seconds, measurement_ages.get(alias, age_seconds)
+                )
         measurements = dict(sorted(measurements.items()))
+        measurement_ages = dict(sorted(measurement_ages.items()))
 
     if measurements and errors:
         status = "available_with_warnings"
@@ -185,6 +193,7 @@ def collect_linux_rssi_measurements(
         "observed_at": observed_at,
         "measurements": measurements,
         "measurement_count": len(measurements),
+        "measurement_ages_seconds": measurement_ages,
         "interfaces_seen": len(interfaces),
         "interfaces_queried": sum(item["status"] != "error" for item in interface_reports),
         "interfaces_with_entries": sum(item["status"] == "available" for item in interface_reports),
