@@ -1276,6 +1276,32 @@ def spatial_intelligence_page():
                 except (OSError, RuntimeError, ValueError) as exc:
                     st.error(f"Windows RSSI ölçümü alınamadı: {exc}")
                 else:
+                    adapter_rows = [
+                        {
+                            "Wi-Fi adaptörü": item.get("name") or "Bilinmeyen adaptör",
+                            "Windows durumu": {
+                                "connected": "Bağlı",
+                                "disconnected": "Bağlı değil",
+                                "not_ready": "Hazır değil",
+                                "associating": "Bağlanıyor",
+                                "discovering": "Ağ aranıyor",
+                                "authenticating": "Kimlik doğrulanıyor",
+                                "disconnecting": "Bağlantı kesiliyor",
+                                "ad_hoc_network_formed": "Ad-hoc ağ oluşturuldu",
+                            }.get(item.get("state"), item.get("state", "Bilinmiyor")),
+                            "RSSI/BSS sonucu": {
+                                "available": "Ölçüm listesi mevcut",
+                                "empty_bss_list": "Ölçüm listesi boş",
+                                "error": "Windows API hatası",
+                            }.get(item.get("status"), item.get("status", "Bilinmiyor")),
+                            "BSS kaydı": item.get("bss_entries", 0),
+                            "Hata kodu": item.get("error_code") or "—",
+                        }
+                        for item in capture.get("interfaces", [])
+                    ]
+                    if adapter_rows:
+                        st.caption("Bu bilgisayarda algılanan Wi-Fi adaptörlerinin ayrı ayrı durumu")
+                        st.table(adapter_rows)
                     if capture["status"] in {"available", "available_with_warnings"}:
                         measurement_text = "\n".join(
                             f"{alias},{rssi}"
