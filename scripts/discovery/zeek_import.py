@@ -2,6 +2,8 @@
 
 import ipaddress
 import json
+import math
+from datetime import datetime, timezone
 
 from scripts.discovery.identity_signals import (
     normalize_mac, is_locally_administered_mac,
@@ -25,6 +27,29 @@ def _ip(value):
         return str(address)
     except (TypeError, ValueError):
         return ""
+
+
+def _timestamp(value):
+    """Normalize Zeek epoch seconds/milliseconds or preserve ISO timestamps."""
+    if value is None or isinstance(value, bool):
+        return ""
+    raw = str(value).strip()
+    if not raw:
+        return ""
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return raw
+    if not math.isfinite(numeric):
+        return ""
+    # Zeek defaults to epoch seconds; its JSON writer also supports epoch millis.
+    if abs(numeric) >= 100_000_000_000:
+        numeric /= 1000.0
+    try:
+        parsed = datetime.fromtimestamp(numeric, tz=timezone.utc)
+    except (OverflowError, OSError, ValueError):
+        return ""
+    return parsed.isoformat(timespec="microseconds").replace("+00:00", "Z")
 
 
 def _number(value):
@@ -121,7 +146,7 @@ def normalize_zeek_dhcp_export(content, imported_at=""):
 
         output.append({
             "imported_at": imported_at,
-            "observed_at": str(record.get("ts") or "").strip(),
+            "observed_at": _timestamp(record.get("ts")),
             "source": "zeek_dhcp_import",
             "client_ip": client_ip,
             "assigned_ip": assigned_ip,

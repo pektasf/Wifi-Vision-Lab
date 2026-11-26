@@ -100,3 +100,38 @@ def test_zeek_dhcp_import_rejects_files_over_size_limit():
 
     with pytest.raises(ValueError, match="20 MB"):
         normalize_zeek_dhcp_export(b" " * (MAX_ZEEK_BYTES + 1))
+
+
+
+@pytest.mark.parametrize(
+    ("timestamp", "expected"),
+    [
+        (0.25, "1970-01-01T00:00:00.250000Z"),
+        (1700000000.25, "2023-11-14T22:13:20.250000Z"),
+        (1700000000250, "2023-11-14T22:13:20.250000Z"),
+    ],
+)
+def test_zeek_dhcp_import_normalizes_epoch_seconds_and_milliseconds(timestamp, expected):
+    rows = normalize_zeek_dhcp_export(json.dumps([{
+        "ts": timestamp,
+        "mac": "00:11:22:33:44:55",
+    }]))
+    assert rows[0]["observed_at"] == expected
+
+
+def test_zeek_dhcp_import_preserves_iso_timestamp_strings():
+    timestamp = "2026-11-26T10:00:00.123456+03:00"
+    rows = normalize_zeek_dhcp_export(json.dumps([{
+        "ts": timestamp,
+        "mac": "00:11:22:33:44:55",
+    }]))
+    assert rows[0]["observed_at"] == timestamp
+
+
+@pytest.mark.parametrize("timestamp", [float("nan"), float("inf"), True])
+def test_zeek_dhcp_import_does_not_emit_invalid_epoch_timestamps(timestamp):
+    rows = normalize_zeek_dhcp_export(json.dumps([{
+        "ts": timestamp,
+        "mac": "00:11:22:33:44:55",
+    }]))
+    assert rows[0]["observed_at"] == ""
