@@ -1955,49 +1955,255 @@ def spatial_intelligence_page():
 
 
 def reports_page():
-    page_header(
-        "Raporlar",
-        "Envanter ve ag gozlem verilerini disa aktarin"
+    from scripts.dashboard_summary import (
+        inventory_status_summary,
+        latest_observation_timestamp,
+    )
+    from scripts.event_timeline import normalize_event_frames
+    from scripts.reporting import (
+        PERIODS,
+        filter_events_by_period,
+        summarize_report_counts,
     )
 
-    inventory = load("device_inventory.csv")
-    profiles = load("device_profiles.csv")
-    events = load("device_events.csv")
-    history = load("device_history.csv")
+    page_header(
+        "Raporlama ve dışa aktarma",
+        "Yerel ağ gözlemlerini seçilen zaman aralığında özetle; kaynak kayıtları CSV veya JSON olarak dışa aktar.",
+    )
 
-    a, b, c, d = st.columns(4)
-    a.metric("Envanter", len(inventory))
-    b.metric("Profiller", len(profiles))
-    c.metric("Olaylar", len(events))
-    d.metric("Gecmis kaydi", len(history))
+    filenames = [
+        "device_inventory.csv",
+        "device_profiles.csv",
+        "device_events.csv",
+        "network_events.csv",
+        "live_events.csv",
+        "behavior_findings.csv",
+        "device_history.csv",
+        "ap_client_relationships.csv",
+        "wifi_signal_history.csv",
+        "wifi_access_points.csv",
+        "topology_nodes.csv",
+        "topology_edges.csv",
+    ]
+    raw_datasets = {filename: load(filename) for filename in filenames}
+    inventory = raw_datasets["device_inventory.csv"]
+    findings = raw_datasets["behavior_findings.csv"]
+    timeline = normalize_event_frames({
+        filename: raw_datasets[filename]
+        for filename in [
+            "device_events.csv",
+            "network_events.csv",
+            "live_events.csv",
+            "behavior_findings.csv",
+        ]
+    })
 
-    st.divider()
-    st.subheader("Veri disa aktarma")
+    period_col, freshness_col = st.columns([1, 2])
+    with period_col:
+        selected_period = st.selectbox(
+            "Rapor dönemi",
+            list(PERIODS),
+            index=1,
+            key="report_period",
+        )
+    filtered_events = filter_events_by_period(timeline, selected_period)
+    summary = summarize_report_counts(inventory, filtered_events, findings)
+    inventory_summary = inventory_status_summary(inventory)
+    latest = latest_observation_timestamp(inventory, timeline)
 
+    with freshness_col:
+        if latest is not None:
+            local_latest = latest.to_pydatetime().astimezone()
+            st.caption(
+                f"Son kayıtlı gözlem: {local_latest.strftime('%d.%m.%Y %H:%M:%S')}"
+            )
+        else:
+            st.caption("Zaman damgalı gözlem bulunamadı.")
+
+    metrics = st.columns(4)
+    metrics[0].metric("Envanter cihazı", f"{summary['devices']:,}")
+    metrics[1].metric("Yanıt veren", f"{inventory_summary['responding']:,}")
+    metrics[2].metric("Dönemdeki olay", f"{summary['events']:,}")
+    metrics[3].metric("Dikkat seviyesi olayı", f"{summary['attention_events']:,}")
+
+    st.markdown("### Rapor özeti")
+    summary_left, summary_right = st.columns([1.1, 1], gap="large")
+    with summary_left:
+        st.markdown("**Olay kaynaklarına göre dağılım**")
+        if filtered_events.empty:
+            st.info("Seçilen dönemde olay kaydı yok.")
+        else:
+            source_counts = (
+                filtered_events["source"]
+                .value_counts()
+                .rename_axis("Kaynak")
+                .reset_index(name="Olay")
+            )
+            import plotly.graph_objects as go
+
+            source_figure = go.Figure(go.Bar(
+                x=source_counts["Olay"],
+                y=source_counts["Kaynak"],
+                orientation="h",
+                marker_color="#087F78",
+                text=source_counts["Olay"],
+                textposition="outside",
+                cliponaxis=False,
+                hovertemplate="%{y}: %{x} olay<extra></extra>",
+            ))
+            source_figure.update_layout(
+                height=max(220, 40 * len(source_counts) + 65),
+                margin={"l": 8, "r": 30, "t": 8, "b": 35},
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="#FFFFFF",
+                showlegend=False,
+                font={"family": "Segoe UI, sans-serif", "color": "#182B2A", "size": 11},
+                xaxis={"title": "Olay sayısı", "rangemode": "tozero",
+                       "showgrid": True, "gridcolor": "#E7EEEA"},
+                yaxis={"title": "", "automargin": True},
+            )
+            st.plotly_chart(
+                source_figure, width="stretch", config={"displayModeBar": False}
+            )
+    with summary_right:
+        st.markdown("**İnceleme gerektiren son olaylar**")
+        if filtered_events.empty:
+            st.info("Seçilen dönemde raporlanacak olay bulunmuyor.")
+        else:
+            attention = filtered_events[
+                filtered_events["severity"].astype(str).str.casefold().isin(
+                    {"critical", "warning", "review"}
+                )
+            ].head(8)
+            if attention.empty:
+                st.info(
+                    "Seçilen dönemde kritik/uyarı/inceleme seviyesinde olay yok. "
+                    "Bu, ölçülmemiş alanların sağlıklı olduğu anlamına gelmez."
+                )
+            else:
+                display = attention[
+                    [
+                        column for column in [
+                            "event_time", "event_type", "subject", "severity", "source"
+                        ] if column in attention.columns
+                    ]
+                ].rename(columns={
+                    "event_time": "Zaman",
+                    "event_type": "Olay",
+                    "subject": "Cihaz / kimlik",
+                    "severity": "Önem",
+                    "source": "Kaynak",
+                })
+                st.dataframe(
+                    display,
+                    width="stretch",
+                    hide_index=True,
+                    height=min(360, 58 + 35 * len(display)),
+                )
+
+    st.markdown("### Yerel veri kapsamı")
     datasets = {
         "Cihaz envanteri": inventory,
-        "Cihaz profilleri": profiles,
-        "Ag olaylari": events,
-        "Cihaz gecmisi": history
+        "Cihaz profilleri": raw_datasets["device_profiles.csv"],
+        "Cihaz olayları": raw_datasets["device_events.csv"],
+        "Ağ olayları": raw_datasets["network_events.csv"],
+        "Canlı ping olayları": raw_datasets["live_events.csv"],
+        "Davranış bulguları": findings,
+        "Cihaz geçmişi": raw_datasets["device_history.csv"],
+        "AP-istemci geçmişi": raw_datasets["ap_client_relationships.csv"],
+        "Wi-Fi sinyal geçmişi": raw_datasets["wifi_signal_history.csv"],
+        "Yakındaki erişim noktaları": raw_datasets["wifi_access_points.csv"],
+        "Topoloji düğümleri": raw_datasets["topology_nodes.csv"],
+        "Topoloji ilişkileri": raw_datasets["topology_edges.csv"],
+        "Birleşik olay zaman çizelgesi": filtered_events,
     }
+    coverage = pd.DataFrame([
+        {"Veri kümesi": name, "Kayıt": len(frame), "Durum": "Mevcut" if not frame.empty else "Henüz kayıt yok"}
+        for name, frame in datasets.items()
+    ])
+    st.dataframe(coverage, width="stretch", hide_index=True, height=390)
 
-    for label, data in datasets.items():
-        if data.empty:
-            continue
-
-        safe_name = (
-            label.lower()
-            .replace(" ", "_")
-            .replace("ag", "network")
+    st.markdown("### Veri dışa aktarma")
+    selected_dataset = st.selectbox(
+        "Dışa aktarılacak veri",
+        list(datasets),
+        key="report_dataset_select",
+    )
+    selected_frame = datasets[selected_dataset]
+    st.caption(
+        f"{len(selected_frame):,} kayıt · "
+        + ("Seçilen rapor dönemine göre filtrelendi." if selected_dataset == "Birleşik olay zaman çizelgesi" else "Kayıtlı yerel veri kümesinin tamamı.")
+    )
+    if not selected_frame.empty:
+        st.dataframe(
+            selected_frame.head(30),
+            width="stretch",
+            hide_index=True,
+            height=min(360, 58 + 35 * min(len(selected_frame), 9)),
         )
+    else:
+        st.info("Bu veri kümesinde henüz dışa aktarılacak kayıt yok.")
 
+    safe_name = (
+        selected_dataset.casefold()
+        .replace(" ", "_")
+        .replace("-", "_")
+        .replace("ı", "i")
+        .replace("ş", "s")
+        .replace("ğ", "g")
+        .replace("ü", "u")
+        .replace("ö", "o")
+        .replace("ç", "c")
+    )
+    export_csv, export_json = st.columns(2)
+    with export_csv:
         st.download_button(
-            label + " CSV indir",
-            data.to_csv(index=False).encode("utf-8-sig"),
-            file_name=safe_name + ".csv",
+            "CSV indir",
+            selected_frame.to_csv(index=False).encode("utf-8-sig"),
+            file_name=f"{safe_name}.csv",
             mime="text/csv",
-            key="report_" + safe_name
+            key="report_selected_csv",
+            width="stretch",
         )
+    with export_json:
+        st.download_button(
+            "JSON indir",
+            selected_frame.to_json(
+                orient="records", force_ascii=False, indent=2, date_format="iso"
+            ),
+            file_name=f"{safe_name}.json",
+            mime="application/json",
+            key="report_selected_json",
+            width="stretch",
+        )
+
+    report_payload = {
+        "report": "WiFi Vision Lab local network summary",
+        "period": selected_period,
+        "generated_at": pd.Timestamp.now().astimezone().isoformat(),
+        "counts": summary,
+        "inventory_status": {
+            "responding": inventory_summary["responding"],
+            "unresponsive": inventory_summary["unresponsive"],
+            "unknown": inventory_summary["unknown"],
+        },
+        "event_sources": (
+            filtered_events["source"].value_counts().to_dict()
+            if not filtered_events.empty else {}
+        ),
+        "scope_note": (
+            "Counts describe locally recorded observations. They do not imply "
+            "continuous monitoring, complete coverage, or inferred device health."
+        ),
+    }
+    st.download_button(
+        "Rapor özetini JSON indir",
+        json.dumps(report_payload, ensure_ascii=False, indent=2),
+        file_name="wifi_vision_report_summary.json",
+        mime="application/json",
+        key="report_summary_json",
+    )
+
 
 
 def topology_page():
