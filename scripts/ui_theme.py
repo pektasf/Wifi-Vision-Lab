@@ -45,7 +45,7 @@ def apply_theme(theme="light"):
         .stApp, [data-testid="stAppViewContainer"] {{
             background: var(--wv-bg); color: var(--wv-text);
         }}
-        .block-container {{ max-width: 1540px; padding: 1.65rem 2.15rem 3.25rem; }}
+        .block-container {{ max-width: 1480px; padding: 1.7rem 2.25rem 3.4rem; }}
         [data-testid="stHeader"] {{
             background: var(--wv-header); border-bottom: 1px solid var(--wv-border);
             backdrop-filter: blur(12px);
@@ -59,7 +59,12 @@ def apply_theme(theme="light"):
         h1 {{ font-size: 1.82rem !important; line-height: 1.2 !important; }}
         h2 {{ font-size: 1.32rem !important; line-height: 1.3 !important; }}
         h3 {{ font-size: 1.04rem !important; line-height: 1.4 !important; }}
-        p, li, label {{ line-height: 1.55; }}
+        p, li, label {{ line-height: 1.62; }}
+        [data-testid="stMarkdownContainer"] p,
+        [data-testid="stMarkdownContainer"] li {{ font-size: .94rem; }}
+        [data-testid="stDataFrame"] {{ font-size: .9rem; }}
+        [data-testid="stCaptionContainer"] {{ font-size: .78rem; line-height: 1.5; }}
+        [data-testid="stVerticalBlock"] {{ gap: .85rem; }}
         [data-testid="stCaptionContainer"], [data-testid="stWidgetLabel"] p,
         [data-testid="stMarkdownContainer"] small {{ color: var(--wv-muted) !important; }}
         [data-testid="stMetric"], [data-testid="stExpander"], [data-testid="stForm"],
