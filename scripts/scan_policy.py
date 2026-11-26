@@ -77,7 +77,9 @@ def build_scan_targets(
             active_network_cidr or network_cidr, strict=True
         )
         local = ipaddress.ip_address(local_ip)
-        gateway = ipaddress.ip_address(gateway_ip)
+        gateway = (
+            ipaddress.ip_address(gateway_ip) if str(gateway_ip or "").strip() else None
+        )
     except ValueError as exc:
         raise ValueError(
             "A valid IPv4 target CIDR, active network, local IP and gateway are required."
@@ -85,15 +87,17 @@ def build_scan_targets(
 
     if (
         network.version != 4 or active_network.version != 4
-        or local.version != 4 or gateway.version != 4
+        or local.version != 4 or (gateway is not None and gateway.version != 4)
     ):
         raise ValueError("Only IPv4 local network discovery is supported.")
 
     if not _is_rfc1918(active_network):
         raise ValueError("The active interface must use an RFC1918 private IPv4 subnet.")
-    if local not in active_network or gateway not in active_network:
-        raise ValueError("The local IP and default gateway must belong to the active subnet.")
-    if gateway.is_multicast or gateway.is_unspecified:
+    if local not in active_network:
+        raise ValueError("The local IP must belong to the active subnet.")
+    if gateway is not None and gateway not in active_network:
+        raise ValueError("The default gateway must belong to the active subnet.")
+    if gateway is not None and (gateway.is_multicast or gateway.is_unspecified):
         raise ValueError("The default gateway address is not valid for discovery.")
 
     if (

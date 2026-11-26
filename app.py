@@ -8,6 +8,7 @@ import pandas as pd
 import streamlit as st
 from scripts.ui_theme import apply_theme
 from scripts.scan_jobs import scan_jobs
+from scripts.device_inventory import list_network_interfaces
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data" / "processed"
@@ -85,6 +86,7 @@ def run_scan():
     custom_cidr = str(st.session_state.get("scan_cidr", "")).strip()
     approved = bool(st.session_state.get("scan_approved", False))
     confirmation = str(st.session_state.get("scan_confirmation", "")).strip()
+    interface_alias = str(st.session_state.get("scan_interface_alias", "")).strip()
 
     try:
         job_id = scan_jobs.start(
@@ -92,6 +94,7 @@ def run_scan():
             scan_cidr=custom_cidr,
             approved=approved,
             confirmation=confirmation,
+            interface_alias=interface_alias,
         )
     except ValueError as exc:
         st.error(str(exc))
@@ -3140,7 +3143,53 @@ with st.sidebar:
 
     st.divider()
     with st.expander("Tarama kapsamı", expanded=False):
-        st.caption("Boş bırakılırsa yalnızca bağlı olduğunuz aktif özel ağ taranır.")
+        st.caption(
+            "Tarama yapılacak yerel ağ adaptörünü seçin. Windows Mobil Erişim Noktası "
+            "ve sanal WLAN adaptörleri varsayılan ağ geçidi olmasa da listelenebilir."
+        )
+        try:
+            network_interfaces = list_network_interfaces()
+        except (OSError, RuntimeError, ValueError) as exc:
+            network_interfaces = []
+            st.warning(f"Ağ adaptörleri listelenemedi: {exc}")
+        if network_interfaces:
+            interface_options = {
+                item["adapter"]: item for item in network_interfaces
+            }
+            current_alias = st.session_state.get("scan_interface_alias", "")
+            if current_alias not in interface_options:
+                current_alias = next(
+                    (item["adapter"] for item in network_interfaces
+                     if item["has_default_gateway"]),
+                    network_interfaces[0]["adapter"],
+                )
+                st.session_state["scan_interface_alias"] = current_alias
+            st.selectbox(
+                "Ağ adaptörü",
+                options=list(interface_options),
+                index=list(interface_options).index(current_alias),
+                key="scan_interface_alias",
+                format_func=lambda alias: (
+                    f"{alias} · {interface_options[alias]['ip']} · "
+                    f"{interface_options[alias]['network']}"
+                    + (" · Varsayılan ağ geçidi" if interface_options[alias]["has_default_gateway"]
+                       else " · Ağ geçidi yok")
+                ),
+            )
+            selected_interface = interface_options.get(
+                st.session_state.get("scan_interface_alias", current_alias)
+            )
+            if selected_interface and not selected_interface["has_default_gateway"]:
+                st.info(
+                    "Bu adaptörde varsayılan ağ geçidi yok. Yalnızca bu adaptörün "
+                    "yerel alt ağı taranacak; ağ geçidi cihazı varsayılmayacak."
+                )
+        else:
+            st.text_input(
+                "Ağ adaptörü adı (isteğe bağlı)",
+                key="scan_interface_alias",
+                placeholder="Windows adaptör adı",
+            )
         st.text_input(
             "Özel IPv4 CIDR (isteğe bağlı)",
             key="scan_cidr",

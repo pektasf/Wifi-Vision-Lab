@@ -34,6 +34,7 @@ class ScanJobManager:
         scan_cidr: str = "",
         approved: bool = False,
         confirmation: str = "",
+        interface_alias: str = "",
     ) -> str:
         """Start main.py in a worker thread and return its job identifier."""
         if scan_cidr and (not approved or confirmation != scan_cidr):
@@ -49,12 +50,15 @@ class ScanJobManager:
             "WIFI_VISION_SCAN_CIDR",
             "WIFI_VISION_SCAN_APPROVED",
             "WIFI_VISION_SCAN_CONFIRMATION",
+            "WIFI_VISION_INTERFACE_ALIAS",
         ):
             env.pop(key, None)
         if scan_cidr:
             env["WIFI_VISION_SCAN_CIDR"] = scan_cidr
             env["WIFI_VISION_SCAN_APPROVED"] = "1"
             env["WIFI_VISION_SCAN_CONFIRMATION"] = confirmation
+        if interface_alias:
+            env["WIFI_VISION_INTERFACE_ALIAS"] = str(interface_alias).strip()
 
         job_id = uuid.uuid4().hex
         job = {

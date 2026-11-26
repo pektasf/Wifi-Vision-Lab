@@ -11,20 +11,24 @@ from scripts.common import DATA, stamp, overwrite_rows
 from scripts.scan_policy import build_scan_targets, load_scan_settings
 
 
-def get_network():
+def list_network_interfaces():
+    """Return local IPv4 interfaces, including Windows hosted-network adapters."""
     if platform.system() != "Windows":
-        raise RuntimeError("Bu tarama adaptoru su anda Windows icindir.")
+        raise RuntimeError("Bu ağ adaptörü şu anda Windows içindir.")
 
     ps = (
-        "$c=Get-NetIPConfiguration | "
-        "Where-Object {$_.IPv4DefaultGateway -and $_.IPv4Address} | "
-        "Select-Object -First 1; "
-        "if($c){[pscustomobject]@{"
-        "IP=$c.IPv4Address[0].IPAddress; "
-        "Prefix=$c.IPv4Address[0].PrefixLength; "
-        "Gateway=$c.IPv4DefaultGateway.NextHop; "
-        "Adapter=$c.InterfaceAlias"
-        "}|ConvertTo-Json -Compress}"
+        "$items = @(Get-NetIPConfiguration | "
+        "Where-Object {$_.IPv4Address} | ForEach-Object { "
+        "$gateway = ''; "
+        "if($_.IPv4DefaultGateway){$gateway=$_.IPv4DefaultGateway.NextHop}; "
+        "[pscustomobject]@{"
+        "IP=$_.IPv4Address[0].IPAddress; "
+        "Prefix=$_.IPv4Address[0].PrefixLength; "
+        "Gateway=$gateway; "
+        "Adapter=$_.InterfaceAlias; "
+        "InterfaceIndex=$_.InterfaceIndex"
+        "} }); "
+        "if($items.Count -gt 0){$items | ConvertTo-Json -Compress}"
     )
 
     try:
@@ -33,43 +37,68 @@ def get_network():
             capture_output=True, text=True, encoding="utf-8",
             errors="replace", timeout=15
         )
-    except FileNotFoundError as exc:
-        raise RuntimeError(
-            "PowerShell bulunamadi. Windows PowerShell erisimini kontrol edin."
-        ) from exc
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(
-            "Aktif ag arayuzu sorgusu zaman asimina ugradi."
-        ) from exc
-    except OSError as exc:
-        raise RuntimeError(f"Ag arayuzu sorgusu baslatilamadi: {exc}") from exc
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as exc:
+        raise RuntimeError(f"Windows ağ arayüzleri sorgulanamadı: {exc}") from exc
 
     if result.returncode or not result.stdout.strip():
-        detail = result.stderr.strip() or "PowerShell aktif IPv4 agi dondurmedi."
-        raise RuntimeError(
-            "Aktif IPv4 agi bulunamadi. Wi-Fi/Ethernet baglantisini kontrol edin. "
-            + detail[:300]
-        )
+        detail = result.stderr.strip() or "IPv4 arayüzü bulunamadı."
+        raise RuntimeError(detail[:300])
 
     try:
         data = json.loads(result.stdout.strip().splitlines()[-1])
-        interface = ipaddress.ip_interface(
-            f"{data['IP']}/{data['Prefix']}"
-        )
-        gateway = str(ipaddress.ip_address(data["Gateway"]))
+        if isinstance(data, dict):
+            data = [data]
+        interfaces = []
+        for row in data:
+            interface = ipaddress.ip_interface(
+                f"{row['IP']}/{row['Prefix']}"
+            )
+            gateway = str(row.get("Gateway") or "").strip()
+            if gateway:
+                gateway = str(ipaddress.ip_address(gateway))
+            interfaces.append({
+                "ip": str(interface.ip),
+                "gateway": gateway,
+                "adapter": str(row.get("Adapter") or "Unknown"),
+                "interface_index": int(row.get("InterfaceIndex") or 0),
+                "network": str(interface.network),
+                "has_default_gateway": bool(gateway),
+            })
     except (KeyError, ValueError, json.JSONDecodeError, TypeError) as exc:
-        raise RuntimeError(
-            "Windows ag bilgisi okunamadi veya eksik. "
-            "IPv4 adresi, prefix ve varsayilan gateway kontrol edilmeli."
-        ) from exc
+        raise RuntimeError("Windows IPv4 arayüz bilgisi okunamadı.") from exc
 
+    return interfaces
+
+
+def get_network(interface_alias=None):
+    """Select an explicit local interface, or retain the default-route fallback."""
+    interfaces = list_network_interfaces()
+    if interface_alias:
+        matches = [
+            item for item in interfaces
+            if item["adapter"] == str(interface_alias).strip()
+        ]
+        if not matches:
+            raise RuntimeError(
+                f"Seçilen ağ adaptörü artık mevcut değil: {interface_alias}"
+            )
+        selected = matches[0]
+    else:
+        selected = next(
+            (item for item in interfaces if item["has_default_gateway"]),
+            interfaces[0] if interfaces else None,
+        )
+
+    if selected is None:
+        raise RuntimeError("Etkin IPv4 ağ arayüzü bulunamadı.")
     return {
-        "ip": str(interface.ip),
-        "gateway": gateway,
-        "adapter": str(data.get("Adapter", "Unknown")),
-        "network": str(interface.network)
+        "ip": selected["ip"],
+        "gateway": selected["gateway"],
+        "adapter": selected["adapter"],
+        "network": selected["network"],
+        "interface_index": selected["interface_index"],
+        "has_default_gateway": selected["has_default_gateway"],
     }
-
 
 def ping_one(ip, timeout_ms=600):
     try:
@@ -161,9 +190,10 @@ def resolve_hostnames(ips):
         return {}
 
 
-def scan(scan_cidr=None, approved=False, confirmation=None):
+def scan(scan_cidr=None, approved=False, confirmation=None, interface_alias=None):
     print("[1/4] Aktif ag algilaniyor...", flush=True)
-    net = get_network()
+    selected_alias = interface_alias or os.getenv("WIFI_VISION_INTERFACE_ALIAS", "").strip() or None
+    net = get_network(selected_alias)
     active_network = net["network"]
 
     requested_cidr = (
