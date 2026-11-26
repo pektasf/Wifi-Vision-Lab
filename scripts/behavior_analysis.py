@@ -1,6 +1,8 @@
 """Evidence-based review findings from the current local device inventory."""
 from __future__ import annotations
 
+from pathlib import Path
+
 import pandas as pd
 
 from scripts.common import DATA, overwrite_rows, stamp
@@ -67,10 +69,8 @@ def run(
     output_path=None,
 ) -> list[dict[str, str]]:
     """Analyze the current local inventory and persist the resulting findings."""
-    source = inventory_path or DATA / "device_inventory.csv"
-    destination = output_path or DATA / "behavior_findings.csv"
-    source = pd.io.common.stringify_path(source)
-    destination = pd.io.common.stringify_path(destination)
+    source = Path(inventory_path) if inventory_path is not None else DATA / "device_inventory.csv"
+    destination = Path(output_path) if output_path is not None else DATA / "behavior_findings.csv"
     try:
         inventory = pd.read_csv(
             source, dtype=str, keep_default_na=False, encoding="utf-8-sig"
