@@ -23,7 +23,7 @@ def _normalize_mac(value):
 
 def _normalize_ip(value):
     try:
-        return str(ipaddress.ip_address(str(value).strip()))
+        return str(ipaddress.IPv4Address(str(value).strip()))
     except ValueError:
         return ""
 
