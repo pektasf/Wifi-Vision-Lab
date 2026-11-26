@@ -135,8 +135,7 @@ Do not infer the position of every other network client from the laptop's own RS
 ## Current status
 
 SI-0 provides a safe capability inventory. SI-2 now has Windows and Linux read-only cached-BSS RSSI collectors, but this is not calibrated positioning and does
-not prove every adapter/driver will return measurements. Linux/macOS RSSI
-collectors, calibrated device coordinates, CSI capture, and passive
+not prove every adapter/driver will return measurements. macOS RSSI collection, calibrated device coordinates, CSI capture, and passive
 human/object sensing remain future phases gated by platform and hardware support.
 
 
