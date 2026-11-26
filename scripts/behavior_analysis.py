@@ -116,6 +116,8 @@ def prepare_temporal_context(
     result["_observation_count"] = pd.to_numeric(
         result["observation_count"], errors="coerce"
     ).fillna(0)
+    if "status" in result.columns:
+        result["latest_observation_status"] = result["status"].fillna("").astype(str)
 
     first = pd.to_datetime(result["first_seen"], utc=True, errors="coerce")
     last = pd.to_datetime(result["last_seen"], utc=True, errors="coerce")
