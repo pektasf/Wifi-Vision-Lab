@@ -104,7 +104,7 @@ def test_platform_availability_is_explicit():
 
 
 
-def test_collector_distinguishes_missing_interface_and_empty_scan_list(tmp_path, monkeypatch):
+def test_collector_distinguishes_missing_interface_and_empty_bss_list(tmp_path, monkeypatch):
     from scripts import windows_wlan
 
     monkeypatch.setattr(
@@ -169,3 +169,20 @@ def test_wlan_error_messages_are_actionable_and_safe():
     assert "privacy" in describe_wlan_error(5).casefold()
     assert "WLAN AutoConfig" in describe_wlan_error(1062)
     assert "0xDEADBEEF" in describe_wlan_error(0xDEADBEEF)
+
+
+
+def test_collector_converts_top_level_wlan_api_errors_to_actionable_status(tmp_path, monkeypatch):
+    from scripts import windows_wlan
+
+    def fail_query(_api):
+        raise OSError(1062, "service inactive")
+
+    monkeypatch.setattr(windows_wlan, "_query_bss_entries", fail_query)
+    report = collect_windows_rssi_measurements(
+        key_path=tmp_path / "error.key", api=object()
+    )
+
+    assert report["status"] == "unavailable"
+    assert report["error_code"] == 1062
+    assert "WLAN AutoConfig" in report["errors"][0]["message"]
