@@ -490,3 +490,35 @@ def test_review_history_is_append_only_and_sorted_newest_first():
     result = filter_event_review_history(history, history.iloc[0]["event_key"])
     assert result["status"].tolist() == ["resolved", "reviewed"]
     assert len(history) == 2
+
+
+
+def test_filter_event_review_assignment_filters_priority_and_assignee_together():
+    from scripts.event_timeline import filter_event_review_assignment
+
+    frame = pd.DataFrame([
+        {"event_type": "IP_CHANGED", "review_priority": "high", "review_assignee": "Network Team"},
+        {"event_type": "PING_NOT_RESPONDING", "review_priority": "critical", "review_assignee": "Network Team"},
+        {"event_type": "NEW_DEVICE", "review_priority": "high", "review_assignee": "Security"},
+    ])
+    result = filter_event_review_assignment(
+        frame, priority="high", assignee="network"
+    )
+    assert result["event_type"].tolist() == ["IP_CHANGED"]
+
+
+def test_filter_event_review_assignment_supports_all_empty_missing_and_invalid_values():
+    from scripts.event_timeline import filter_event_review_assignment
+
+    frame = pd.DataFrame([
+        {"event_type": "IP_CHANGED", "review_priority": "normal", "review_assignee": ""},
+        {"event_type": "PING_NOT_RESPONDING", "review_priority": "critical", "review_assignee": "Ops"},
+    ])
+    assert len(filter_event_review_assignment(frame, priority="all")) == 2
+    assert len(filter_event_review_assignment(frame, assignee="")) == 2
+    assert filter_event_review_assignment(frame, priority="urgent").empty
+    assert filter_event_review_assignment(frame, assignee="Ops").iloc[0]["event_type"] == "PING_NOT_RESPONDING"
+    assert filter_event_review_assignment(
+        pd.DataFrame([{"event_type": "legacy"}]), priority="high"
+    ).empty
+    assert filter_event_review_assignment(None).empty

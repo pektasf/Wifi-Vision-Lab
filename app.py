@@ -1242,6 +1242,7 @@ def events_page():
         normalize_event_frames,
         summarize_event_severity,
         filter_event_review_status,
+        filter_event_review_assignment,
         merge_event_review_states,
         upsert_event_review_state,
         append_event_review_history,
@@ -1348,6 +1349,41 @@ def events_page():
     )
     filtered = filter_event_review_status(filtered, selected_review_status)
 
+    with st.expander("Öncelik ve sorumlu filtreleri", expanded=False):
+        priority_filter_col, assignee_filter_col = st.columns(2)
+        with priority_filter_col:
+            priority_filter_labels = {
+                "all": "Tüm öncelikler",
+                "low": "Düşük",
+                "normal": "Normal",
+                "high": "Yüksek",
+                "critical": "Kritik",
+            }
+            selected_priority = st.selectbox(
+                "İş önceliği",
+                options=list(priority_filter_labels),
+                format_func=lambda value: priority_filter_labels[value],
+                key="unified_event_priority",
+            )
+        with assignee_filter_col:
+            assignee_term = st.text_input(
+                "Sorumlu kişi / ekip ara",
+                placeholder="İsim veya ekip",
+                key="unified_event_assignee",
+            )
+    filtered = filter_event_review_assignment(
+        filtered,
+        priority=selected_priority,
+        assignee=assignee_term,
+    )
+
+    priority_counts = data["review_priority"].value_counts()
+    st.caption(
+        f"Öncelik dağılımı · Kritik {int(priority_counts.get('critical', 0)):,} · "
+        f"Yüksek {int(priority_counts.get('high', 0)):,} · "
+        f"Normal {int(priority_counts.get('normal', 0)):,} · "
+        f"Düşük {int(priority_counts.get('low', 0)):,}"
+    )
     st.caption(f"{len(filtered):,} olay eşleşti.")
     if filtered.empty:
         st.info("Bu filtrelerle eşleşen olay bulunamadı. Filtreleri temizleyip yeniden deneyin.")
@@ -1390,6 +1426,8 @@ def events_page():
         "ip": "IP adresi",
         "severity": "Önem",
         "review_status": "İnceleme",
+        "review_priority": "Öncelik",
+        "review_assignee": "Sorumlu",
         "old_value": "Önceki değer",
         "new_value": "Yeni değer",
         "details": "Açıklama",

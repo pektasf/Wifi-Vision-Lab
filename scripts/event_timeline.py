@@ -365,6 +365,37 @@ def filter_event_review_history(
         ).drop(columns=["_parsed_time", "_order"])
     return result.reset_index(drop=True)
 
+
+def filter_event_review_assignment(
+    frame: pd.DataFrame,
+    *,
+    priority: str = "",
+    assignee: str = "",
+) -> pd.DataFrame:
+    """Filter review metadata by exact priority and literal assignee substring."""
+    if frame is None:
+        return pd.DataFrame()
+    result = frame.copy()
+    selected_priority = str(priority or "").strip().lower()
+    if selected_priority and selected_priority != "all":
+        if selected_priority not in EVENT_REVIEW_PRIORITIES or "review_priority" not in result.columns:
+            return result.iloc[0:0].copy()
+        result = result[
+            result["review_priority"].fillna("normal").astype(str).str.lower()
+            .eq(selected_priority)
+        ]
+    term = str(assignee or "").strip()
+    if term:
+        if "review_assignee" not in result.columns:
+            return result.iloc[0:0].copy()
+        result = result[
+            result["review_assignee"].fillna("").astype(str).str.contains(
+                term, case=False, regex=False, na=False
+            )
+        ]
+    return result.reset_index(drop=True)
+
+
 def filter_event_review_status(
     frame: pd.DataFrame,
     status: str = "",
