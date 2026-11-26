@@ -34,7 +34,7 @@ def test_normalizes_supported_event_sources_and_sorts_newest_first():
         "ip_changed",
         "MULTIPLE_IPS_SAME_MAC",
     ]
-    assert result.iloc[0]["source"] == "Canli izleme"
+    assert result.iloc[0]["source"] == "Canlı izleme"
     assert result.iloc[1]["subject"] == "AA:BB"
     assert result.iloc[1]["old_value"] == "192.168.1.2"
     assert result.iloc[2]["severity"] == "review"
