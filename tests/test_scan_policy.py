@@ -205,6 +205,7 @@ def test_get_network_can_select_hosted_network_adapter(monkeypatch):
             "ip": "192.168.137.1", "gateway": "",
             "adapter": "Local Area Connection* 12", "interface_index": 19,
             "network": "192.168.137.0/24", "has_default_gateway": False,
+            "dhcp_enabled": False,
         },
     ]
     monkeypatch.setattr(device_inventory, "list_network_interfaces", lambda: interfaces)
