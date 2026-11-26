@@ -9,7 +9,7 @@ UNRESPONSIVE_STATES = {
     "offline", "down", "unreachable", "not_responding", "not responding",
     "ping_not_responding",
 }
-UNKNOWN_STATES = {"", "unknown", "unk", "n/a", "na", "none", "nan"}
+UNKNOWN_STATES = {"", "unknown", "unk", "n/a", "na", "none", "nan", "bilinmiyor"}
 
 
 def inventory_status_summary(inventory: pd.DataFrame) -> dict[str, object]:
