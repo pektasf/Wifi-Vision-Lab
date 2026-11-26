@@ -534,44 +534,159 @@ def dashboard_page():
 
 
 def devices_page():
+    from scripts.dashboard_summary import inventory_status_summary
+
     inventory = load("device_inventory.csv")
-    page_header("Cihaz envanteri", "Cihazları arayın, filtreleyin ve teknik ayrıntıları gerektiğinde açın.")
+    page_header(
+        "Cihaz envanteri",
+        "Yerel ağda gözlemlenen cihazları arayın, durumlarına göre filtreleyin ve kanıt kayıtlarını açın.",
+    )
     if inventory.empty:
-        st.info("Henüz cihaz kaydı bulunmuyor. Önce ağ keşfi yapın.")
+        st.info("Henüz cihaz kaydı bulunmuyor. İlk ağ keşfinden sonra envanter burada görünür.")
+        if st.button("Ağ keşfini başlat", type="primary", key="inventory_empty_scan"):
+            run_scan()
         return
 
     data = inventory.copy()
-    for col in ["ip", "mac", "hostname", "status", "gateway", "adapter", "subnet"]:
-        if col not in data.columns:
-            data[col] = ""
-    data["status"] = data["status"].replace("", "Bilinmiyor")
+    for column in ["ip", "mac", "hostname", "status", "gateway", "adapter", "subnet"]:
+        if column not in data.columns:
+            data[column] = ""
+    data["status"] = data["status"].fillna("").astype(str).replace("", "Bilinmiyor")
+    summary = inventory_status_summary(data)
 
-    responding = int(data["status"].astype(str).str.lower().isin(
-        ["responding", "online", "active"]
-    ).sum())
-    summary = st.columns(3)
-    summary[0].metric("Toplam cihaz", f"{len(data):,}")
-    summary[1].metric("Yanıt veren", f"{responding:,}")
-    summary[2].metric("Diğer / bilinmiyor", f"{len(data) - responding:,}")
+    metrics = st.columns(4)
+    metrics[0].metric("Bilinen cihaz", f"{summary['total']:,}")
+    metrics[1].metric("Yanıt veren", f"{summary['responding']:,}")
+    metrics[2].metric("Yanıt vermeyen", f"{summary['unresponsive']:,}")
+    metrics[3].metric("Durumu bilinmeyen", f"{summary['unknown']:,}")
 
-    filters = st.columns([2, 1])
-    with filters[0]:
-        search = st.text_input("Cihaz ara", placeholder="IP, MAC veya cihaz adı", key="inventory_search")
-    with filters[1]:
-        statuses = ["Tüm durumlar"] + sorted(data["status"].astype(str).unique().tolist())
-        selected_status = st.selectbox("Durum", statuses, key="inventory_status")
+    search_col, status_col, type_col = st.columns([2, 1, 1])
+    with search_col:
+        search = st.text_input(
+            "Cihaz ara",
+            placeholder="IP, MAC, cihaz adı veya üretici",
+            key="inventory_search",
+        )
+    with status_col:
+        statuses = ["Tüm durumlar"] + sorted(data["status"].unique().tolist())
+        selected_status = st.selectbox(
+            "Durum", statuses, key="inventory_status"
+        )
+    classification_column = next(
+        (
+            column for column in ["classification", "device_type", "type"]
+            if column in data.columns
+        ),
+        None,
+    )
+    with type_col:
+        if classification_column:
+            type_options = ["Tüm türler"] + sorted(
+                value for value in data[classification_column].astype(str).unique()
+                if value.strip()
+            )
+            selected_type = st.selectbox(
+                "Cihaz türü", type_options, key="inventory_type"
+            )
+        else:
+            selected_type = "Tüm türler"
 
     filtered = data.copy()
     if selected_status != "Tüm durumlar":
-        filtered = filtered[filtered["status"].astype(str) == selected_status]
+        filtered = filtered[filtered["status"] == selected_status]
+    if classification_column and selected_type != "Tüm türler":
+        filtered = filtered[filtered[classification_column].astype(str) == selected_type]
     if search.strip():
         mask = filtered.astype(str).apply(
-            lambda col: col.str.contains(search.strip(), case=False, na=False, regex=False)
+            lambda column: column.str.contains(
+                search.strip(), case=False, na=False, regex=False
+            )
         ).any(axis=1)
         filtered = filtered[mask]
 
-    st.divider()
-    render_device_cards(filtered, "inventory")
+    st.caption(f"{len(filtered):,} cihaz eşleşti.")
+    if filtered.empty:
+        st.info("Bu filtrelerle eşleşen cihaz bulunamadı.")
+        return
+
+    preferred = [
+        "hostname", "ip", "mac", "status", "vendor",
+        "classification", "device_type", "gateway", "subnet", "adapter",
+    ]
+    columns = [column for column in preferred if column in filtered.columns]
+    display = filtered[columns].rename(columns={
+        "hostname": "Cihaz",
+        "ip": "IP adresi",
+        "mac": "MAC adresi",
+        "status": "Durum",
+        "vendor": "Üretici",
+        "classification": "Sınıflandırma",
+        "device_type": "Cihaz türü",
+        "gateway": "Varsayılan ağ geçidi",
+        "subnet": "Alt ağ",
+        "adapter": "Ağ arayüzü",
+    })
+    st.dataframe(
+        display.head(250),
+        width="stretch",
+        hide_index=True,
+        height=min(560, 58 + 35 * min(len(display), 13)),
+    )
+    if len(display) > 250:
+        st.caption("İlk 250 cihaz gösteriliyor. Arama ve filtrelerle listeyi daraltabilirsiniz.")
+
+    st.markdown("### Seçili cihazın teknik ayrıntıları")
+    selected_index = st.selectbox(
+        "Cihaz seç",
+        options=filtered.index.tolist(),
+        format_func=lambda index: (
+            f"{filtered.loc[index, 'hostname'] or 'İsimsiz cihaz'} · "
+            f"{filtered.loc[index, 'ip'] or 'IP yok'} · "
+            f"{filtered.loc[index, 'mac'] or 'MAC yok'}"
+        ),
+        key="inventory_detail_selection",
+    )
+    selected_device = filtered.loc[selected_index]
+    identity_left, identity_right = st.columns(2)
+    with identity_left:
+        st.markdown("**Kimlik ve sınıflandırma**")
+        for field, label in [
+            ("hostname", "Cihaz adı"),
+            ("vendor", "Üretici"),
+            ("classification", "Sınıflandırma"),
+            ("mac", "MAC adresi"),
+        ]:
+            if field in selected_device.index:
+                st.write(f"{label}: {selected_device.get(field, '') or 'Bilinmiyor'}")
+    with identity_right:
+        st.markdown("**Ağ yapılandırması ve gözlem**")
+        for field, label in [
+            ("ip", "IP adresi"),
+            ("status", "Durum"),
+            ("gateway", "Ağ geçidi"),
+            ("subnet", "Alt ağ"),
+            ("timestamp", "Gözlem zamanı"),
+        ]:
+            if field in selected_device.index:
+                st.write(f"{label}: {selected_device.get(field, '') or 'Bilinmiyor'}")
+
+    with st.expander("Kaynak kaydın tüm alanları"):
+        st.dataframe(
+            pd.DataFrame([
+                {"Alan": str(key), "Değer": str(value)}
+                for key, value in selected_device.items()
+            ]),
+            width="stretch",
+            hide_index=True,
+        )
+
+    st.download_button(
+        "Filtrelenmiş envanteri CSV indir",
+        filtered.to_csv(index=False).encode("utf-8-sig"),
+        file_name="wifi_vision_device_inventory.csv",
+        mime="text/csv",
+        key="inventory_export",
+    )
 
 
 
