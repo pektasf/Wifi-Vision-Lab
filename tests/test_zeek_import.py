@@ -176,3 +176,71 @@ def test_zeek_dhcp_import_bounds_optional_text_and_removes_control_characters():
     assert row["relay_circuit_id"].startswith("relayport")
     assert len(row["relay_circuit_id"]) == 256
     assert row["relay_agent_remote_id"] == "remoteidentifier"
+
+
+
+def test_zeek_dhcp_import_accepts_and_canonicalizes_explicit_ipv4_network_scope():
+    rows = normalize_zeek_dhcp_export(
+        json.dumps([{
+            "mac": "00:11:22:33:44:55",
+            "assigned_addr": "192.168.1.42",
+        }]),
+        network_id="192.168.1.42/24",
+    )
+    assert rows[0]["network_id"] == "192.168.1.0/24"
+
+
+@pytest.mark.parametrize("network_id", [
+    "not-a-network",
+    "192.168.1.0/24/extra",
+    "2001:db8::/64",
+])
+def test_zeek_dhcp_import_rejects_invalid_or_non_ipv4_network_scope(network_id):
+    with pytest.raises(ValueError, match="Ağ kapsamı"):
+        normalize_zeek_dhcp_export(
+            json.dumps([{"mac": "00:11:22:33:44:55"}]),
+            network_id=network_id,
+        )
+
+
+def test_zeek_dhcp_import_rejects_overlong_network_scope():
+    with pytest.raises(ValueError, match="64 karakter"):
+        normalize_zeek_dhcp_export(
+            json.dumps([{"mac": "00:11:22:33:44:55"}]),
+            network_id="1" * 65,
+        )
+
+
+def test_zeek_dhcp_import_leaves_network_scope_unknown_when_not_supplied():
+    rows = normalize_zeek_dhcp_export(json.dumps([{
+        "mac": "00:11:22:33:44:55",
+        "assigned_addr": "192.168.1.42",
+        "server_addr": "192.168.1.1",
+    }]))
+    assert rows[0]["network_id"] == ""
+
+
+
+def test_zeek_import_does_not_apply_explicit_scope_to_out_of_subnet_assignment():
+    rows = normalize_zeek_dhcp_export(
+        json.dumps([{
+            "mac": "00:11:22:33:44:55",
+            "assigned_addr": "192.168.2.42",
+            "server_addr": "192.168.1.1",
+        }]),
+        network_id="192.168.1.0/24",
+    )
+    assert rows[0]["network_id"] == ""
+    assert "network_scope_address_mismatch" in rows[0]["evidence_status"]
+
+
+def test_zeek_import_keeps_scope_when_assigned_ip_is_inside_network():
+    rows = normalize_zeek_dhcp_export(
+        json.dumps([{
+            "mac": "00:11:22:33:44:55",
+            "assigned_addr": "192.168.1.42",
+        }]),
+        network_id="192.168.1.0/24",
+    )
+    assert rows[0]["network_id"] == "192.168.1.0/24"
+    assert "network_scope_address_mismatch" not in rows[0]["evidence_status"]

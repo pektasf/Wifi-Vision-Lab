@@ -482,6 +482,16 @@ def render():
         "Yetkili Zeek sensöründen alınan dhcp.log JSON/NDJSON kayıtlarını içe aktar. "
         "Bu kaynak, DHCP istemcisinin MAC, hostname ve IP kira bilgisini birlikte gözlemleyebilir."
     )
+    zeek_network_scope = st.text_input(
+        "Zeek kayıtlarının ağ kapsamı (IPv4 CIDR, isteğe bağlı)",
+        placeholder="192.168.1.0/24",
+        help=(
+            "Yalnızca dosyanın tek bir IPv4 ağından geldiğinden eminsen doldur. "
+            "Birden fazla VLAN/ağ varsa boş bırak; DHCP sunucu IP'si ağ kapsamı "
+            "olarak otomatik kullanılmaz."
+        ),
+        key="zeek_network_scope",
+    )
     zeek_upload = st.file_uploader(
         "Zeek dhcp.log JSON dosyası",
         type=["json", "log", "txt"],
@@ -497,6 +507,7 @@ def render():
             imported = normalize_zeek_dhcp_export(
                 zeek_upload.getvalue(),
                 imported_at=pd.Timestamp.now(tz="UTC").isoformat(),
+                network_id=zeek_network_scope.strip(),
             )
             if not imported:
                 st.warning("Dosyada kullanılabilir Zeek DHCP kaydı bulunamadı.")
@@ -510,6 +521,7 @@ def render():
                         row.get("observed_at", ""), row.get("server_ip", ""),
                         row.get("mac", ""), row.get("assigned_ip", ""),
                         row.get("message_types", ""),
+                        row.get("network_id", ""),
                         row.get("relay_circuit_id", ""),
                         row.get("relay_agent_remote_id", ""),
                     )
@@ -519,7 +531,8 @@ def render():
                     key = (
                         row["observed_at"], row["server_ip"],
                         row["mac"], row["assigned_ip"],
-                        row["message_types"], row["relay_circuit_id"],
+                        row["message_types"], row["network_id"],
+                        row["relay_circuit_id"],
                         row["relay_agent_remote_id"],
                     )
                     if key not in seen:
@@ -542,6 +555,11 @@ def render():
         local_mac_count = int(
             zeek_evidence["mac_address_type"].eq("locally_administered").sum()
         )
+        scope_mismatch_count = int(
+            zeek_evidence["evidence_status"].astype(str).str.contains(
+                "network_scope_address_mismatch", regex=False
+            ).sum()
+        )
         assigned_count = int(
             zeek_evidence["assigned_ip"].astype(str).str.strip().ne("").sum()
         )
@@ -553,6 +571,11 @@ def render():
         zeek_metrics[1].metric("Atanmış IP", assigned_count)
         zeek_metrics[2].metric("Farklı MAC", distinct_mac_count)
         zeek_metrics[3].metric("Yerel yönetimli MAC", local_mac_count)
+        if scope_mismatch_count:
+            st.warning(
+                f"{scope_mismatch_count} DHCP kaydının IP adresi girilen ağ kapsamının dışında. "
+                "Bu kayıtlar için ağ kapsamı eşleştirmede kullanılmadı."
+            )
 
         zeek_evidence["inventory_match"] = zeek_evidence.apply(
             lambda row: {
