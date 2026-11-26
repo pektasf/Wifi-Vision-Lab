@@ -79,10 +79,10 @@ def correlate_wireless_dhcp_observations(
     by_mac = {}
     for item in wireless:
         by_mac.setdefault(item[2], []).append(item)
-    for items in by_mac.values():
+    for mac_key, items in list(by_mac.items()):
         items.sort(key=lambda item: item[3])
         timestamps = [item[3].timestamp() for item in items]
-        items[:] = (items, timestamps)
+        by_mac[mac_key] = (items, timestamps)
 
     pairs = []
     for dhcp_index, dhcp_row, mac, dhcp_time in dhcp:
