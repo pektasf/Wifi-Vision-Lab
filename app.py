@@ -1107,108 +1107,259 @@ def live_page():
 
 
 def signal_page():
-    st.title("Wi-Fi Sinyali")
-    st.caption("Aktif bağlantı ölçümü, sinyal kalitesi ve erişim noktası görünümü.")
-
+    page_header(
+        "Wi-Fi sinyal analizi",
+        "Aktif bağlantıyı, zaman içindeki sinyal değişimini ve yakındaki erişim noktalarını ayrı ölçümlerle incele.",
+    )
     connection = load("wifi_connection.csv")
     access_points = load("wifi_access_points.csv")
     signal_history = load("wifi_signal_history.csv")
 
-    st.markdown("### Mevcut bağlantı")
     if not connection.empty:
-        current = connection.iloc[-1]
+        current_connection = connection.copy()
+        if "observed_at" in current_connection.columns:
+            current_connection["_time"] = pd.to_datetime(
+                current_connection["observed_at"], utc=True, errors="coerce"
+            )
+            current_connection = current_connection.sort_values(
+                "_time", na_position="first"
+            )
+        current = current_connection.iloc[-1]
+        st.markdown("### Mevcut bağlantı")
         a, b, c, d = st.columns(4)
-        a.metric("SSID", str(current.get("ssid", "-")) or "-")
-        b.metric("Sinyal", str(current.get("signal", "-")) or "-")
-        c.metric("Kanal", str(current.get("channel", "-")) or "-")
-        d.metric("Radyo tipi", str(current.get("radio_type", "-")) or "-")
-        left, right = st.columns(2)
-        with left:
+        a.metric("SSID", str(current.get("ssid", "") or "Bilinmiyor"))
+        a.caption("Kablosuz ağ adı")
+        b.metric("Sinyal", str(current.get("signal", "") or "Ölçülmedi"))
+        b.caption("Windows bağlantı sinyal yüzdesi")
+        c.metric("Kanal", str(current.get("channel", "") or "Bilinmiyor"))
+        d.metric("Radyo tipi", str(current.get("radio_type", "") or "Bilinmiyor"))
+        detail_left, detail_right = st.columns(2)
+        with detail_left:
             st.caption("BSSID")
-            st.code(str(current.get("bssid", "-")) or "-")
-        with right:
-            st.caption("Son keşif zamanı")
-            st.write(str(current.get("observed_at", "-")) or "-")
+            st.code(str(current.get("bssid", "") or "Bilinmiyor"))
+        with detail_right:
+            st.caption("Gözlem zamanı")
+            st.write(str(current.get("observed_at", "") or "Zaman bilgisi yok"))
     else:
-        st.info("Wi-Fi bağlantı kaydı bulunamadı. Önce Wi-Fi keşfini çalıştırın.")
+        st.info(
+            "Mevcut Wi-Fi bağlantı kaydı bulunamadı. Yerel Wi-Fi keşfi çalıştırıldığında "
+            "bağlantı bilgileri burada görünür."
+        )
 
-    st.markdown("---")
-    st.markdown("### Sinyal ölçüm geçmişi")
+    st.markdown("### Sinyal geçmişi")
     if not signal_history.empty and "signal_percent" in signal_history.columns:
         history = signal_history.copy()
         history["signal_percent"] = pd.to_numeric(
-            history["signal_percent"], errors="coerce"
+            history["signal_percent"].astype(str).str.replace("%", "", regex=False),
+            errors="coerce",
         )
-        history = history.dropna(subset=["signal_percent"])
-        if "observed_at" in history.columns:
-            history = history.sort_values("observed_at")
-        if not history.empty:
-            latest = history.iloc[-1]
-            a, b, c = st.columns(3)
-            a.metric("Son ölçüm", f"{int(latest['signal_percent'])}%")
-            b.metric("Kalite", str(latest.get("quality", "-")) or "-")
-            change = latest.get("change_percent", "")
-            c.metric(
-                "Önceki ölçüme göre",
-                f"{int(float(change)):+d} puan"
-                if str(change).strip() else "İlk ölçüm",
+        if "rssi_dbm" in history.columns:
+            history["rssi_dbm"] = pd.to_numeric(
+                history["rssi_dbm"], errors="coerce"
             )
-            if "observed_at" in history.columns:
-                st.line_chart(
-                    history.tail(100).set_index("observed_at")[["signal_percent"]],
+        if "observed_at" in history.columns:
+            history["_parsed_time"] = pd.to_datetime(
+                history["observed_at"], utc=True, errors="coerce"
+            )
+            history = history.sort_values(
+                "_parsed_time", ascending=True, na_position="last"
+            )
+        history = history.dropna(subset=["signal_percent"])
+        if history.empty:
+            st.info("Sinyal geçmişinde çizilebilir sayısal ölçüm bulunamadı.")
+        else:
+            latest = history.iloc[-1]
+            metric_a, metric_b, metric_c = st.columns(3)
+            metric_a.metric("Son sinyal", f"{latest['signal_percent']:.0f}%")
+            rssi = latest.get("rssi_dbm")
+            metric_b.metric(
+                "Son RSSI",
+                f"{float(rssi):.0f} dBm"
+                if pd.notna(rssi) else "Ölçülmedi",
+            )
+            metric_c.metric(
+                "Kalite etiketi",
+                str(latest.get("quality", "") or "Belirtilmedi"),
+            )
+
+            import plotly.graph_objects as go
+
+            x_values = (
+                history["observed_at"].astype(str).tolist()
+                if "observed_at" in history.columns
+                else list(range(len(history)))
+            )
+            signal_figure = go.Figure(go.Scatter(
+                x=x_values,
+                y=history["signal_percent"],
+                mode="lines+markers",
+                line={"color": "#087F78", "width": 2.5},
+                marker={"size": 5, "color": "#087F78"},
+                hovertemplate="%{x}<br>Sinyal: %{y:.0f}%<extra></extra>",
+                name="Sinyal yüzdesi",
+            ))
+            signal_figure.update_layout(
+                height=280,
+                margin={"l": 12, "r": 18, "t": 12, "b": 42},
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="#FFFFFF",
+                showlegend=False,
+                font={"family": "Segoe UI, sans-serif", "color": "#182B2A", "size": 11},
+                xaxis={"title": "Gözlem zamanı", "showgrid": False},
+                yaxis={
+                    "title": "Sinyal (%)", "range": [0, 100],
+                    "showgrid": True, "gridcolor": "#E7EEEA",
+                },
+            )
+            st.plotly_chart(
+                signal_figure, width="stretch", config={"displayModeBar": False}
+            )
+
+            if "rssi_dbm" in history.columns and history["rssi_dbm"].notna().any():
+                rssi_history = history.dropna(subset=["rssi_dbm"])
+                rssi_figure = go.Figure(go.Scatter(
+                    x=(
+                        rssi_history["observed_at"].astype(str).tolist()
+                        if "observed_at" in rssi_history.columns
+                        else list(range(len(rssi_history)))
+                    ),
+                    y=rssi_history["rssi_dbm"],
+                    mode="lines+markers",
+                    line={"color": "#426C8C", "width": 2.2},
+                    marker={"size": 5, "color": "#426C8C"},
+                    hovertemplate="%{x}<br>RSSI: %{y:.0f} dBm<extra></extra>",
+                    name="RSSI",
+                ))
+                rssi_figure.update_layout(
                     height=250,
+                    margin={"l": 12, "r": 18, "t": 10, "b": 42},
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="#FFFFFF",
+                    showlegend=False,
+                    font={"family": "Segoe UI, sans-serif", "color": "#182B2A", "size": 11},
+                    xaxis={"title": "Gözlem zamanı", "showgrid": False},
+                    yaxis={"title": "RSSI (dBm)", "showgrid": True, "gridcolor": "#E7EEEA"},
                 )
+                st.plotly_chart(
+                    rssi_figure, width="stretch", config={"displayModeBar": False}
+                )
+
             detail_columns = [
                 column for column in [
                     "observed_at", "ssid", "signal_percent", "rssi_dbm",
                     "channel", "receive_mbps", "transmit_mbps", "quality",
                 ] if column in history.columns
             ]
+            display = history[detail_columns].tail(30).iloc[::-1].rename(columns={
+                "observed_at": "Gözlem zamanı",
+                "ssid": "SSID",
+                "signal_percent": "Sinyal (%)",
+                "rssi_dbm": "RSSI (dBm)",
+                "channel": "Kanal",
+                "receive_mbps": "Alım (Mbps)",
+                "transmit_mbps": "Gönderim (Mbps)",
+                "quality": "Kalite",
+            })
             st.dataframe(
-                history[detail_columns].tail(20).iloc[::-1],
+                display,
                 width="stretch",
                 hide_index=True,
+                height=min(390, 58 + 35 * len(display)),
             )
     else:
-        st.info("Henüz sinyal geçmişi yok. Bir ağ taraması çalıştırıldığında ölçüm kaydedilir.")
-
-    st.markdown("---")
-    st.markdown("### Yakındaki erişim noktaları")
-    if not access_points.empty:
-        st.metric("Keşfedilen AP kaydı", f"{len(access_points):,}")
-        if "signal" in access_points.columns:
-            signal_values = (
-                access_points["signal"].astype(str)
-                .str.replace("%", "", regex=False)
-            )
-            chart_data = access_points.copy()
-            chart_data["Sinyal (%)"] = pd.to_numeric(
-                signal_values, errors="coerce"
-            )
-            label_col = next(
-                (column for column in ["ssid", "bssid"] if column in chart_data.columns),
-                None,
-            )
-            if label_col:
-                chart_data = chart_data.dropna(subset=["Sinyal (%)"])
-                if not chart_data.empty:
-                    st.bar_chart(
-                        chart_data.set_index(label_col)["Sinyal (%)"],
-                        height=240,
-                    )
-        st.dataframe(
-            access_points, width="stretch", hide_index=True, height=320
+        st.info(
+            "Henüz sinyal geçmişi yok. Bir Wi-Fi keşfi ölçüm kaydettiğinde zaman serisi burada oluşur."
         )
-    else:
+
+    st.markdown("### Yakındaki erişim noktaları")
+    if access_points.empty:
         st.info("Keşfedilmiş erişim noktası kaydı bulunmuyor.")
+    else:
+        aps = access_points.copy()
+        if "signal" in aps.columns:
+            aps["_signal_percent"] = pd.to_numeric(
+                aps["signal"].astype(str).str.replace("%", "", regex=False),
+                errors="coerce",
+            )
+        else:
+            aps["_signal_percent"] = pd.NA
+        label_column = next(
+            (column for column in ["ssid", "bssid"] if column in aps.columns),
+            None,
+        )
+        if label_column:
+            aps["_chart_label"] = aps[label_column].astype(str)
+            if "bssid" in aps.columns and label_column != "bssid":
+                aps["_chart_label"] = (
+                    aps["_chart_label"] + " · " + aps["bssid"].astype(str)
+                )
+        else:
+            aps["_chart_label"] = [
+                f"Erişim noktası {index + 1}" for index in range(len(aps))
+            ]
+        aps = aps.sort_values(
+            "_signal_percent", ascending=False, na_position="last"
+        )
+        st.caption(f"{len(aps):,} erişim noktası kaydı · Sinyal değeri mevcut olanlar üstte")
+        chart_data = aps.dropna(subset=["_signal_percent"]).head(15)
+        if not chart_data.empty:
+            import plotly.graph_objects as go
+
+            ap_figure = go.Figure(go.Bar(
+                x=chart_data["_signal_percent"],
+                y=chart_data["_chart_label"],
+                orientation="h",
+                marker_color="#087F78",
+                text=chart_data["_signal_percent"].map(lambda value: f"{value:.0f}%"),
+                textposition="outside",
+                cliponaxis=False,
+                hovertemplate="%{y}<br>Sinyal: %{x:.0f}%<extra></extra>",
+            ))
+            ap_figure.update_layout(
+                height=max(260, 34 * len(chart_data) + 70),
+                margin={"l": 12, "r": 35, "t": 8, "b": 35},
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="#FFFFFF",
+                showlegend=False,
+                font={"family": "Segoe UI, sans-serif", "color": "#182B2A", "size": 11},
+                xaxis={
+                    "title": "Sinyal (%)", "range": [0, 100],
+                    "showgrid": True, "gridcolor": "#E7EEEA",
+                },
+                yaxis={"title": "", "autorange": "reversed", "automargin": True},
+            )
+            st.plotly_chart(
+                ap_figure, width="stretch", config={"displayModeBar": False}
+            )
+        visible_columns = [
+            column for column in [
+                "ssid", "bssid", "signal", "channel", "frequency",
+                "radio_type", "security", "observed_at",
+            ] if column in aps.columns
+        ]
+        display = aps[visible_columns].head(100).rename(columns={
+            "ssid": "SSID",
+            "bssid": "BSSID",
+            "signal": "Sinyal",
+            "channel": "Kanal",
+            "frequency": "Frekans",
+            "radio_type": "Radyo tipi",
+            "security": "Güvenlik",
+            "observed_at": "Gözlem zamanı",
+        })
+        st.dataframe(
+            display,
+            width="stretch",
+            hide_index=True,
+            height=min(420, 58 + 35 * len(display)),
+        )
 
     st.caption(
-        "Sinyal yüzdesi bağlantı kalitesini gösterir; tek başına fiziksel mesafe "
-        "veya AP-istemci bağlantı topolojisini kanıtlamaz."
+        "Sinyal yüzdesi ve RSSI (dBm) farklı ölçümlerdir; ayrı grafiklerde gösterilir. "
+        "Bunlar tek başına fiziksel mesafe veya doğrulanmış AP-istemci topolojisi kanıtlamaz."
     )
-    if st.button("Wi-Fi verisini yeniden tara", key="wifi_scan_button"):
+    if st.button("Wi-Fi verisini yeniden tara", type="primary", key="wifi_scan_button"):
         run_scan()
-
 
 
 
