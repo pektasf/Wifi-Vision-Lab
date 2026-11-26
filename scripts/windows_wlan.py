@@ -167,7 +167,7 @@ def normalise_bss_entries(
     return dict(sorted(measurements.items()))
 
 
-def _query_bss_entries(api) -> list[tuple[bytes, int]]:
+def _query_bss_entries(api) -> dict[str, object]:
     _configure_api(api)
     negotiated_version = _DWORD()
     client_handle = _HANDLE()
@@ -177,13 +177,20 @@ def _query_bss_entries(api) -> list[tuple[bytes, int]]:
 
     interface_list = ctypes.POINTER(_WLAN_INTERFACE_INFO_LIST)()
     collected: list[tuple[bytes, int]] = []
+    diagnostics = {
+        "interfaces_seen": 0,
+        "interfaces_queried": 0,
+        "interfaces_with_entries": 0,
+        "interface_error_codes": [],
+    }
     try:
         result = api.WlanEnumInterfaces(client_handle, None, ctypes.byref(interface_list))
         if result != 0:
             raise OSError(result, "WlanEnumInterfaces failed.")
         if not interface_list:
-            return collected
+            return {"entries": collected, **diagnostics}
 
+        diagnostics["interfaces_seen"] = int(interface_list.contents.dwNumberOfItems)
         list_address = ctypes.addressof(interface_list.contents)
         entries_offset = _WLAN_INTERFACE_INFO_LIST.InterfaceInfo.offset
         entry_size = ctypes.sizeof(_WLAN_INTERFACE_INFO)
@@ -203,14 +210,19 @@ def _query_bss_entries(api) -> list[tuple[bytes, int]]:
                 ctypes.byref(bss_list),
             )
             if result != 0:
+                diagnostics["interface_error_codes"].append(int(result))
                 continue
+            diagnostics["interfaces_queried"] += 1
             if not bss_list:
                 continue
             try:
+                item_count = int(bss_list.contents.dwNumberOfItems)
+                if item_count:
+                    diagnostics["interfaces_with_entries"] += 1
                 bss_address = ctypes.addressof(bss_list.contents)
                 bss_offset = _WLAN_BSS_LIST.wlanBssEntries.offset
                 bss_size = ctypes.sizeof(_WLAN_BSS_ENTRY)
-                for item_index in range(int(bss_list.contents.dwNumberOfItems)):
+                for item_index in range(item_count):
                     entry_ptr = ctypes.cast(
                         bss_address + bss_offset + item_index * bss_size,
                         ctypes.POINTER(_WLAN_BSS_ENTRY),
@@ -226,7 +238,26 @@ def _query_bss_entries(api) -> list[tuple[bytes, int]]:
         if interface_list:
             api.WlanFreeMemory(ctypes.cast(interface_list, _VOID_P))
         api.WlanCloseHandle(client_handle, None)
-    return collected
+    return {"entries": collected, **diagnostics}
+
+
+_WLAN_ERROR_MESSAGES = {
+    5: "Windows denied access to the WLAN results. Check Windows privacy and app permissions.",
+    8: "Windows could not allocate enough memory for the WLAN result list.",
+    50: "The WLAN service or adapter driver does not support this query.",
+    1062: "The WLAN AutoConfig service is not running.",
+    1168: "Windows could not find the requested WLAN interface.",
+    0x80342000: "The Wi-Fi radio is powered off.",
+}
+
+
+def describe_wlan_error(code: int) -> str:
+    """Return a safe, actionable explanation for a Windows WLAN error code."""
+    numeric_code = int(code)
+    return _WLAN_ERROR_MESSAGES.get(
+        numeric_code,
+        f"Windows WLAN API returned error {numeric_code} (0x{numeric_code & 0xFFFFFFFF:08X}).",
+    )
 
 
 def collect_windows_rssi_measurements(
@@ -237,15 +268,60 @@ def collect_windows_rssi_measurements(
 ) -> dict[str, object]:
     """Read the Windows WLAN BSS list; never explicitly request a new scan."""
     if api is None:
-        api = _load_wlan_api()
-    entries = _query_bss_entries(api)
-    measurements = normalise_bss_entries(entries, _load_local_alias_key(key_path))
+        try:
+            api = _load_wlan_api()
+        except RuntimeError as exc:
+            return {
+                "status": "unsupported_platform",
+                "source": "windows_wlan_bss_api",
+                "measurements": {},
+                "measurement_count": 0,
+                "errors": [{"code": None, "message": str(exc)}],
+            }
+
+    try:
+        query = _query_bss_entries(api)
+    except OSError as exc:
+        code = int(exc.errno or 0)
+        return {
+            "status": "unavailable",
+            "source": "windows_wlan_bss_api",
+            "observed_at": (now or datetime.now().astimezone()).isoformat(timespec="seconds"),
+            "measurements": {},
+            "measurement_count": 0,
+            "error_code": code,
+            "errors": [{"code": code, "message": describe_wlan_error(code)}],
+            "collection_mode": "read_only_bss_list_no_wlan_scan_call",
+        }
+
+    measurements = normalise_bss_entries(
+        query["entries"], _load_local_alias_key(key_path)
+    )
+    errors = [
+        {"code": code, "message": describe_wlan_error(code)}
+        for code in query["interface_error_codes"]
+    ]
+    if measurements and errors:
+        status = "available_with_warnings"
+    elif measurements:
+        status = "available"
+    elif not query["interfaces_seen"]:
+        status = "no_wifi_interface"
+    elif errors:
+        status = "unavailable"
+    else:
+        status = "no_measurements"
+
     return {
-        "status": "available" if measurements else "no_measurements",
+        "status": status,
         "source": "windows_wlan_bss_api",
         "observed_at": (now or datetime.now().astimezone()).isoformat(timespec="seconds"),
         "measurements": measurements,
         "measurement_count": len(measurements),
+        "interfaces_seen": query["interfaces_seen"],
+        "interfaces_queried": query["interfaces_queried"],
+        "interfaces_with_entries": query["interfaces_with_entries"],
+        "errors": errors,
         "collection_mode": "read_only_bss_list_no_wlan_scan_call",
         "privacy": {
             "raw_bssid_returned": False,
