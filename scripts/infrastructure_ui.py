@@ -130,6 +130,50 @@ def render():
             "router üzerindeki tüm DHCP istemci kayıtlarını temsil etmez."
         )
 
+    try:
+        from scripts.device_inventory import list_network_adapters
+        local_adapters = list_network_adapters()
+    except (OSError, RuntimeError, ValueError) as exc:
+        local_adapters = []
+        st.caption(f"Yerel adaptör envanteri alınamadı: {exc}")
+
+    if local_adapters:
+        st.markdown("### Bu bilgisayardaki tüm ağ adaptörleri")
+        adapter_frame = pd.DataFrame(local_adapters)
+        virtual_wlan_count = int(
+            adapter_frame["adapter_kind"].eq("virtual_wlan").sum()
+        )
+        virtual_other_count = int(
+            adapter_frame["adapter_kind"].eq("virtual_or_software").sum()
+        )
+        adapter_metrics = st.columns(3)
+        adapter_metrics[0].metric("Toplam adaptör", len(adapter_frame))
+        adapter_metrics[1].metric("Sanal WLAN", virtual_wlan_count)
+        adapter_metrics[2].metric("Diğer sanal/yazılım", virtual_other_count)
+        adapter_display = adapter_frame.rename(columns={
+            "adapter": "Adaptör",
+            "adapter_description": "Donanım açıklaması",
+            "mac": "MAC adresi",
+            "status": "Durum",
+            "adapter_kind": "Tür",
+            "hardware_interface": "Donanım arayüzü",
+            "media_type": "Medya türü",
+            "ndis_physical_medium": "Fiziksel ortam",
+            "link_speed": "Bağlantı hızı",
+            "interface_index": "Arayüz indeksi",
+        })
+        st.dataframe(
+            adapter_display,
+            width="stretch",
+            hide_index=True,
+            height=min(420, 58 + 35 * min(len(adapter_display), 10)),
+        )
+        st.caption(
+            "Bu liste fiziksel, sanal, devre dışı ve gizli Windows adaptörlerini "
+            "kapsayabilir. Yalnızca tarama bilgisayarının yerel envanteridir; "
+            "uzak cihazların adaptör listesini göstermez."
+        )
+
     if inventory.empty and nodes.empty and classification.empty:
         st.warning("Altyapi envanteri icin henuz veri bulunamadi.")
         return
