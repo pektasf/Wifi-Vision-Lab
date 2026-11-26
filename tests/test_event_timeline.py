@@ -365,3 +365,40 @@ def test_merge_event_review_states_handles_empty_and_invalid_legacy_state():
         "event_key": "wrong", "status": "unsupported", "note": "legacy",
     }]))
     assert result.iloc[0]["review_status"] == "new"
+
+
+def test_filter_event_review_status_filters_only_selected_state():
+    from scripts.event_timeline import filter_event_review_status
+
+    frame = pd.DataFrame([
+        {"event_type": "IP_CHANGED", "review_status": "new"},
+        {"event_type": "PING_NOT_RESPONDING", "review_status": "action_required"},
+        {"event_type": "seen_again", "review_status": "resolved"},
+    ])
+    result = filter_event_review_status(frame, "action_required")
+    assert result["event_type"].tolist() == ["PING_NOT_RESPONDING"]
+
+
+def test_filter_event_review_status_supports_all_and_safe_missing_data():
+    from scripts.event_timeline import filter_event_review_status
+
+    frame = pd.DataFrame([
+        {"event_type": "IP_CHANGED", "review_status": "new"},
+        {"event_type": "seen_again", "review_status": "resolved"},
+    ])
+    assert len(filter_event_review_status(frame, "all")) == 2
+    assert len(filter_event_review_status(frame)) == 2
+    assert filter_event_review_status(frame, "unknown").empty
+    assert filter_event_review_status(pd.DataFrame([{"event_type": "legacy"}]), "new").empty
+    assert filter_event_review_status(None, "new").empty
+
+
+def test_filter_event_review_status_treats_missing_status_as_new():
+    from scripts.event_timeline import filter_event_review_status
+
+    frame = pd.DataFrame([
+        {"event_type": "IP_CHANGED", "review_status": None},
+        {"event_type": "seen_again", "review_status": "resolved"},
+    ])
+    result = filter_event_review_status(frame, "new")
+    assert result["event_type"].tolist() == ["IP_CHANGED"]

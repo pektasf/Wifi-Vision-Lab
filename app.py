@@ -1241,6 +1241,7 @@ def events_page():
         filter_event_timeline,
         normalize_event_frames,
         summarize_event_severity,
+        filter_event_review_status,
         merge_event_review_states,
         upsert_event_review_state,
         EVENT_REVIEW_STATUSES,
@@ -1293,7 +1294,7 @@ def events_page():
     )
 
     st.markdown("### Olayları filtrele")
-    filter_search, filter_source, filter_severity, filter_type = st.columns([2.0, 1.05, 0.9, 1.25])
+    filter_search, filter_source, filter_severity, filter_type, filter_review = st.columns([2.0, 1.0, 0.85, 1.15, 1.05])
     with filter_search:
         term = st.text_input(
             "Olay ara",
@@ -1319,6 +1320,20 @@ def events_page():
         selected_type = st.selectbox(
             "Olay türü", type_values, key="unified_event_type"
         )
+    with filter_review:
+        review_status_labels = {
+            "all": "Tüm durumlar",
+            "new": "Yeni",
+            "reviewed": "İncelendi",
+            "action_required": "İşlem gerekli",
+            "resolved": "Çözüldü",
+        }
+        selected_review_status = st.selectbox(
+            "İnceleme",
+            options=list(review_status_labels),
+            format_func=lambda value: review_status_labels[value],
+            key="unified_event_review_status",
+        )
 
     filtered = filter_event_timeline(
         data,
@@ -1327,6 +1342,7 @@ def events_page():
         severity="" if selected_severity == "Tüm seviyeler" else selected_severity,
         event_type="" if selected_type == "Tüm olay türleri" else selected_type,
     )
+    filtered = filter_event_review_status(filtered, selected_review_status)
 
     st.caption(f"{len(filtered):,} olay eşleşti.")
     if filtered.empty:
@@ -1359,6 +1375,9 @@ def events_page():
     display["severity"] = display["severity"].map(
         lambda value: severity_labels.get(str(value).casefold(), str(value))
     )
+    display["review_status"] = display["review_status"].map(
+        lambda value: review_status_labels.get(str(value), str(value))
+    )
     display = display.rename(columns={
         "event_time": "Zaman",
         "event_type": "Olay",
@@ -1366,6 +1385,7 @@ def events_page():
         "identity_key": "Kimlik anahtarı",
         "ip": "IP adresi",
         "severity": "Önem",
+        "review_status": "İnceleme",
         "old_value": "Önceki değer",
         "new_value": "Yeni değer",
         "details": "Açıklama",
