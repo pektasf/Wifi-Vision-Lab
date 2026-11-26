@@ -1,4 +1,6 @@
-from scripts.discovery.engine import (\n    build_device_profiles, build_inventory_rows, classify_observation_evidence\n)
+from scripts.discovery.engine import (
+    build_device_profiles, build_inventory_rows, classify_observation_evidence
+)
 
 
 def test_profiles_merge_same_mac_across_sources_and_ips():
