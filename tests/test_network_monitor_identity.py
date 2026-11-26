@@ -84,7 +84,8 @@ def test_run_migrates_legacy_event_csv_without_losing_rows(tmp_path, monkeypatch
         tmp_path / "last_inventory.csv", index=False
     )
     (tmp_path / "network_events.csv").write_text(
-        "timestamp,event,ip\\n2026-11-25T09:00:00+03:00,FIRST_OBSERVED,192.168.1.50\\n",
+        "timestamp,event,ip" + chr(10)
+        + "2026-11-25T09:00:00+03:00,FIRST_OBSERVED,192.168.1.50" + chr(10),
         encoding="utf-8",
     )
 
