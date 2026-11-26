@@ -134,3 +134,16 @@ def prepare_relationship_history(edges, source, target, edge_from, edge_to):
     else:
         result = result.iloc[::-1]
     return result.reset_index(drop=True)
+
+
+
+def topology_render_profile(node_count, edge_count=0):
+    """Choose readable, scalable Plotly rendering settings for topology size."""
+    node_count = max(0, int(node_count or 0))
+    edge_count = max(0, int(edge_count or 0))
+    return {
+        "use_webgl": node_count >= 300 or edge_count >= 500,
+        "show_labels": node_count <= 120,
+        "node_count": node_count,
+        "edge_count": edge_count,
+    }
