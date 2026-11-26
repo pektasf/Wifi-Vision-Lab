@@ -60,12 +60,14 @@ def _same_subnet(ip_value, subnet_value):
 
 
 def build_topology(inventory, profiles=None, intelligence=None,
-                   classifications=None, ap_relationships=None):
+                   classifications=None, ap_relationships=None,
+                   network_context=None):
     """Return topology nodes/edges with explicit evidence provenance."""
     profiles = profiles if profiles is not None else pd.DataFrame()
     intelligence = intelligence if intelligence is not None else pd.DataFrame()
     classifications = classifications if classifications is not None else pd.DataFrame()
     ap_relationships = ap_relationships if ap_relationships is not None else pd.DataFrame()
+    network_context = network_context if network_context is not None else pd.DataFrame()
 
     if inventory.empty or "ip" not in inventory.columns:
         return [], []
@@ -226,6 +228,62 @@ def build_topology(inventory, profiles=None, intelligence=None,
                 "details": "Configuration relationship only; not a physical link.",
             })
 
+    # DHCP server data describes the local adapter's configuration only.
+    # It is attached to the scanned subnet as context, never as a physical hop.
+    if not network_context.empty:
+        context_row = network_context.iloc[-1]
+        dhcp_server = str(context_row.get("dhcp_server", "")).strip()
+        network_cidr = str(context_row.get("network_cidr", "")).strip()
+        if dhcp_server and str(context_row.get("dhcp_enabled", "")).strip().lower() in {"enabled", "true", "1"}:
+            try:
+                dhcp_address = ipaddress.ip_address(dhcp_server)
+                if dhcp_address.version == 4:
+                    canonical_subnet = str(ipaddress.ip_network(network_cidr, strict=False)) if network_cidr else ""
+                    scope_id = scopes.get(canonical_subnet) if canonical_subnet else None
+                    if not scope_id and canonical_subnet:
+                        scope_id = f"NETWORK:{canonical_subnet}"
+                        nodes_by_id.setdefault(scope_id, {
+                            "id": scope_id,
+                            "label": f"Observed subnet {canonical_subnet}",
+                            "node_type": "network_scope",
+                            "ip": "", "mac": "", "vendor": "",
+                            "status": "adapter_context_scope",
+                            "classification": "Local adapter network context",
+                            "evidence_type": "adapter_configuration",
+                            "evidence_source": "network_context.csv",
+                            "confidence": "context_only",
+                            "details": "Subnet from the selected local adapter configuration; not a physical device."
+                        })
+                    if scope_id:
+                        server_id = dhcp_server
+                        if server_id not in nodes_by_id:
+                            nodes_by_id[server_id] = {
+                                "id": server_id,
+                                "label": "Configured DHCP server address",
+                                "node_type": "dhcp_server_address",
+                                "ip": dhcp_server, "mac": "", "vendor": "",
+                                "status": "configured_not_observed",
+                                "classification": "DHCP server from local adapter configuration",
+                                "evidence_type": "dhcp_configuration",
+                                "evidence_source": "Windows network configuration",
+                                "confidence": "context_only",
+                                "details": "The selected adapter reports this DHCP server address; server identity and physical links are not confirmed."
+                            }
+                        else:
+                            nodes_by_id[server_id]["details"] += " DHCP server address is also reported by the selected adapter configuration."
+                        edges.append({
+                            "source": scope_id,
+                            "target": server_id,
+                            "relation": "configured_dhcp_server",
+                            "confidence": "context_only",
+                            "evidence_type": "dhcp_configuration",
+                            "evidence_source": "Windows network configuration",
+                            "observed_at": str(context_row.get("captured_at", "")),
+                            "details": "Local adapter configuration only; this does not establish a physical link or enumerate DHCP clients."
+                        })
+            except ValueError:
+                pass
+
     # Only the latest direct, verified WLAN association per client is a
     # current topology edge. Older observations remain in the local history CSV
     # and must not be drawn as if the client were still attached to old APs.
@@ -312,9 +370,11 @@ def run():
     intelligence = read_data("device_intelligence.csv")
     classifications = read_data("device_classification.csv")
     ap_relationships = read_data("ap_client_relationships.csv")
+    network_context = read_data("network_context.csv")
 
     nodes, edges = build_topology(
-        inventory, profiles, intelligence, classifications, ap_relationships
+        inventory, profiles, intelligence, classifications, ap_relationships,
+        network_context
     )
     overwrite_rows(DATA / "topology_nodes.csv", nodes, NODE_FIELDS)
     overwrite_rows(DATA / "topology_edges.csv", edges, EDGE_FIELDS)
