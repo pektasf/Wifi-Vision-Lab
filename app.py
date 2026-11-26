@@ -1247,6 +1247,7 @@ def events_page():
         upsert_event_review_state,
         append_event_review_history,
         filter_event_review_history,
+        format_event_review_changes,
         EVENT_REVIEW_STATUSES,
         EVENT_REVIEW_PRIORITIES,
     )
@@ -1628,6 +1629,10 @@ def events_page():
             "assignee": "Sorumlu",
             "note": "Not",
         })
+        if "Değişen alanlar" in history_display.columns:
+            history_display["Değişen alanlar"] = history_display["Değişen alanlar"].map(
+                format_event_review_changes
+            )
         st.dataframe(
             history_display.head(30),
             width="stretch",
