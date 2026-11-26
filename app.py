@@ -1239,6 +1239,111 @@ def spatial_intelligence_page():
     except ImportError:
         st.warning("Kat planı çizimi için Plotly kurulu değil.")
 
+    st.divider()
+    st.subheader("Wi-Fi parmak izi ile bölge tahmini")
+    st.caption(
+        "Bu deney, farklı odalarda ölçülen erişim noktası sinyal seviyelerini yerel referanslarla "
+        "karşılaştırır. Şimdilik ölçümler elle girilir; otomatik Windows taraması yapılmaz."
+    )
+    from scripts.spatial_fingerprints import (
+        estimate_zone,
+        list_fingerprints,
+        parse_measurement_lines,
+        save_fingerprint,
+    )
+
+    if zones:
+        zone_lookup = {zone["zone_id"]: zone for zone in zones}
+        with st.form("spatial_fingerprint_survey_form", clear_on_submit=True):
+            st.markdown("**Bu noktada referans ölçümü kaydet**")
+            survey_zone_id = st.selectbox(
+                "Bulunduğun bölge",
+                options=list(zone_lookup),
+                format_func=lambda zone_id: zone_lookup[zone_id]["name"],
+            )
+            survey_label = st.text_input(
+                "Ölçüm adı", placeholder="Örn. Oda A - kapı yanı"
+            )
+            survey_values = st.text_area(
+                "AP takma adı ve RSSI (her satırda AP-01,-62 biçiminde)",
+                placeholder="# Örnek\nAP-01,-62\nAP-02,-74\nAP-03,-81",
+                height=110,
+            )
+            survey_notes = st.text_input("Not (isteğe bağlı)")
+            survey_submit = st.form_submit_button("Referans ölçümünü kaydet")
+
+        if survey_submit:
+            try:
+                parsed = parse_measurement_lines(survey_values)
+                if len(parsed) < 2:
+                    raise ValueError("En az iki farklı AP takma adı ölçümü girin.")
+                save_fingerprint(
+                    selected_floor_id, survey_zone_id, survey_label, parsed,
+                    source="manual", notes=survey_notes,
+                )
+            except ValueError as exc:
+                st.error(str(exc))
+            else:
+                st.success("Referans parmak izi yerel SQLite'a kaydedildi.")
+                st.rerun()
+
+        with st.form("spatial_fingerprint_estimate_form"):
+            st.markdown("**Yeni ölçümün bölgesini tahmin et**")
+            query_values = st.text_area(
+                "Anlık AP sinyal ölçümleri (AP takma adı,-dBm)",
+                placeholder="AP-01,-64\nAP-02,-72\nAP-03,-79",
+                height=100,
+            )
+            estimate_submit = st.form_submit_button("Bölgeyi tahmin et")
+
+        if estimate_submit:
+            try:
+                query_measurements = parse_measurement_lines(query_values)
+                if len(query_measurements) < 2:
+                    raise ValueError("Tahmin için en az iki AP ölçümü girin.")
+                estimate = estimate_zone(
+                    selected_floor_id, query_measurements, k=3, min_overlap=2,
+                )
+            except ValueError as exc:
+                st.error(str(exc))
+            else:
+                if estimate["status"] == "estimated":
+                    st.metric("Tahmin edilen bölge", estimate["zone_name"])
+                    st.caption(
+                        f"Benzerlik tabanlı eşleşme uyumu: %{estimate['confidence'] * 100:.1f} "
+                        f"| En yakın referans farkı: {estimate['nearest_distance_db']} dB"
+                    )
+                elif estimate["status"] == "ambiguous":
+                    st.warning("Ölçüm birden fazla bölgeyle benzer eşleşti; konum belirsiz.")
+                else:
+                    st.warning(estimate["message"])
+                st.caption(
+                    "Bu sonuç yalnızca deneysel bölge tahminidir. Yüzde bir doğruluk olasılığı "
+                    "değildir; metre cinsinden mesafe veya koordinat üretmez."
+                )
+                if estimate.get("nearest_samples"):
+                    st.dataframe(
+                        pd.DataFrame(estimate["nearest_samples"]),
+                        width="stretch", hide_index=True,
+                    )
+
+        stored_samples = list_fingerprints(selected_floor_id)
+        st.caption(f"Bu katta kayıtlı referans ölçümü: {len(stored_samples)}")
+        if stored_samples:
+            sample_rows = [
+                {
+                    "Ölçüm": item["label"],
+                    "Bölge": zone_lookup.get(item["zone_id"], {}).get("name", "Bilinmiyor"),
+                    "AP sayısı": len(item["measurements"]),
+                    "Kaynak": item["source"],
+                    "Zaman": item["observed_at"],
+                }
+                for item in stored_samples
+            ]
+            st.dataframe(pd.DataFrame(sample_rows), width="stretch", hide_index=True)
+    else:
+        st.info("Parmak izi ölçümü için önce en az bir bölge/oda tanımlayın.")
+
     left, right = st.columns(2)
     with left:
         st.markdown("**Bölgeler**")
