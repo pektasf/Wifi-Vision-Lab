@@ -337,3 +337,42 @@ def test_relationship_history_is_empty_for_missing_pair_or_schema():
     assert prepare_relationship_history(edges, "", "b", "source", "target").empty
     assert prepare_relationship_history(edges, "a", "missing", "source", "target").empty
     assert prepare_relationship_history(edges, "a", "b", None, "target").empty
+
+
+
+def test_topology_render_profile_uses_svg_for_small_maps_and_keeps_labels():
+    from scripts.topology_evidence import topology_render_profile
+
+    profile = topology_render_profile(120, 20)
+
+    assert profile["use_webgl"] is False
+    assert profile["show_labels"] is True
+
+
+def test_topology_render_profile_simplifies_labels_for_dense_maps():
+    from scripts.topology_evidence import topology_render_profile
+
+    profile = topology_render_profile(121, 20)
+
+    assert profile["use_webgl"] is False
+    assert profile["show_labels"] is False
+
+
+def test_topology_render_profile_switches_to_webgl_at_node_or_edge_threshold():
+    from scripts.topology_evidence import topology_render_profile
+
+    assert topology_render_profile(300, 10)["use_webgl"] is True
+    assert topology_render_profile(40, 500)["use_webgl"] is True
+
+
+def test_topology_render_profile_handles_missing_and_negative_counts():
+    from scripts.topology_evidence import topology_render_profile
+
+    profile = topology_render_profile(None, -5)
+
+    assert profile == {
+        "use_webgl": False,
+        "show_labels": True,
+        "node_count": 0,
+        "edge_count": 0,
+    }

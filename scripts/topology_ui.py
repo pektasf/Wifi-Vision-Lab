@@ -8,6 +8,7 @@ from scripts.topology_evidence import (
     prepare_relationship_history,
     prepare_verified_edge_options,
     split_topology_edges,
+    topology_render_profile,
 )
 
 
@@ -187,6 +188,9 @@ def render():
                     positions[node_id] = (x, y)
                 lane_cursor -= row_count * 1.5 + 1.8
 
+            render_profile = topology_render_profile(total, len(verified_edges))
+            node_trace_type = go.Scattergl if render_profile["use_webgl"] else go.Scatter
+            edge_trace_type = node_trace_type
             figure = go.Figure()
             edge_x, edge_y = [], []
             if edge_from and edge_to:
@@ -201,7 +205,7 @@ def render():
                             positions[source_id][1], positions[target_id][1], None
                         ])
             if edge_x:
-                figure.add_trace(go.Scatter(
+                figure.add_trace(edge_trace_type(
                     x=edge_x,
                     y=edge_y,
                     mode="lines",
@@ -230,12 +234,12 @@ def render():
                         f"MAC: {html.escape(str(row.get(mac_col, '')))}"
                     )
                 node_ids = [item[0] for item in members]
-                figure.add_trace(go.Scatter(
+                figure.add_trace(node_trace_type(
                     x=x_values,
                     y=y_values,
                     customdata=node_ids,
-                    mode="markers+text",
-                    text=labels,
+                    mode="markers+text" if render_profile["show_labels"] else "markers",
+                    text=labels if render_profile["show_labels"] else None,
                     textposition="top center",
                     textfont={"size": 9, "color": "#344744"},
                     hovertext=hover,
@@ -249,6 +253,13 @@ def render():
                     name=lane,
                 ))
 
+            if not render_profile["show_labels"]:
+                st.caption(
+                    f"Yoğun harita modu: {total:,} cihaz için etiketler sadeleştirildi. "
+                    "Tam cihaz bilgisi için düğümlerin üzerine gelin; yakınlaştırma ve "
+                    "otomatik sığdırma araçlarını kullanabilirsiniz."
+                )
+
             if not edge_x:
                 st.info(
                     "Henüz doğrulanmış bağlantı yok. Cihazlar rol gruplarında gösteriliyor; "
@@ -260,6 +271,7 @@ def render():
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="#FFFFFF",
                 showlegend=True,
+                uirevision="topology-network-map-v1",
                 legend={"orientation": "h", "y": 1.08, "x": 0},
                 font={"family": "Segoe UI, sans-serif", "color": "#182B2A", "size": 11},
                 xaxis={"visible": False, "showgrid": False, "zeroline": False},
@@ -281,7 +293,12 @@ def render():
             chart_selection = st.plotly_chart(
                 figure,
                 width="stretch",
-                config={"displayModeBar": False},
+                config={
+                    "displayModeBar": True,
+                    "displaylogo": False,
+                    "scrollZoom": True,
+                    "responsive": True,
+                },
                 on_select="rerun",
                 selection_mode="points",
                 key="topology_relationship_map",

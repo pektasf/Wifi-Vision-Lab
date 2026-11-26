@@ -63,3 +63,13 @@ context_only relationships separately.
   other AP clients require additional supported evidence.
 - Historical verified associations show that an association was observed at
   a time; they do not necessarily describe the current connection.
+
+
+## Large-topology rendering
+
+The topology graph keeps vector traces for smaller maps and switches node/edge
+traces to Plotly WebGL when there are at least 300 devices or 500 verified
+relationships. Device labels are shown on maps with up to 120 devices; larger
+maps keep hover details and reduce always-visible text to avoid visual and
+rendering overload. The map exposes Plotly zoom, pan, scroll zoom and autoscale
+controls, and preserves the current viewport across Streamlit reruns.
