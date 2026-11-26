@@ -45,3 +45,13 @@ A Zeek DHCP record's server address is not a subnet identifier. Therefore,
 the import view does not claim an IP-only inventory match unless both records
 carry the same explicit network scope. An exact MAC observation may still be
 shown as a MAC correlation, but it is not proof of a physical device or person.
+
+
+## Timestamp formats
+
+Zeek's JSON writer defaults to UNIX epoch seconds. It can also be configured
+for epoch milliseconds or ISO-8601 timestamps. The importer converts numeric
+seconds and milliseconds to UTC ISO-8601 values so timeline sorting and display
+use real timestamps; existing ISO-8601 strings are preserved. See the
+[Zeek JSON logging documentation](https://docs.zeek.org/en/current/scripts/base/frameworks/logging/writers/ascii.zeek.html)
+for the timestamp format setting.
