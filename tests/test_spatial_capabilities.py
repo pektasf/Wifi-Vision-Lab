@@ -142,7 +142,7 @@ def test_capability_report_is_json_shareable_without_network_identity():
             stdout=(
                 "Driver : Example Wi-Fi Adapter"
                 if args[:4] == ["netsh", "wlan", "show", "drivers"]
-                else "Name : Wi-Fi\\nState : connected\\nSignal : 75%"
+                else "Name : Wi-Fi\nState : connected\nSSID : PRIVATE-NETWORK-NAME\nBSSID : AA:BB:CC:DD:EE:FF\nSignal : 75%"
                 if args[:4] == ["netsh", "wlan", "show", "interfaces"]
                 else '[{"Name":"Wi-Fi","InterfaceDescription":"Example Adapter","Status":"Up"}]'
             ),
@@ -152,6 +152,6 @@ def test_capability_report_is_json_shareable_without_network_identity():
     )
     exported = json.dumps(report, ensure_ascii=False)
 
-    assert "SSID" not in exported
-    assert "BSSID" not in exported
+    assert "PRIVATE-NETWORK-NAME" not in exported
+    assert "AA:BB:CC:DD:EE:FF" not in exported
     assert "Example Adapter" in exported
