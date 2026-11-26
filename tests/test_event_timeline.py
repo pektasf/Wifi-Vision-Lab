@@ -698,3 +698,55 @@ def test_summarize_event_review_workload_defaults_missing_fields_and_handles_emp
     assert result.iloc[0]["open_events"] == 1
     assert result.iloc[0]["new_events"] == 1
     assert result.iloc[0]["high_priority_open"] == 0
+
+
+
+def test_sort_event_review_queue_prioritizes_unassigned_and_high_priority_stably():
+    from scripts.event_timeline import sort_event_review_queue
+    frame = pd.DataFrame([
+        {"event_key": "assigned-low", "event_time": "2026-11-26T10:00:00Z", "review_status": "new", "review_priority": "low", "review_assignee": "Ops"},
+        {"event_key": "assigned-critical", "event_time": "2026-11-26T09:00:00Z", "review_status": "new", "review_priority": "critical", "review_assignee": "Ops"},
+        {"event_key": "unassigned-high", "event_time": "2026-11-26T08:00:00Z", "review_status": "action_required", "review_priority": "high", "review_assignee": ""},
+        {"event_key": "resolved-critical", "event_time": "2026-11-26T11:00:00Z", "review_status": "resolved", "review_priority": "critical", "review_assignee": ""},
+    ])
+    result = sort_event_review_queue(frame, "priority", unassigned_first=True)
+    assert result["event_key"].tolist() == ["unassigned-high", "assigned-critical", "assigned-low", "resolved-critical"]
+    assert not any(c.startswith("_queue_") for c in result.columns)
+    assert frame["event_key"].iloc[0] == "assigned-low"
+
+
+def test_sort_event_review_queue_handles_newest_open_and_invalid_modes():
+    import pytest
+    from scripts.event_timeline import sort_event_review_queue
+    frame = pd.DataFrame([
+        {"event_key": "old-open", "event_time": "2026-11-25T10:00:00Z", "review_status": "new"},
+        {"event_key": "new-open", "event_time": "2026-11-26T10:00:00Z", "review_status": "reviewed"},
+        {"event_key": "new-resolved", "event_time": "2026-11-27T10:00:00Z", "review_status": "resolved"},
+    ])
+    assert sort_event_review_queue(frame, "newest")["event_key"].tolist() == ["new-open", "old-open", "new-resolved"]
+    assert sort_event_review_queue(frame, "open")["event_key"].tolist() == ["new-open", "old-open", "new-resolved"]
+    with pytest.raises(ValueError): sort_event_review_queue(frame, "random")
+    assert sort_event_review_queue(None).empty
+
+
+def test_add_event_review_history_summary_counts_and_finds_latest_timestamp():
+    from scripts.event_timeline import add_event_review_history_summary
+    events = pd.DataFrame([{"event_key": "a"}, {"event_key": "b"}])
+    history = pd.DataFrame([
+        {"event_key": "a", "updated_at": "2026-11-25T10:00:00Z"},
+        {"event_key": "a", "updated_at": "2026-11-26T10:00:00Z"},
+        {"event_key": "b", "updated_at": "2026-11-24T10:00:00Z"},
+    ])
+    result = add_event_review_history_summary(events, history).set_index("event_key")
+    assert result.loc["a", "review_history_count"] == 2
+    assert result.loc["a", "review_last_updated"] == "2026-11-26T10:00:00Z"
+    assert result.loc["b", "review_history_count"] == 1
+    assert result.loc["b", "review_last_updated"] == "2026-11-24T10:00:00Z"
+
+
+def test_add_event_review_history_summary_handles_missing_or_empty_history():
+    from scripts.event_timeline import add_event_review_history_summary
+    events = pd.DataFrame([{"event_key": "a"}])
+    assert add_event_review_history_summary(events, None).iloc[0]["review_history_count"] == 0
+    assert add_event_review_history_summary(events, pd.DataFrame()).iloc[0]["review_last_updated"] == ""
+    assert add_event_review_history_summary(None, None).empty
