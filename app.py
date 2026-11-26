@@ -588,12 +588,20 @@ def devices_page():
             data[column] = ""
     data["status"] = data["status"].fillna("").astype(str).replace("", "Bilinmiyor")
     summary = inventory_status_summary(data)
+    if "identity_assessment" not in data.columns:
+        data["identity_assessment"] = "no_indicator_observed"
+    if "identity_signals" not in data.columns:
+        data["identity_signals"] = ""
+    identity_review_count = int(
+        data["identity_assessment"].isin(["review", "indicator"]).sum()
+    )
 
-    metrics = st.columns(4)
+    metrics = st.columns(5)
     metrics[0].metric("Bilinen cihaz", f"{summary['total']:,}")
     metrics[1].metric("Yanıt veren", f"{summary['responding']:,}")
     metrics[2].metric("Yanıt vermeyen", f"{summary['unresponsive']:,}")
     metrics[3].metric("Durumu bilinmeyen", f"{summary['unknown']:,}")
+    metrics[4].metric("Kimlik göstergesi", f"{identity_review_count:,}")
 
     search_col, status_col, type_col = st.columns([2, 1, 1])
     with search_col:
@@ -646,7 +654,7 @@ def devices_page():
 
     preferred = [
         "hostname", "ip", "mac", "status", "vendor",
-        "classification", "device_type", "gateway", "subnet", "adapter",
+        "classification", "device_type", "identity_assessment", "identity_signals", "gateway", "subnet", "adapter",
     ]
     columns = [column for column in preferred if column in filtered.columns]
     display = filtered[columns].rename(columns={
@@ -657,6 +665,8 @@ def devices_page():
         "vendor": "Üretici",
         "classification": "Sınıflandırma",
         "device_type": "Cihaz türü",
+        "identity_assessment": "Kimlik değerlendirmesi",
+        "identity_signals": "Kimlik göstergeleri",
         "gateway": "Varsayılan ağ geçidi",
         "subnet": "Alt ağ",
         "adapter": "Ağ arayüzü",
@@ -669,6 +679,29 @@ def devices_page():
     )
     if len(display) > 250:
         st.caption("İlk 250 cihaz gösteriliyor. Arama ve filtrelerle listeyi daraltabilirsiniz.")
+
+    st.markdown("### Kimlik gizleme / adres değişimi göstergeleri")
+    st.caption(
+        "Bunlar gözlemlenebilir davranış göstergeleridir. Tek başına MAC sahteciliği, "
+        "saldırı veya gerçek cihaz kimliği kanıtı değildir. Randomize/özel MAC kullanımı "
+        "normal bir gizlilik özelliği olabilir."
+    )
+    flagged = filtered[filtered["identity_assessment"].isin(["review", "indicator"])]
+    if flagged.empty:
+        st.info(
+            "Mevcut gözlemlerde kimlik değişimi göstergesi bulunmadı. "
+            "Bu, tüm cihazların kimliğinin kesin doğrulandığı anlamına gelmez."
+        )
+    else:
+        identity_columns = [
+            column for column in [
+                "hostname", "ip", "mac", "identity_assessment",
+                "identity_signals", "subnet"
+            ] if column in flagged.columns
+        ]
+        st.dataframe(
+            flagged[identity_columns], width="stretch", hide_index=True
+        )
 
     st.markdown("### Seçili cihazın teknik ayrıntıları")
     selected_index = st.selectbox(
