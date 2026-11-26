@@ -1,0 +1,67 @@
+"""Normalize local network observations into one searchable event timeline."""
+from __future__ import annotations
+
+import pandas as pd
+
+EVENT_SOURCES = {
+    "device_events.csv": "Cihaz olayları",
+    "network_events.csv": "Ağ olayları",
+    "live_events.csv": "Canlı izleme",
+    "behavior_findings.csv": "Davranış analizi",
+}
+
+TIME_FIELDS = ("event_time", "timestamp", "observed_at", "time")
+TYPE_FIELDS = ("event_type", "event", "type", "event_name")
+DETAIL_FIELDS = ("details", "detail", "description", "message")
+
+
+def _value(row: pd.Series, fields: tuple[str, ...], default: str = "") -> str:
+    for field in fields:
+        value = row.get(field, "")
+        if pd.notna(value) and str(value).strip():
+            return str(value).strip()
+    return default
+
+
+def normalize_event_frames(frames: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    """Return a stable, newest-first timeline without discarding source context."""
+    records: list[dict[str, str]] = []
+    for filename, frame in frames.items():
+        if frame is None or frame.empty:
+            continue
+        source = EVENT_SOURCES.get(filename, filename)
+        for _, row in frame.fillna("").iterrows():
+            subject = _value(
+                row, ("identity_key", "subject", "mac", "client_mac", "ip"),
+                "Genel ağ olayı",
+            )
+            records.append({
+                "event_time": _value(row, TIME_FIELDS),
+                "event_type": _value(row, TYPE_FIELDS, "unknown_event"),
+                "subject": subject,
+                "severity": _value(row, ("severity",), "info"),
+                "old_value": _value(row, ("old_value",)),
+                "new_value": _value(row, ("new_value",)),
+                "details": _value(row, DETAIL_FIELDS),
+                "source": source,
+            })
+
+    columns = [
+        "event_time", "event_type", "subject", "severity",
+        "old_value", "new_value", "details", "source",
+    ]
+    if not records:
+        return pd.DataFrame(columns=columns)
+
+    result = pd.DataFrame(records, columns=columns)
+    result["_parsed_time"] = pd.to_datetime(
+        result["event_time"], utc=True, errors="coerce"
+    )
+    result["_order"] = range(len(result))
+    result = result.sort_values(
+        ["_parsed_time", "_order"],
+        ascending=[False, True],
+        na_position="last",
+        kind="stable",
+    )
+    return result.drop(columns=["_parsed_time", "_order"]).reset_index(drop=True)
