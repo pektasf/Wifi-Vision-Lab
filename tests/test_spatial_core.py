@@ -34,7 +34,7 @@ def test_schema_v2_upgrades_to_spatial_schema_without_losing_data(tmp_path):
     initialize_database(db_path)
 
     with connect(db_path) as connection:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 4
         assert connection.execute(
             "SELECT updated_at FROM dataset_snapshots WHERE dataset='keep.csv'"
         ).fetchone()["updated_at"] == "before-migration"
@@ -43,7 +43,7 @@ def test_schema_v2_upgrades_to_spatial_schema_without_losing_data(tmp_path):
                 "SELECT name FROM sqlite_master WHERE type='table'"
             )
         }
-    assert {"spatial_floors", "spatial_zones", "spatial_anchors"} <= tables
+    assert {"spatial_floors", "spatial_zones", "spatial_anchors", "spatial_fingerprints"} <= tables
 
 
 def test_floor_zone_and_anchor_round_trip_are_local_sqlite_records(tmp_path):
