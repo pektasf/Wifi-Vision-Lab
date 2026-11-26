@@ -602,7 +602,10 @@ def sort_event_review_queue(frame: pd.DataFrame | None, sort_by: str = "priority
         cols, asc = ["_queue_resolved", "_queue_time"], [True, False]
     else:
         cols, asc = ["_queue_resolved", "_queue_priority", "_queue_time"], [True, True, False]
-    if unassigned_first: cols.insert(0, "_queue_unassigned"); asc.insert(0, False)
+    if unassigned_first:
+        insert_at = 1 if sort_by != "newest" else 1
+        cols.insert(insert_at, "_queue_unassigned")
+        asc.insert(insert_at, False)
     result = result.sort_values(cols, ascending=asc, na_position="last", kind="stable")
     return result.drop(columns=[c for c in result.columns if c.startswith("_queue_")]).reset_index(drop=True)
 
