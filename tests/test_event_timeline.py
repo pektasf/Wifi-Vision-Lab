@@ -624,7 +624,7 @@ def test_bulk_event_review_preserves_unselected_fields_and_skips_noop_audit():
     assert updated.iloc[0]["note"] == "Mevcut not"
     assert updated.iloc[0]["priority"] == "high"
     assert updated.iloc[0]["assignee"] == "Nöbetçi ekip"
-    assert updated.iloc[0]["updated_at"] == "2026-11-26T10:00:00Z"
+    assert updated.iloc[0]["updated_at"] == "old"
 
 
 def test_bulk_event_review_deduplicates_event_keys_and_can_clear_assignee():
