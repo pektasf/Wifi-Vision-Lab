@@ -151,10 +151,15 @@ def test_windows_interface_listing_includes_hosted_network_without_gateway(monke
         {
             "IP": "192.168.1.20", "Prefix": 24, "Gateway": "192.168.1.1",
             "Adapter": "Wi-Fi", "InterfaceIndex": 7,
+            "DHCPEnabled": "True", "DHCPServer": "192.168.1.1",
+            "DHCPLeaseObtained": "2026-11-26T06:00:00.0000000Z",
+            "DHCPLeaseExpires": "2026-11-27T06:00:00.0000000Z",
         },
         {
             "IP": "192.168.137.1", "Prefix": 24, "Gateway": "",
             "Adapter": "Local Area Connection* 12", "InterfaceIndex": 19,
+            "DHCPEnabled": "False", "DHCPServer": "",
+            "DHCPLeaseObtained": "", "DHCPLeaseExpires": "",
         },
     ]
     monkeypatch.setattr(device_inventory.platform, "system", lambda: "Windows")
@@ -176,6 +181,15 @@ def test_windows_interface_listing_includes_hosted_network_without_gateway(monke
     assert hosted["network"] == "192.168.137.0/24"
     assert hosted["gateway"] == ""
     assert hosted["has_default_gateway"] is False
+    assert hosted["dhcp_enabled"] is False
+    assert hosted["dhcp_server"] == ""
+    assert hosted["dhcp_lease_obtained"] == ""
+    assert hosted["dhcp_lease_expires"] == ""
+    wifi = interfaces[0]
+    assert wifi["dhcp_enabled"] is True
+    assert wifi["dhcp_server"] == "192.168.1.1"
+    assert wifi["dhcp_lease_obtained"] == "2026-11-26T06:00:00.0000000Z"
+    assert wifi["dhcp_lease_expires"] == "2026-11-27T06:00:00.0000000Z"
 
 
 def test_get_network_can_select_hosted_network_adapter(monkeypatch):
@@ -202,6 +216,8 @@ def test_get_network_can_select_hosted_network_adapter(monkeypatch):
     assert selected["network"] == "192.168.137.0/24"
     assert selected["gateway"] == ""
     assert selected["has_default_gateway"] is False
+    assert selected["dhcp_enabled"] is False
+    assert selected["dhcp_server"] == ""
 
 
 def test_get_network_rejects_stale_adapter_selection(monkeypatch):
@@ -229,6 +245,8 @@ def test_scan_network_diagnostics_show_selected_adapter_and_gateway():
     assert "192.168.137.0/24" in message
     assert "ağ geçidi=yok" in message
     assert "arayüz indeksi=19" in message
+    assert "DHCP=devre dışı/bilinmiyor" in message
+    assert "DHCP sunucusu=bilinmiyor" in message
 
 
 def test_scan_network_diagnostics_show_gateway_when_present():
@@ -243,4 +261,27 @@ def test_scan_network_diagnostics_show_gateway_when_present():
     })
 
     assert "ağ geçidi=192.168.1.1" in message
+    assert "DHCP=devre dışı/bilinmiyor" in message
     assert "yok" not in message
+
+
+
+def test_scan_network_diagnostics_show_dhcp_lease_context():
+    from scripts.device_inventory import format_network_diagnostics
+
+    message = format_network_diagnostics({
+        "adapter": "Wi-Fi",
+        "ip": "192.168.1.20",
+        "network": "192.168.1.0/24",
+        "gateway": "192.168.1.1",
+        "interface_index": 7,
+        "dhcp_enabled": True,
+        "dhcp_server": "192.168.1.1",
+        "dhcp_lease_obtained": "2026-11-26T06:00:00Z",
+        "dhcp_lease_expires": "2026-11-27T06:00:00Z",
+    })
+
+    assert "DHCP=etkin" in message
+    assert "DHCP sunucusu=192.168.1.1" in message
+    assert "kira başlangıcı=2026-11-26T06:00:00Z" in message
+    assert "kira bitişi=2026-11-27T06:00:00Z" in message
