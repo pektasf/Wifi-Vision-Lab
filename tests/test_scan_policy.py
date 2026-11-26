@@ -302,3 +302,45 @@ def test_scan_network_diagnostics_distinguish_disabled_dhcp():
     })
 
     assert "DHCP=devre dışı" in message
+
+
+
+def test_network_context_snapshot_records_selected_adapter_and_dhcp_metadata():
+    from scripts.device_inventory import (
+        NETWORK_CONTEXT_FIELDS,
+        build_network_context_row,
+    )
+
+    row = build_network_context_row({
+        "adapter": "Wi-Fi",
+        "interface_index": 7,
+        "ip": "192.0.2.10",
+        "network": "192.0.2.0/24",
+        "gateway": "192.0.2.1",
+        "dhcp_enabled": True,
+        "dhcp_server": "192.0.2.1",
+        "dhcp_lease_obtained": "2026-11-26T06:00:00Z",
+        "dhcp_lease_expires": "2026-11-27T06:00:00Z",
+    }, captured_at="2026-11-26T11:00:00+03:00")
+
+    assert list(row) == NETWORK_CONTEXT_FIELDS
+    assert row["captured_at"] == "2026-11-26T11:00:00+03:00"
+    assert row["adapter"] == "Wi-Fi"
+    assert row["interface_index"] == "7"
+    assert row["local_ipv4"] == "192.0.2.10"
+    assert row["network_cidr"] == "192.0.2.0/24"
+    assert row["dhcp_enabled"] == "enabled"
+    assert row["dhcp_server"] == "192.0.2.1"
+    assert row["dhcp_lease_obtained"] == "2026-11-26T06:00:00Z"
+    assert row["dhcp_lease_expires"] == "2026-11-27T06:00:00Z"
+    assert row["evidence_source"] == "windows_ip_configuration"
+
+
+def test_network_context_snapshot_distinguishes_disabled_from_unknown_dhcp():
+    from scripts.device_inventory import build_network_context_row
+
+    disabled = build_network_context_row({"dhcp_enabled": False}, captured_at="fixed")
+    unknown = build_network_context_row({}, captured_at="fixed")
+
+    assert disabled["dhcp_enabled"] == "disabled"
+    assert unknown["dhcp_enabled"] == "unknown"
