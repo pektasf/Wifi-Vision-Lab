@@ -3163,6 +3163,7 @@ with st.sidebar:
                      if item["has_default_gateway"]),
                     network_interfaces[0]["adapter"],
                 )
+                st.session_state["scan_interface_alias"] = current_alias
             st.selectbox(
                 "Ağ adaptörü",
                 options=list(interface_options),
