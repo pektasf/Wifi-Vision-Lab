@@ -99,3 +99,58 @@ def test_endpoint_adapter_import_ignores_ipv6_values():
         }],
     }
     assert normalize_endpoint_adapter_payload(payload) == []
+
+
+
+def test_endpoint_virtual_adapter_evidence_matches_inventory_by_mac_first():
+    from scripts.discovery.endpoint_adapter_evidence import (
+        enrich_inventory_with_endpoint_adapters,
+    )
+    inventory = [{
+        "hostname": "test-device",
+        "ip": "192.168.1.20",
+        "mac": "02:11:22:33:44:55",
+    }]
+    endpoint = [{
+        "endpoint_ip": "192.168.1.99",
+        "endpoint_mac": "02-11-22-33-44-55",
+        "adapter_name": "Wi-Fi Direct",
+        "adapter_kind": "virtual_wlan",
+        "adapter_description": "Microsoft Wi-Fi Direct Virtual Adapter",
+    }]
+    result = enrich_inventory_with_endpoint_adapters(inventory, endpoint)
+    assert result[0]["endpoint_adapter_kind"] == "virtual_wlan"
+    assert result[0]["endpoint_match_method"] == "mac"
+    assert result[0]["endpoint_evidence_status"] == "endpoint_reported"
+
+
+def test_endpoint_adapter_evidence_falls_back_to_exact_ip_only():
+    from scripts.discovery.endpoint_adapter_evidence import (
+        enrich_inventory_with_endpoint_adapters,
+    )
+    inventory = [{"ip": "192.168.1.20", "mac": "00:11:22:33:44:55"}]
+    endpoint = [{
+        "endpoint_ip": "192.168.1.20",
+        "endpoint_mac": "00:11:22:33:44:66",
+        "adapter_name": "Wi-Fi",
+        "adapter_kind": "physical",
+    }]
+    result = enrich_inventory_with_endpoint_adapters(inventory, endpoint)
+    assert result[0]["endpoint_match_method"] == "ip"
+    assert result[0]["endpoint_adapter_kind"] == "physical"
+
+
+def test_endpoint_adapter_evidence_does_not_attach_when_no_exact_identity_matches():
+    from scripts.discovery.endpoint_adapter_evidence import (
+        enrich_inventory_with_endpoint_adapters,
+    )
+    result = enrich_inventory_with_endpoint_adapters(
+        [{"ip": "192.168.1.20", "mac": "00:11:22:33:44:55"}],
+        [{
+            "endpoint_ip": "192.168.1.21",
+            "endpoint_mac": "00:11:22:33:44:66",
+            "adapter_kind": "virtual_wlan",
+        }],
+    )
+    assert result[0]["endpoint_adapter_kind"] == ""
+    assert result[0]["endpoint_match_method"] == ""

@@ -86,3 +86,46 @@ def normalize_endpoint_adapter_payload(payload):
                 "evidence_source": "wifi_vision_endpoint",
             })
     return rows
+
+
+
+def enrich_inventory_with_endpoint_adapters(inventory_rows, endpoint_rows):
+    """Attach endpoint-reported adapter evidence by exact MAC, else exact IP."""
+    enriched = []
+    for original in inventory_rows:
+        row = dict(original)
+        mac = _normalize_mac(row.get("mac"))
+        ip = _normalize_ip(row.get("ip"))
+        matches = []
+        for evidence in endpoint_rows:
+            evidence_mac = _normalize_mac(evidence.get("endpoint_mac"))
+            evidence_ip = _normalize_ip(evidence.get("endpoint_ip"))
+            if mac and evidence_mac and mac == evidence_mac:
+                matches.append((evidence, "mac"))
+            elif ip and evidence_ip and ip == evidence_ip:
+                matches.append((evidence, "ip"))
+
+        if matches:
+            row["endpoint_adapter_name"] = ";".join(sorted({
+                str(item.get("adapter_name") or "") for item, _ in matches
+                if str(item.get("adapter_name") or "").strip()
+            }))
+            row["endpoint_adapter_kind"] = ";".join(sorted({
+                str(item.get("adapter_kind") or "unknown") for item, _ in matches
+            }))
+            row["endpoint_adapter_description"] = ";".join(sorted({
+                str(item.get("adapter_description") or "") for item, _ in matches
+                if str(item.get("adapter_description") or "").strip()
+            }))
+            row["endpoint_evidence_status"] = "endpoint_reported"
+            row["endpoint_match_method"] = (
+                "mac" if any(method == "mac" for _, method in matches) else "ip"
+            )
+        else:
+            row["endpoint_adapter_name"] = ""
+            row["endpoint_adapter_kind"] = ""
+            row["endpoint_adapter_description"] = ""
+            row["endpoint_evidence_status"] = ""
+            row["endpoint_match_method"] = ""
+        enriched.append(row)
+    return enriched

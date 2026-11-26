@@ -17,3 +17,11 @@ not cryptographically signed; a file can be modified before import. Matching
 an imported MAC/IP to the local inventory is a correlation, not proof of a
 person's identity or proof that a device is malicious. The import is intended
 for authorized endpoint inventory and virtual-adapter visibility only.
+
+
+When imported endpoint evidence matches an inventory row, the Cihaz Envanteri
+page displays the reported adapter type and description. Matching prefers an
+exact MAC address; if no MAC match exists, it can fall back to an exact IPv4
+address. The UI records which matching method was used. An IP-only match is
+weaker because DHCP reuse is possible, and must not be treated as proof of
+persistent device identity.

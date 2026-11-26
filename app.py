@@ -572,6 +572,17 @@ def devices_page():
     from scripts.dashboard_summary import inventory_status_summary
 
     inventory = load("device_inventory.csv")
+    endpoint_evidence = load("endpoint_adapter_evidence.csv")
+    if not inventory.empty and not endpoint_evidence.empty:
+        from scripts.discovery.endpoint_adapter_evidence import (
+            enrich_inventory_with_endpoint_adapters,
+        )
+        inventory = pd.DataFrame(
+            enrich_inventory_with_endpoint_adapters(
+                inventory.to_dict("records"),
+                endpoint_evidence.to_dict("records"),
+            )
+        )
     page_header(
         "Cihaz envanteri",
         "Yerel ağda gözlemlenen cihazları arayın, durumlarına göre filtreleyin ve kanıt kayıtlarını açın.",
@@ -654,7 +665,9 @@ def devices_page():
 
     preferred = [
         "hostname", "ip", "mac", "status", "vendor",
-        "classification", "device_type", "identity_assessment", "identity_signals", "gateway", "subnet", "adapter",
+        "classification", "device_type", "identity_assessment", "identity_signals",
+        "endpoint_adapter_kind", "endpoint_adapter_name", "endpoint_match_method",
+        "gateway", "subnet", "adapter",
     ]
     columns = [column for column in preferred if column in filtered.columns]
     display = filtered[columns].rename(columns={
@@ -667,6 +680,9 @@ def devices_page():
         "device_type": "Cihaz türü",
         "identity_assessment": "Kimlik değerlendirmesi",
         "identity_signals": "Kimlik göstergeleri",
+        "endpoint_adapter_kind": "Endpoint adaptör türü",
+        "endpoint_adapter_name": "Endpoint adaptör adı",
+        "endpoint_match_method": "Endpoint eşleşmesi",
         "gateway": "Varsayılan ağ geçidi",
         "subnet": "Alt ağ",
         "adapter": "Ağ arayüzü",
@@ -702,6 +718,24 @@ def devices_page():
         st.dataframe(
             flagged[identity_columns], width="stretch", hide_index=True
         )
+
+    st.markdown("### Uzak endpoint adaptör kanıtı")
+    if str(selected_device.get("endpoint_evidence_status", "")).strip():
+        st.write(
+            f"Adaptör türü: {selected_device.get('endpoint_adapter_kind', 'Bilinmiyor')}"
+        )
+        st.write(
+            f"Adaptör adı: {selected_device.get('endpoint_adapter_name', 'Bilinmiyor')}"
+        )
+        st.write(
+            f"Eşleşme yöntemi: {selected_device.get('endpoint_match_method', 'Bilinmiyor')}"
+        )
+        st.caption(
+            "Bu bilgi yetkili endpoint collector dosyasından bildirilmiştir; "
+            "tek başına kriptografik kimlik doğrulaması değildir."
+        )
+    else:
+        st.caption("Bu cihaz için içe aktarılmış endpoint adaptör kaydıyla kesin MAC/IP eşleşmesi bulunmuyor.")
 
     st.markdown("### Seçili cihazın teknik ayrıntıları")
     selected_index = st.selectbox(
