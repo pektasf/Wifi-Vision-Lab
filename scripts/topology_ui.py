@@ -269,8 +269,10 @@ def render():
                     "tickmode": "array",
                     "tickvals": [lane_centers[lane] for lane in lane_order if lane in lane_centers],
                     "ticktext": [lane for lane in lane_order if lane in lane_centers],
-                    "range": [min(positions[node][1] for node in positions) - 1.0,
-                              max(positions[node][1] for node in positions) + 1.4],
+                    "range": [
+                        min((point[1] for point in positions.values()), default=-1) - 1.0,
+                        max((point[1] for point in positions.values()), default=1) + 1.4,
+                    ],
                     "showgrid": False,
                     "zeroline": False,
                     "ticks": "",
