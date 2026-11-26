@@ -359,10 +359,11 @@ def render():
         selected_source = str(selected_edge.get(edge_from, "")).strip()
         selected_target = str(selected_edge.get(edge_to, "")).strip()
 
+        detail_ids_col = first_column(device_nodes, ["id", "ip", "mac"]) or "_label"
         node_labels = {}
-        if ids_col in device_nodes.columns:
+        if detail_ids_col in device_nodes.columns:
             node_labels = {
-                str(row.get(ids_col, "")).strip(): str(row.get("_label", "")).strip()
+                str(row.get(detail_ids_col, "")).strip(): str(row.get("_label", "")).strip()
                 for _, row in device_nodes.iterrows()
                 if str(row.get(ids_col, "")).strip()
             }
