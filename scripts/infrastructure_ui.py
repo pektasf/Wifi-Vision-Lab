@@ -49,6 +49,7 @@ def render():
     classification = read_data("device_classification.csv")
     wifi = read_data("wifi_connection.csv")
     access_points = read_data("wifi_access_points.csv")
+    ap_client_history = read_data("ap_client_relationships.csv")
 
     st.markdown(
         '<div class="wv-page-header"><h1>Ağ altyapısı</h1>'
@@ -411,6 +412,52 @@ def render():
             "adresinin ayni fiziksel cihaza ait oldugu varsayilmaz."
         )
 
+
+        st.divider()
+        st.subheader("Doğrulanmış AP–istemci ilişkileri")
+        st.caption(
+            "Yalnızca Windows WLAN arayüzünden doğrudan alınan istemci MAC → AP BSSID "
+            "eşleşmeleri doğrulanmış kabul edilir. Ortak SSID veya aynı ağda bulunma "
+            "tek başına AP bağlantısı kanıtı değildir."
+        )
+        associations = split_ap_client_records(ap_client_history)
+        verified_associations = associations["verified"]
+        unverified_associations = associations["unverified"]
+        assoc_left, assoc_right = st.columns(2)
+        assoc_left.metric("Doğrulanmış gözlem", f"{len(verified_associations):,}")
+        assoc_right.metric("Doğrulanmamış kayıt", f"{len(unverified_associations):,}")
+        association_columns = [
+            "observed_at", "client_hostname", "client_mac", "client_ip",
+            "ap_bssid", "ssid", "source", "evidence_type",
+            "confidence", "verification_status",
+        ]
+        if not verified_associations.empty:
+            st.markdown("**Doğrudan doğrulanmış ilişkiler**")
+            available = [column for column in association_columns if column in verified_associations.columns]
+            st.dataframe(
+                verified_associations[available].rename(columns={
+                    "observed_at": "Gözlem zamanı",
+                    "client_hostname": "İstemci",
+                    "client_mac": "İstemci MAC",
+                    "client_ip": "İstemci IP",
+                    "ap_bssid": "AP BSSID",
+                    "ssid": "SSID",
+                    "source": "Kaynak",
+                    "evidence_type": "Kanıt türü",
+                    "confidence": "Güven",
+                    "verification_status": "Doğrulama",
+                }),
+                width="stretch",
+                hide_index=True,
+                height=min(420, 58 + 35 * min(len(verified_associations), 10)),
+            )
+        else:
+            st.info("Henüz doğrudan doğrulanmış AP–istemci gözlemi yok.")
+        if not unverified_associations.empty:
+            with st.expander("Doğrulanmamış AP–istemci kayıtları"):
+                st.caption("Bu kayıtlar doğrulanmış ilişki olarak sunulmaz.")
+                st.dataframe(unverified_associations, width="stretch", hide_index=True)
+
     with evidence_tab:
         st.subheader("Kanıt ve veri kaynakları")
         st.markdown(
@@ -436,3 +483,25 @@ def render():
                 f"{filename} ? "
                 f"{'Mevcut' if path.exists() else 'Bulunamadi'}"
             )
+
+
+
+def split_ap_client_records(frame):
+    """Separate direct, explicitly verified AP associations from all other records."""
+    if frame is None or frame.empty:
+        empty = pd.DataFrame() if frame is None else frame.iloc[0:0].copy()
+        return {"verified": empty.copy(), "unverified": empty.copy()}
+
+    required = {"verification_status", "confidence", "evidence_type"}
+    if not required.issubset(frame.columns):
+        return {"verified": frame.iloc[0:0].copy(), "unverified": frame.copy()}
+
+    verified_mask = (
+        frame["verification_status"].fillna("").astype(str).str.strip().str.casefold().eq("verified")
+        & frame["confidence"].fillna("").astype(str).str.strip().str.casefold().eq("verified")
+        & frame["evidence_type"].fillna("").astype(str).str.strip().str.casefold().eq("direct_association")
+    )
+    return {
+        "verified": frame[verified_mask].copy(),
+        "unverified": frame[~verified_mask].copy(),
+    }
