@@ -89,6 +89,14 @@ def normalize_endpoint_adapter_payload(payload):
 
 
 
+def _network_scope(row):
+    for field in ("network_id", "subnet", "network"):
+        value = str(row.get(field, "") or "").strip()
+        if value:
+            return value
+    return ""
+
+
 def enrich_inventory_with_endpoint_adapters(inventory_rows, endpoint_rows):
     """Attach endpoint-reported adapter evidence by exact MAC, else exact IP."""
     enriched = []
@@ -100,10 +108,20 @@ def enrich_inventory_with_endpoint_adapters(inventory_rows, endpoint_rows):
         for evidence in endpoint_rows:
             evidence_mac = _normalize_mac(evidence.get("endpoint_mac"))
             evidence_ip = _normalize_ip(evidence.get("endpoint_ip"))
+            inventory_scope = _network_scope(row)
+            evidence_scope = _network_scope(evidence)
             if mac and evidence_mac and mac == evidence_mac:
-                matches.append((evidence, "mac"))
+                if not (
+                    inventory_scope and evidence_scope
+                    and inventory_scope != evidence_scope
+                ):
+                    matches.append((evidence, "mac"))
             elif ip and evidence_ip and ip == evidence_ip:
-                matches.append((evidence, "ip"))
+                if (
+                    inventory_scope and evidence_scope
+                    and inventory_scope == evidence_scope
+                ):
+                    matches.append((evidence, "ip"))
 
         if matches:
             row["endpoint_adapter_name"] = ";".join(sorted({
