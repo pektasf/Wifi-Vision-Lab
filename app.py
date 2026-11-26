@@ -635,7 +635,7 @@ def detail_page():
 
 
 def events_page():
-    from scripts.event_timeline import normalize_event_frames
+    from scripts.event_timeline import normalize_event_frames, summarize_event_severity
 
     st.title("Ag Olaylari")
     st.caption("Cihaz, ag, canli izleme ve davranis bulgularini tek bir yerel zaman cizelgesinde inceleyin.")
