@@ -211,6 +211,26 @@ def collect_capabilities(
         ],
     }
 
+    if operating_system == "Linux":
+        report["capabilities"]["rssi_dbm"] = {
+            "status": "collector_available_tool_driver_dependent",
+            "detail": (
+                "The Linux iw backend reads cached BSS RSSI in dBm without triggering "
+                "a scan. The iw utility, kernel wireless stack, driver, permissions, "
+                "and freshness of the cached list determine whether measurements are available."
+            ),
+        }
+        report["commands"] = {
+            "iw_interfaces": {"available": None, "return_code": None},
+            "netsh_drivers": {"available": False, "return_code": None},
+            "netsh_interfaces": {"available": False, "return_code": None},
+            "powershell_adapters": {"available": False, "return_code": None},
+        }
+        report["notes"].append(
+            "Linux RSSI collection reads cached BSS data only; the capability audit does not invoke iw."
+        )
+        return report
+
     if operating_system != "Windows":
         report["capabilities"]["nearby_ap_signal_percent"] = {
             "status": "not_implemented",
