@@ -750,9 +750,10 @@ def behavior_page():
 
 def live_page():
     st.title("Canli Izleme")
-    st.caption("Ag envanteri ve mevcut izleme kayitlarinin durumu.")
+    st.caption("Envanter durumu, ping gecisleri ve tarama karsilastirmalarini yerel kayitlardan izleyin.")
 
     monitor = load("network_monitor.csv")
+    live_events = load("live_events.csv")
     inventory = load("device_inventory.csv")
 
     total = len(inventory)
@@ -763,46 +764,55 @@ def live_page():
             .isin(["responding", "online", "active"]).sum()
         )
 
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
     c1.metric("Envanter kaydi", f"{total:,}")
-    c2.metric("Yan\u0131t veren cihaz", f"{responding:,}")
-    c3.metric("Izleme kaydi", f"{len(monitor):,}")
+    c2.metric("Yanıt veren cihaz", f"{responding:,}")
+    c3.metric("Tarama karsilastirma olayi", f"{len(monitor):,}")
+    c4.metric("Canli ping gecisi", f"{len(live_events):,}")
 
-    st.markdown("---")
-    left, right = st.columns([1, 1])
+    st.divider()
+    left, right = st.columns(2)
 
     with left:
-        st.markdown("### Izleme verisi")
-        if monitor.empty:
-            st.info("network_monitor.csv dosyasinda izleme kaydi bulunmuyor.")
+        st.subheader("Canli ping olaylari")
+        if live_events.empty:
+            st.info("Canli ping olay kaydi bulunmuyor. Canli izleyici calistirildiginda durum degisimleri burada gorunur.")
         else:
-            st.success("Izleme kayitlari mevcut.")
-            st.dataframe(
-                monitor,
-                width="stretch",
-                hide_index=True,
-                height=300
-            )
+            events = live_events.copy()
+            time_col = next((c for c in ["timestamp", "event_time"] if c in events.columns), None)
+            if time_col:
+                events["_parsed_time"] = pd.to_datetime(events[time_col], utc=True, errors="coerce")
+                events = events.sort_values("_parsed_time", ascending=False, na_position="last")
+                events = events.drop(columns=["_parsed_time"])
+            st.dataframe(events.head(100), width="stretch", hide_index=True, height=320)
 
     with right:
-        st.markdown("### Son envanter")
-        if inventory.empty:
-            st.info("Cihaz envanteri henuz olusturulmamis.")
+        st.subheader("Tarama karsilastirmalari")
+        if monitor.empty:
+            st.info("network_monitor.csv dosyasinda karsilastirma kaydi bulunmuyor.")
         else:
-            timestamp_col = next(
-                (c for c in ["timestamp", "observed_at", "last_seen"]
-                 if c in inventory.columns),
-                None
-            )
-            if timestamp_col:
-                latest = inventory[timestamp_col].astype(str).max()
-                st.write("Son kayit:", latest or "Bilinmiyor")
-            st.write("Kaynak: data/processed/device_inventory.csv")
-            st.write("Bu ekran kayitli verileri gosterir; kendi basina surekli tarama yapmaz.")
+            events = monitor.copy()
+            time_col = next((c for c in ["timestamp", "event_time"] if c in events.columns), None)
+            if time_col:
+                events["_parsed_time"] = pd.to_datetime(events[time_col], utc=True, errors="coerce")
+                events = events.sort_values("_parsed_time", ascending=False, na_position="last")
+                events = events.drop(columns=["_parsed_time"])
+            st.dataframe(events.head(100), width="stretch", hide_index=True, height=320)
 
-    st.markdown("---")
-    st.markdown("### Cihaz durumu")
-    if not inventory.empty:
+    st.divider()
+    st.subheader("Son envanter")
+    if inventory.empty:
+        st.info("Cihaz envanteri henuz olusturulmamis.")
+    else:
+        timestamp_col = next(
+            (c for c in ["timestamp", "observed_at", "last_seen"] if c in inventory.columns),
+            None
+        )
+        if timestamp_col:
+            parsed = pd.to_datetime(inventory[timestamp_col], utc=True, errors="coerce")
+            latest = parsed.max()
+            st.write("Son kayit:", latest.isoformat() if pd.notna(latest) else "Bilinmiyor")
+        st.caption("Bu ekran kayitli verileri gosterir; kendi basina surekli tarama yapmaz.")
         if "status" in inventory.columns:
             status = (
                 inventory["status"].replace("", "Bilinmiyor")
@@ -810,23 +820,15 @@ def live_page():
                 .reset_index(name="Cihaz sayisi")
                 .set_index("Durum")
             )
-            st.bar_chart(status, height=250)
+            st.bar_chart(status, height=220)
 
-        preferred = [
-            "timestamp", "ip", "hostname", "mac", "status"
-        ]
-        columns = [c for c in preferred if c in inventory.columns]
+        preferred = ["timestamp", "ip", "hostname", "mac", "status"]
+        columns = [column for column in preferred if column in inventory.columns]
         if columns:
-            st.dataframe(
-                inventory[columns].head(20),
-                width="stretch",
-                hide_index=True
-            )
+            st.dataframe(inventory[columns].head(20), width="stretch", hide_index=True)
 
-    if st.button("Envanter taramasını başlat", key="live_scan_button"):
+    if st.button("Envanter taramasini baslat", key="live_scan_button"):
         run_scan()
-
-
 
 
 def signal_page():
