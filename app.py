@@ -1254,6 +1254,52 @@ def spatial_intelligence_page():
     )
 
     if zones:
+        from scripts.windows_wlan import (
+            collector_availability,
+            collect_windows_rssi_measurements,
+        )
+
+        collector_info = collector_availability()
+        if collector_info["status"] == "implemented":
+            st.caption(
+                "Windows WLAN API desteği: mevcut BSS listesinden gerçek RSSI (dBm) "
+                "okunabilir. Bu işlem WlanScan çağırmaz; ölçüm güncelliği sürücü ve "
+                "Windows WLAN hizmetinin tuttuğu listeye bağlıdır."
+            )
+            if st.button(
+                "Windows Wi-Fi listesinden RSSI ölçümü al",
+                key="spatial_capture_windows_rssi",
+            ):
+                try:
+                    with st.spinner("Windows WLAN BSS listesi okunuyor..."):
+                        capture = collect_windows_rssi_measurements()
+                except (OSError, RuntimeError, ValueError) as exc:
+                    st.error(f"Windows RSSI ölçümü alınamadı: {exc}")
+                else:
+                    if capture["status"] == "available":
+                        measurement_text = "\\n".join(
+                            f"{alias},{rssi}"
+                            for alias, rssi in capture["measurements"].items()
+                        )
+                        st.session_state["spatial_captured_measurements"] = measurement_text
+                        st.session_state["spatial_survey_measurements"] = measurement_text
+                        st.session_state["spatial_estimate_measurements"] = measurement_text
+                        st.session_state["spatial_captured_source"] = capture["source"]
+                        st.success(
+                            f"{capture['measurement_count']} erişim noktası için RSSI "
+                            "ölçümü alındı. Ham SSID/BSSID gösterilmedi veya kaydedilmedi."
+                        )
+                    else:
+                        st.warning(
+                            "Windows WLAN listesinde kullanılabilir RSSI ölçümü bulunamadı. "
+                            "Wi-Fi adaptörünün açık ve WLAN hizmetinin çalışır durumda olduğunu kontrol edin."
+                        )
+        else:
+            st.info(
+                f"Otomatik RSSI ölçüm toplayıcısı bu işletim sisteminde henüz yok "
+                f"({collector_info['status']}). Kat planı, manuel ölçüm ve diğer modüller kullanılabilir."
+            )
+
         zone_lookup = {zone["zone_id"]: zone for zone in zones}
         with st.form("spatial_fingerprint_survey_form", clear_on_submit=True):
             st.markdown("**Bu noktada referans ölçümü kaydet**")
@@ -1269,6 +1315,7 @@ def spatial_intelligence_page():
                 "AP takma adı ve RSSI (her satırda AP-01,-62 biçiminde)",
                 placeholder="# Örnek\nAP-01,-62\nAP-02,-74\nAP-03,-81",
                 height=110,
+                key="spatial_survey_measurements",
             )
             survey_notes = st.text_input("Not (isteğe bağlı)")
             survey_submit = st.form_submit_button("Referans ölçümünü kaydet")
@@ -1280,11 +1327,18 @@ def spatial_intelligence_page():
                     raise ValueError("En az iki farklı AP takma adı ölçümü girin.")
                 save_fingerprint(
                     selected_floor_id, survey_zone_id, survey_label, parsed,
-                    source="manual", notes=survey_notes,
+                    source=(
+                        st.session_state.get("spatial_captured_source", "manual")
+                        if survey_values.strip() == st.session_state.get("spatial_captured_measurements", "").strip()
+                        else "manual"
+                    ),
+                    notes=survey_notes,
                 )
             except ValueError as exc:
                 st.error(str(exc))
             else:
+                st.session_state.pop("spatial_captured_measurements", None)
+                st.session_state.pop("spatial_captured_source", None)
                 st.success("Referans parmak izi yerel SQLite'a kaydedildi.")
                 st.rerun()
 
@@ -1294,6 +1348,7 @@ def spatial_intelligence_page():
                 "Anlık AP sinyal ölçümleri (AP takma adı,-dBm)",
                 placeholder="AP-01,-64\nAP-02,-72\nAP-03,-79",
                 height=100,
+                key="spatial_estimate_measurements",
             )
             estimate_submit = st.form_submit_button("Bölgeyi tahmin et")
 
