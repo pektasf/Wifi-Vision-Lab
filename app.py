@@ -841,7 +841,7 @@ def history_page():
         )
         gap_metrics[2].metric(
             "En uzun aralık (dakika)",
-            f"{observation_gaps["gap_minutes"].max():,.1f}",
+            f"{observation_gaps['gap_minutes'].max():,.1f}",
         )
         st.dataframe(
             gap_display.head(200),
