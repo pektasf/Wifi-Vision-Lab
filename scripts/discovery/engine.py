@@ -20,23 +20,53 @@ DEVICE_FIELDS = [
 ]
 
 
-def build_device_profiles(observations):
-    grouped = {}
+def build_observation_identity_keys(observations):
+    """Link IP-only observations only when one MAC is unambiguous on that network."""
+    macs_by_network_ip = {}
 
     for observation in observations:
-        network = observation.get("network_id", "")
-        mac = observation.get("mac", "").strip().upper()
-        ip = observation.get("ip", "").strip()
+        network = str(observation.get("network_id", "")).strip()
+        mac = str(observation.get("mac", "")).strip().upper()
+        ip = str(observation.get("ip", "")).strip()
+        if network and mac and ip:
+            macs_by_network_ip.setdefault((network, ip), set()).add(mac)
+
+    identity_keys = []
+    for observation in observations:
+        network = str(observation.get("network_id", "")).strip()
+        mac = str(observation.get("mac", "")).strip().upper()
+        ip = str(observation.get("ip", "")).strip()
 
         if mac:
-            identity_basis = "mac"
-            identity = f"{network}|mac|{mac}"
-        elif ip:
-            identity_basis = "network_ip"
-            identity = f"{network}|ip|{ip}"
-        else:
+            identity_keys.append(f"{network}|mac|{mac}")
             continue
 
+        matching_macs = (
+            macs_by_network_ip.get((network, ip), set()) if ip else set()
+        )
+        if len(matching_macs) == 1:
+            identity_keys.append(f"{network}|mac|{next(iter(matching_macs))}")
+        elif ip:
+            identity_keys.append(f"{network}|ip|{ip}")
+        else:
+            identity_keys.append("")
+
+    return identity_keys
+
+
+def build_device_profiles(observations):
+    grouped = {}
+    identity_keys = build_observation_identity_keys(observations)
+
+    for observation, identity in zip(observations, identity_keys):
+        network = str(observation.get("network_id", "")).strip()
+        ip = str(observation.get("ip", "")).strip()
+
+        if not identity:
+            continue
+
+        identity_basis = "mac" if "|mac|" in identity else "network_ip"
+        device_mac = identity.rsplit("|mac|", 1)[-1] if identity_basis == "mac" else ""
         device_id = hashlib.sha256(
             identity.encode("utf-8")
         ).hexdigest()[:20]
@@ -46,7 +76,7 @@ def build_device_profiles(observations):
                 "device_id": device_id,
                 "identity_basis": identity_basis,
                 "network_id": network,
-                "mac": mac,
+                "mac": device_mac,
                 "ips": set(),
                 "hostnames": set(),
                 "sources": set(),
@@ -198,17 +228,10 @@ class DiscoveryEngine:
 
 def build_inventory_rows(observations, profiles):
     grouped = {}
+    identity_keys = build_observation_identity_keys(observations)
 
-    for observation in observations:
-        network = observation.get("network_id", "")
-        mac = observation.get("mac", "").strip().upper()
-        ip = observation.get("ip", "").strip()
-
-        if mac:
-            identity = f"{network}|mac|{mac}"
-        elif ip:
-            identity = f"{network}|ip|{ip}"
-        else:
+    for observation, identity in zip(observations, identity_keys):
+        if not identity:
             continue
 
         device_id = hashlib.sha256(

@@ -84,3 +84,91 @@ def test_inventory_contains_one_row_per_profile():
     assert rows[0]["subnet"] == "10.0.0.0/24"
     assert rows[0]["gateway"] == "10.0.0.1"
     assert rows[0]["status"] == "arp_seen;responding"
+
+
+
+def test_ip_only_observation_joins_single_matching_mac_profile():
+    observations = [
+        {
+            "network_id": "192.168.10.0/24",
+            "ip": "192.168.10.25",
+            "mac": "AA:BB:CC:DD:EE:FF",
+            "source": "arp",
+            "status": "arp_seen",
+            "observed_at": "2026-11-26T10:00:00+03:00",
+        },
+        {
+            "network_id": "192.168.10.0/24",
+            "ip": "192.168.10.25",
+            "mac": "",
+            "hostname": "device.local",
+            "source": "ping",
+            "status": "responding",
+            "observed_at": "2026-11-26T10:01:00+03:00",
+        },
+    ]
+
+    profiles = build_device_profiles(observations)
+    inventory = build_inventory_rows(observations, profiles)
+
+    assert len(profiles) == 1
+    assert profiles[0]["identity_basis"] == "mac"
+    assert profiles[0]["mac"] == "AA:BB:CC:DD:EE:FF"
+    assert profiles[0]["sources"] == "arp;ping"
+    assert profiles[0]["statuses"] == "arp_seen;responding"
+    assert len(inventory) == 1
+    assert inventory[0]["mac"] == "AA:BB:CC:DD:EE:FF"
+    assert inventory[0]["hostname"] == "device.local"
+
+
+def test_ip_only_observation_is_not_joined_when_ip_maps_to_multiple_macs():
+    observations = [
+        {
+            "network_id": "192.168.10.0/24",
+            "ip": "192.168.10.25",
+            "mac": "AA:BB:CC:DD:EE:01",
+            "source": "arp_a",
+        },
+        {
+            "network_id": "192.168.10.0/24",
+            "ip": "192.168.10.25",
+            "mac": "AA:BB:CC:DD:EE:02",
+            "source": "arp_b",
+        },
+        {
+            "network_id": "192.168.10.0/24",
+            "ip": "192.168.10.25",
+            "mac": "",
+            "source": "ping",
+        },
+    ]
+
+    profiles = build_device_profiles(observations)
+
+    assert len(profiles) == 3
+    assert sum(profile["identity_basis"] == "mac" for profile in profiles) == 2
+    assert sum(profile["identity_basis"] == "network_ip" for profile in profiles) == 1
+
+
+def test_ip_only_observation_does_not_join_mac_from_another_network():
+    observations = [
+        {
+            "network_id": "192.168.10.0/24",
+            "ip": "192.168.10.25",
+            "mac": "AA:BB:CC:DD:EE:FF",
+            "source": "arp",
+        },
+        {
+            "network_id": "192.168.20.0/24",
+            "ip": "192.168.10.25",
+            "mac": "",
+            "source": "ping",
+        },
+    ]
+
+    profiles = build_device_profiles(observations)
+
+    assert len(profiles) == 2
+    assert {profile["identity_basis"] for profile in profiles} == {
+        "mac", "network_ip"
+    }
