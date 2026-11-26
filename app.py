@@ -449,16 +449,11 @@ def dashboard_page():
                 old_value = str(event.get("old_value", "") or "")
                 new_value = str(event.get("new_value", "") or "")
                 transition = f"{old_value}  →  {new_value}" if old_value or new_value else ""
-                st.markdown(
-                    f"**{label} · {event_type}**  
-"
-                    f"{subject}  
-"
-                    f"<span style='color:#617370;font-size:.78rem'>{event_time}</span>"
-                    + (f"  
-{transition}" if transition else ""),
-                    unsafe_allow_html=True,
-                )
+                st.markdown(f"**{label} · {event_type}**")
+                st.write(subject)
+                st.caption(event_time)
+                if transition:
+                    st.caption(transition)
                 st.divider()
 
     events_col, devices_col = st.columns([1.15, 1], gap="large")
