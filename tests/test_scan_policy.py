@@ -245,7 +245,7 @@ def test_scan_network_diagnostics_show_selected_adapter_and_gateway():
     assert "192.168.137.0/24" in message
     assert "ağ geçidi=yok" in message
     assert "arayüz indeksi=19" in message
-    assert "DHCP=devre dışı/bilinmiyor" in message
+    assert "DHCP=bilinmiyor" in message
     assert "DHCP sunucusu=bilinmiyor" in message
 
 
@@ -285,3 +285,19 @@ def test_scan_network_diagnostics_show_dhcp_lease_context():
     assert "DHCP sunucusu=192.168.1.1" in message
     assert "kira başlangıcı=2026-11-26T06:00:00Z" in message
     assert "kira bitişi=2026-11-27T06:00:00Z" in message
+
+
+
+def test_scan_network_diagnostics_distinguish_disabled_dhcp():
+    from scripts.device_inventory import format_network_diagnostics
+
+    message = format_network_diagnostics({
+        "adapter": "Virtual adapter",
+        "ip": "192.168.137.1",
+        "network": "192.168.137.0/24",
+        "gateway": "",
+        "interface_index": 19,
+        "dhcp_enabled": False,
+    })
+
+    assert "DHCP=devre dışı" in message
