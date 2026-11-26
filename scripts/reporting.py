@@ -5,9 +5,9 @@ import pandas as pd
 
 
 PERIODS = {
-    "Son 24 saat": pd.Timedelta(hours=24),
-    "Son 7 gün": pd.Timedelta(days=7),
-    "Son 30 gün": pd.Timedelta(days=30),
+    "Son 24 saat": pd.Timedelta("24h"),
+    "Son 7 gün": pd.Timedelta("7d"),
+    "Son 30 gün": pd.Timedelta("30d"),
     "Tüm zamanlar": None,
 }
 
