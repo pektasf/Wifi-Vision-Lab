@@ -22,11 +22,11 @@ def filter_events_by_period(
     """Filter events by a named UTC window, preserving all rows for all-time."""
     if events is None:
         return pd.DataFrame()
+    if period not in PERIODS:
+        raise ValueError(f"Unsupported report period: {period}")
     if events.empty or period == "Tüm zamanlar":
         return events.copy()
-    duration = PERIODS.get(period)
-    if duration is None:
-        raise ValueError(f"Unsupported report period: {period}")
+    duration = PERIODS[period]
 
     time_column = next((field for field in TIME_FIELDS if field in events.columns), None)
     if time_column is None:
