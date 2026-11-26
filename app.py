@@ -635,98 +635,60 @@ def detail_page():
 
 
 def events_page():
+    from scripts.event_timeline import normalize_event_frames
+
     st.title("Ag Olaylari")
-    st.caption("Ag ve cihaz olaylarini tek ekranda inceleyin.")
+    st.caption("Cihaz, ag, canli izleme ve davranis bulgularini tek bir yerel zaman cizelgesinde inceleyin.")
 
-    sources = [
-        ("Cihaz olaylari", "device_events.csv"),
-        ("Ag olaylari", "network_events.csv"),
+    filenames = [
+        "device_events.csv",
+        "network_events.csv",
+        "live_events.csv",
+        "behavior_findings.csv",
     ]
+    frames = {filename: load(filename) for filename in filenames}
+    data = normalize_event_frames(frames)
 
-    frames = []
-    for label, filename in sources:
-        frame = load(filename)
-        if not frame.empty:
-            frame = frame.copy()
-            frame["record_source"] = label
-            frames.append(frame)
-
-    if not frames:
+    if data.empty:
         st.info("Henuz olay kaydi bulunmuyor.")
         return
 
-    data = pd.concat(frames, ignore_index=True, sort=False).fillna("")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Toplam olay", f"{len(data):,}")
+    c2.metric("Olay kaynagi", f"{data['source'].nunique():,}")
+    c3.metric("Farkli olay turu", f"{data['event_type'].nunique():,}")
 
-    c1, c2 = st.columns(2)
-    c1.metric("Toplam olay kaydi", f"{len(data):,}")
-    c2.metric("Olay kaynagi", f"{len(frames)}")
+    st.divider()
+    st.subheader("Olay zaman cizelgesi")
 
-    st.markdown("---")
-    st.markdown("### Olay filtreleri")
-
-    f1, f2 = st.columns([2, 1])
+    f1, f2, f3 = st.columns([2, 1, 1])
     with f1:
-        term = st.text_input(
-            "Olay ara",
-            placeholder="IP, MAC, olay turu veya aciklama..."
-        )
+        term = st.text_input("Olay ara", placeholder="IP, MAC, cihaz, olay turu veya aciklama...", key="unified_event_search")
     with f2:
-        source_values = ["Tum kaynaklar"] + sorted(
-            data["record_source"].astype(str).unique().tolist()
-        )
-        selected_source = st.selectbox("Kaynak", source_values)
+        source_values = ["Tum kaynaklar"] + sorted(data["source"].unique().tolist())
+        selected_source = st.selectbox("Kaynak", source_values, key="unified_event_source")
+    with f3:
+        severity_values = ["Tum seviyeler"] + sorted(data["severity"].unique().tolist())
+        selected_severity = st.selectbox("Onem", severity_values, key="unified_event_severity")
 
     filtered = data.copy()
-
     if selected_source != "Tum kaynaklar":
-        filtered = filtered[
-            filtered["record_source"].astype(str) == selected_source
-        ]
-
+        filtered = filtered[filtered["source"] == selected_source]
+    if selected_severity != "Tum seviyeler":
+        filtered = filtered[filtered["severity"] == selected_severity]
     if term.strip():
-        term = term.strip().lower()
-        mask = filtered.astype(str).apply(
-            lambda col: col.str.lower().str.contains(term, regex=False)
-        ).any(axis=1)
+        mask = filtered.astype(str).apply(lambda column: column.str.contains(term.strip(), case=False, na=False, regex=False)).any(axis=1)
         filtered = filtered[mask]
 
-    st.markdown(f"**{len(filtered):,}** olay gosteriliyor")
-
-    # Varsa olay turu veya durum alanina gore ek filtre sun.
-    type_col = next(
-        (c for c in ["event_type", "event", "type", "event_name"]
-         if c in filtered.columns),
-        None
+    st.caption(f"{len(filtered):,} olay gosteriliyor - En yeni kayit en ustte")
+    st.dataframe(filtered, width="stretch", hide_index=True, height=500)
+    st.download_button(
+        "Filtrelenmis olaylari CSV indir",
+        filtered.to_csv(index=False).encode("utf-8-sig"),
+        file_name="wifi_vision_event_timeline.csv",
+        mime="text/csv",
+        key="unified_event_export",
     )
-
-    if type_col and not filtered.empty:
-        types = ["Tum olay turleri"] + sorted(
-            x for x in filtered[type_col].astype(str).unique() if x.strip()
-        )
-        selected_type = st.selectbox("Olay turu", types)
-        if selected_type != "Tum olay turleri":
-            filtered = filtered[
-                filtered[type_col].astype(str) == selected_type
-            ]
-
-    preferred = [
-        "timestamp", "event_time", "ip", "mac", "hostname",
-        "event_type", "event", "type", "description",
-        "message", "status", "severity", "record_source"
-    ]
-    visible = [c for c in preferred if c in filtered.columns]
-    if not visible:
-        visible = list(filtered.columns)
-
-    st.dataframe(
-        filtered[visible],
-        width="stretch",
-        hide_index=True,
-        height=470
-    )
-
-    with st.expander("Tum olay alanlarini goster"):
-        st.write(", ".join(data.columns.astype(str)))
 
 
 def behavior_page():
