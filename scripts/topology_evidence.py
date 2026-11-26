@@ -147,3 +147,45 @@ def topology_render_profile(node_count, edge_count=0):
         "node_count": node_count,
         "edge_count": edge_count,
     }
+
+
+_NEIGHBOR_PROTOCOLS = {
+    "lldp": ("lldp_neighbor", "lldp_neighbor_advertisement"),
+    "cdp": ("cdp_neighbor", "cdp_neighbor_advertisement"),
+    "mesh_controller": ("mesh_peer", "controller_verified_mesh_relationship"),
+}
+
+
+def prepare_verified_neighbor_edges(records):
+    """Accept only explicit LLDP/CDP or trusted-controller mesh evidence."""
+    import re
+    if records is None or records.empty:
+        return []
+    mac_pattern = re.compile(r"^(?:[0-9A-F]{2}:){5}[0-9A-F]{2}$")
+    prepared = []
+    for _, row in records.iterrows():
+        protocol = str(row.get("protocol", "")).strip().casefold()
+        expected = _NEIGHBOR_PROTOCOLS.get(protocol)
+        if not expected:
+            continue
+        relation, evidence_type = expected
+        if str(row.get("verification_status", "")).strip().casefold() != "verified":
+            continue
+        if str(row.get("evidence_type", "")).strip().casefold() != evidence_type:
+            continue
+        if protocol == "mesh_controller" and str(row.get("source_trust", "")).strip().casefold() != "trusted":
+            continue
+        local_mac = str(row.get("local_mac", "")).strip().upper().replace("-", ":")
+        neighbor_mac = str(row.get("neighbor_mac", "")).strip().upper().replace("-", ":")
+        if not mac_pattern.fullmatch(local_mac) or not mac_pattern.fullmatch(neighbor_mac) or local_mac == neighbor_mac:
+            continue
+        prepared.append({
+            "local_mac": local_mac, "neighbor_mac": neighbor_mac,
+            "protocol": protocol, "relation": relation,
+            "evidence_type": evidence_type,
+            "evidence_source": str(row.get("evidence_source", "") or protocol),
+            "observed_at": str(row.get("observed_at", "")),
+            "local_port": str(row.get("local_port", "")),
+            "neighbor_port": str(row.get("neighbor_port", "")),
+        })
+    return prepared
