@@ -90,15 +90,20 @@ if __name__ == "__main__":
 
 
 
-def prepare_temporal_context(profiles: pd.DataFrame) -> pd.DataFrame:
-    """Prepare observed device history without treating address changes as threats."""
+def prepare_temporal_context(
+    profiles: pd.DataFrame, events: pd.DataFrame | None = None
+) -> pd.DataFrame:
+    """Summarize device continuity and corroborating IP-change event history.
+
+    IP changes remain contextual observations, never threat verdicts.
+    """
     columns = [
         "identity_key", "hostname", "ip_history", "ip_change_count",
-        "observation_count", "first_seen", "last_seen",
+        "observation_count", "first_seen", "last_seen", "history_span_days",
+        "latest_observation_status", "ip_change_events", "last_ip_change",
+        "last_ip_change_from", "last_ip_change_to",
     ]
-    if profiles is None or profiles.empty:
-        return pd.DataFrame(columns=columns)
-    if "identity_key" not in profiles.columns:
+    if profiles is None or profiles.empty or "identity_key" not in profiles.columns:
         return pd.DataFrame(columns=columns)
 
     result = profiles.copy()
@@ -111,10 +116,70 @@ def prepare_temporal_context(profiles: pd.DataFrame) -> pd.DataFrame:
     result["_observation_count"] = pd.to_numeric(
         result["observation_count"], errors="coerce"
     ).fillna(0)
+    if "status" in result.columns:
+        result["latest_observation_status"] = result["status"].fillna("").astype(str)
+
+    first = pd.to_datetime(result["first_seen"], utc=True, errors="coerce")
+    last = pd.to_datetime(result["last_seen"], utc=True, errors="coerce")
+    result["history_span_days"] = (
+        (last - first).dt.total_seconds() / 86400
+    ).round(1).where(first.notna() & last.notna(), "")
+
+    if events is not None and not events.empty and "identity_key" in events.columns:
+        event_frame = events.copy()
+        if "event_type" in event_frame.columns:
+            event_frame = event_frame[
+                event_frame["event_type"].astype(str).str.casefold() == "ip_changed"
+            ].copy()
+        else:
+            event_frame = event_frame.iloc[0:0].copy()
+        if not event_frame.empty:
+            if "event_time" not in event_frame.columns:
+                event_frame["event_time"] = ""
+            event_frame["_event_time"] = pd.to_datetime(
+                event_frame["event_time"], utc=True, errors="coerce"
+            )
+            event_frame = event_frame.sort_values(
+                "_event_time", ascending=False, na_position="last", kind="stable"
+            )
+            for key, group in event_frame.groupby("identity_key", sort=False):
+                mask = result["identity_key"].astype(str) == str(key)
+                if not mask.any():
+                    continue
+                latest = group.iloc[0]
+                result.loc[mask, "ip_change_events"] = len(group)
+                result.loc[mask, "last_ip_change"] = str(latest.get("event_time", "") or "")
+                result.loc[mask, "last_ip_change_from"] = str(latest.get("old_value", "") or "")
+                result.loc[mask, "last_ip_change_to"] = str(latest.get("new_value", "") or "")
+
     result = result[result["_ip_change_count"] > 0].copy()
     result = result.sort_values(
         ["_ip_change_count", "_observation_count", "identity_key"],
         ascending=[False, False, True],
         kind="stable",
+    )
+    return result[columns].reset_index(drop=True)
+
+
+def prepare_ip_change_history(events: pd.DataFrame) -> pd.DataFrame:
+    """Return recorded IP transitions newest-first, preserving original evidence."""
+    columns = [
+        "event_time", "identity_key", "old_value", "new_value", "details"
+    ]
+    if events is None or events.empty or "event_type" not in events.columns:
+        return pd.DataFrame(columns=columns)
+    result = events[
+        events["event_type"].astype(str).str.casefold() == "ip_changed"
+    ].copy()
+    if result.empty:
+        return pd.DataFrame(columns=columns)
+    for column in columns:
+        if column not in result.columns:
+            result[column] = ""
+    result["_sort_time"] = pd.to_datetime(
+        result["event_time"], utc=True, errors="coerce"
+    )
+    result = result.sort_values(
+        "_sort_time", ascending=False, na_position="last", kind="stable"
     )
     return result[columns].reset_index(drop=True)

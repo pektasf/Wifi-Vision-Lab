@@ -1124,15 +1124,20 @@ def behavior_page():
     )
 
 
-    from scripts.behavior_analysis import prepare_temporal_context
+    from scripts.behavior_analysis import (
+        prepare_ip_change_history,
+        prepare_temporal_context,
+    )
 
-    temporal = prepare_temporal_context(profiles)
+    device_events = load("device_events.csv")
+    temporal = prepare_temporal_context(profiles, device_events)
     st.divider()
     st.markdown("### Zamansal cihaz geçmişi")
     st.caption(
         "Aşağıdaki kayıtlar önceki taramalarda aynı cihaz kimliği için görülen IP adreslerini "
         "özetler. DHCP ve ağ yapılandırması değişiklikleri normal olabilir; IP değişimi tek başına "
-        "güvenlik tehdidi veya saldırı kanıtı değildir."
+        "güvenlik tehdidi veya saldırı kanıtı değildir. Süre ve geçiş bilgileri yalnızca "
+        "kaydedilmiş gözlemlerden hesaplanır; cihazın ağda kesintisiz bağlı kaldığını kanıtlamaz."
     )
     if temporal.empty:
         st.info("Henüz birden fazla IP adresiyle gözlemlenmiş cihaz geçmişi bulunmuyor.")
@@ -1145,6 +1150,12 @@ def behavior_page():
             "observation_count": "Gözlem sayısı",
             "first_seen": "İlk gözlem",
             "last_seen": "Son gözlem",
+            "history_span_days": "Geçmiş kapsama süresi (gün)",
+            "latest_observation_status": "Son tarama durumu",
+            "ip_change_events": "Kaydedilmiş IP geçiş olayı",
+            "last_ip_change": "Son IP geçiş zamanı",
+            "last_ip_change_from": "Önceki IP",
+            "last_ip_change_to": "Yeni IP",
         })
         st.caption(f"{len(temporal):,} cihazın geçmişinde birden fazla IP adresi var.")
         st.dataframe(
@@ -1155,6 +1166,31 @@ def behavior_page():
         )
         if len(temporal_display) > 200:
             st.caption("İlk 200 kayıt gösteriliyor.")
+
+    ip_history = prepare_ip_change_history(device_events)
+    st.markdown("### Kaydedilmiş IP geçişleri")
+    st.caption(
+        "Bu tablo yalnızca cihaz geçmişine yazılmış IP değişim olaylarını gösterir. "
+        "Eski/yeni IP ve olay zamanı kayıt dosyasından alınır; tek başına risk puanı üretmez."
+    )
+    if ip_history.empty:
+        st.info("Henüz kaydedilmiş bir IP geçiş olayı bulunmuyor.")
+    else:
+        ip_display = ip_history.rename(columns={
+            "event_time": "Olay zamanı",
+            "identity_key": "Cihaz kimliği",
+            "old_value": "Önceki IP",
+            "new_value": "Yeni IP",
+            "details": "Kayıt açıklaması",
+        })
+        st.dataframe(
+            ip_display.head(150),
+            width="stretch",
+            hide_index=True,
+            height=min(360, 58 + 35 * min(len(ip_display), 8)),
+        )
+        if len(ip_display) > 150:
+            st.caption("İlk 150 kayıt gösteriliyor.")
 
 
 
