@@ -16,7 +16,7 @@ from scripts.windows_wlan import _alias_for_bssid, _load_local_alias_key
 
 
 _INTERFACE_RE = re.compile(r"^\s*Interface\s+(\S+)\s*$", re.MULTILINE)
-_BSS_RE = re.compile(r"^\s*BSS\s+((?:[0-9a-f]{2}:){5}[0-9a-f]{2})(?:\s|$)", re.I | re.M)
+_BSS_RE = re.compile(r"^\s*BSS\s+((?:[0-9a-f]{2}:){5}[0-9a-f]{2})(?=\s|\(|$)", re.I | re.M)
 _SIGNAL_RE = re.compile(r"^\s*signal:\s*(-?\d+(?:\.\d+)?)\s*dBm\s*$", re.I | re.M)
 
 
