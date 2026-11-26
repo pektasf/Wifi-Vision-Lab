@@ -248,3 +248,21 @@ def upsert_event_review_state(
         "updated_at": str(updated_at or ""),
     }
     return pd.concat([current, pd.DataFrame([row])], ignore_index=True)
+
+
+def filter_event_review_status(
+    frame: pd.DataFrame,
+    status: str = "",
+) -> pd.DataFrame:
+    """Filter normalized events by their persisted review workflow status."""
+    if frame is None:
+        return pd.DataFrame()
+    result = frame.copy()
+    selected = str(status or "").strip()
+    if not selected or selected == "all":
+        return result.reset_index(drop=True)
+    if selected not in EVENT_REVIEW_STATUSES or "review_status" not in result.columns:
+        return result.iloc[0:0].copy()
+    return result[
+        result["review_status"].fillna("new").astype(str).eq(selected)
+    ].reset_index(drop=True)
