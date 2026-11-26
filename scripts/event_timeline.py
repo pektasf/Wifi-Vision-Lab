@@ -367,6 +367,32 @@ def filter_event_review_history(
 
 
 
+
+def filter_event_review_history_for_events(
+    history: pd.DataFrame | None,
+    event_keys: list[str] | tuple[str, ...] | set[str],
+) -> pd.DataFrame:
+    """Return newest-first audit entries limited to an explicit event-key set."""
+    if history is None or history.empty or "event_key" not in history.columns:
+        return pd.DataFrame(columns=EVENT_REVIEW_HISTORY_COLUMNS)
+    keys = {str(key).strip() for key in event_keys if str(key).strip()}
+    if not keys:
+        return pd.DataFrame(columns=EVENT_REVIEW_HISTORY_COLUMNS)
+    result = history[
+        history["event_key"].fillna("").astype(str).isin(keys)
+    ].copy()
+    if "updated_at" in result.columns:
+        result["_parsed_time"] = pd.to_datetime(
+            result["updated_at"], format="mixed", utc=True, errors="coerce"
+        )
+        result["_order"] = range(len(result))
+        result = result.sort_values(
+            ["_parsed_time", "_order"], ascending=[False, False],
+            na_position="last", kind="stable",
+        ).drop(columns=["_parsed_time", "_order"])
+    return result.reset_index(drop=True)
+
+
 def format_event_review_changes(value: object) -> str:
     """Render stored audit JSON as concise, readable Turkish change summaries."""
     if value is None or (isinstance(value, float) and pd.isna(value)):
