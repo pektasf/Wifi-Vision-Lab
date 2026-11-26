@@ -145,8 +145,8 @@ def render():
                 "gateway_address": ("Gateway adresi", 3, "diamond", "#8A5A12"),
                 "access_point_radio": ("AP radyosu", 2, "hexagon", "#087F78"),
                 "network_device_candidate": ("Ağ ekipmanı adayı", 1, "square", "#426C8C"),
-                "endpoint": ("Uç cihaz", 0, "circle", "#167A55"),
-                "wifi_client": ("Wi-Fi istemcisi", 0, "circle", "#167A55"),
+                "endpoint": ("Uç cihaz", 0, "circle", "#73827F"),
+                "wifi_client": ("Wi-Fi istemcisi", 0, "circle", "#73827F"),
             }
             positions = {}
             grouped_nodes = {}
@@ -283,7 +283,7 @@ def render():
     ]
 
     for title, frame, explanation in [
-        ("Tahmini iliskiler", inferred_edges,
+        ("Tahmini ilişkiler", inferred_edges,
          "Cihaz adı veya sınıflandırma gibi dolaylı ipuçlarıdır; doğrulanmış fiziksel bağlantı değildir."),
         ("Aynı ağda gözlemlenenler", context_edges,
          "Ortak tarama kapsamı veya ağ yapılandırması bağlamıdır; fiziksel bağlantı kanıtı değildir."),
@@ -302,7 +302,7 @@ def render():
                 )
 
     if not verified_edges.empty:
-        st.subheader("Dogrulanmis iliski ayrintisi")
+        st.subheader("Doğrulanmış ilişki ayrıntısı")
         edge_options = prepare_verified_edge_options(
             verified_edges, edge_from, edge_to
         )
@@ -393,7 +393,7 @@ def render():
             show_topology_device(filtered.loc[selected_index])
 
     st.divider()
-    st.subheader("AP-istemci baglanti gecmisi")
+    st.subheader("AP-istemci bağlantı geçmişi")
     association_history = read_data("ap_client_relationships.csv")
     if not association_history.empty:
         association_history = prepare_association_history(association_history)
@@ -440,7 +440,7 @@ def render():
         st.caption("Henuz AP-istemci gozlem gecmisi bulunmuyor.")
 
     st.divider()
-    st.subheader("Mevcut Wi-Fi baglantisi")
+    st.subheader("Mevcut Wi-Fi bağlantısı")
     if not wifi.empty:
         st.dataframe(wifi, width="stretch", hide_index=True)
     else:
