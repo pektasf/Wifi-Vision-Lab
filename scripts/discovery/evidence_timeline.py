@@ -2,6 +2,7 @@
 
 import hashlib
 import ipaddress
+from datetime import datetime, timezone
 
 from scripts.discovery.identity_signals import (
     normalize_mac, is_locally_administered_mac,
@@ -30,6 +31,17 @@ def _records(value):
     if hasattr(value, "to_dict"):
         return value.to_dict("records")
     return list(value)
+
+
+def _time_sort_key(value):
+    value = str(value or "").strip()
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return (1, parsed.timestamp())
+    except (TypeError, ValueError, OverflowError, OSError):
+        return (0, value)
 
 
 def build_identity_evidence_timeline(
@@ -172,5 +184,5 @@ def build_identity_evidence_timeline(
             f"DHCP sunucusu: {row.get('server_ip', '')} · Mesajlar: {row.get('message_types', '')}",
         )
 
-    timeline.sort(key=lambda item: item["observed_at"], reverse=True)
+    timeline.sort(key=lambda item: _time_sort_key(item["observed_at"]), reverse=True)
     return timeline[:max(1, min(int(limit), MAX_TIMELINE_ROWS))]
