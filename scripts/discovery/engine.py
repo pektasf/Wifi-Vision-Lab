@@ -199,7 +199,7 @@ class DiscoveryEngine:
 
                     observations.append({
                         "observation_id": observation_id,
-                        "observed_at": raw.get("timestamp", ""),
+                        "observed_at": raw.get("timestamp") or stamp(),
                         "source": source,
                         "network_id": subnet,
                         "ip": ip,
