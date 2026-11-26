@@ -583,6 +583,51 @@ def summarize_event_review_workload(frame: pd.DataFrame | None) -> pd.DataFrame:
         ascending=[False, False, True], kind="stable",
     ).reset_index(drop=True)
 
+
+def sort_event_review_queue(frame: pd.DataFrame | None, sort_by: str = "priority", *, unassigned_first: bool = False) -> pd.DataFrame:
+    """Sort review rows into a deterministic operator queue without changing source data."""
+    if frame is None: return pd.DataFrame()
+    result = frame.copy()
+    if result.empty: return result
+    if sort_by not in {"priority", "newest", "open"}: raise ValueError(f"Unsupported event review queue sort: {sort_by}")
+    status = result.get("review_status", pd.Series("new", index=result.index)).fillna("new").astype(str)
+    priority = result.get("review_priority", pd.Series("normal", index=result.index)).fillna("normal").astype(str)
+    assignee = result.get("review_assignee", pd.Series("", index=result.index)).fillna("").astype(str).str.strip()
+    result["_queue_resolved"] = status.eq("resolved").astype(int)
+    result["_queue_priority"] = priority.map({"critical": 0, "high": 1, "normal": 2, "low": 3}).fillna(4)
+    result["_queue_unassigned"] = assignee.eq("").astype(int)
+    time_col = next((col for col in ("event_time", "timestamp") if col in result.columns), None)
+    result["_queue_time"] = pd.to_datetime(result[time_col], utc=True, errors="coerce") if time_col else pd.NaT
+    if sort_by == "newest":
+        cols, asc = ["_queue_resolved", "_queue_time"], [True, False]
+    else:
+        cols, asc = ["_queue_resolved", "_queue_priority", "_queue_time"], [True, True, False]
+    if unassigned_first: cols.insert(0, "_queue_unassigned"); asc.insert(0, True)
+    result = result.sort_values(cols, ascending=asc, na_position="last", kind="stable")
+    return result.drop(columns=[c for c in result.columns if c.startswith("_queue_")]).reset_index(drop=True)
+
+
+def add_event_review_history_summary(frame: pd.DataFrame | None, history: pd.DataFrame | None) -> pd.DataFrame:
+    """Attach audit count and latest review timestamp to event rows using event_key only."""
+    if frame is None: return pd.DataFrame()
+    result = frame.copy()
+    result["review_history_count"] = 0
+    result["review_last_updated"] = ""
+    if result.empty or history is None or history.empty or "event_key" not in history.columns or "event_key" not in result.columns: return result
+    audit = history.copy()
+    audit["event_key"] = audit["event_key"].fillna("").astype(str)
+    audit = audit[audit["event_key"].ne("")]
+    if audit.empty: return result
+    counts = audit.groupby("event_key", sort=False).size()
+    keys = result["event_key"].fillna("").astype(str)
+    result["review_history_count"] = keys.map(counts).fillna(0).astype(int)
+    if "updated_at" in audit.columns:
+        audit["_parsed"] = pd.to_datetime(audit["updated_at"], utc=True, errors="coerce")
+        latest = audit.sort_values("_parsed", ascending=False, na_position="last", kind="stable").drop_duplicates("event_key")
+        values = latest.set_index("event_key")["updated_at"].fillna("").astype(str)
+        result["review_last_updated"] = keys.map(values).fillna("")
+    return result
+
 def filter_event_review_status(
     frame: pd.DataFrame,
     status: str = "",
