@@ -93,9 +93,11 @@ def build_scan_targets(
 
     if not _is_rfc1918(active_network):
         raise ValueError("The active interface must use an RFC1918 private IPv4 subnet.")
-    if local not in active_network or gateway not in active_network:
-        raise ValueError("The local IP and default gateway must belong to the active subnet.")
-    if gateway.is_multicast or gateway.is_unspecified:
+    if local not in active_network:
+        raise ValueError("The local IP must belong to the active subnet.")
+    if gateway is not None and gateway not in active_network:
+        raise ValueError("The default gateway must belong to the active subnet.")
+    if gateway is not None and (gateway.is_multicast or gateway.is_unspecified):
         raise ValueError("The default gateway address is not valid for discovery.")
 
     if (
