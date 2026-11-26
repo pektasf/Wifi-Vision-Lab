@@ -153,6 +153,7 @@ def estimate_zone(
     min_overlap: int = 2,
     missing_penalty_db: float = 12.0,
     exclude_sample_id: str | None = None,
+    reference_sample_ids: set[str] | None = None,
     db_path=None,
 ) -> dict[str, object]:
     query = validate_measurements(measurements)
@@ -162,6 +163,8 @@ def estimate_zone(
     candidates = []
     for sample in samples:
         if exclude_sample_id and sample["sample_id"] == exclude_sample_id:
+            continue
+        if reference_sample_ids is not None and sample["sample_id"] not in reference_sample_ids:
             continue
         distance, overlap = _distance(
             query, sample["measurements"],
@@ -336,5 +339,146 @@ def evaluate_fingerprints(
             "Leave-one-out results on this small local survey set; not a guarantee "
             "of future accuracy. Collect independent repeat surveys across times "
             "and device orientations before drawing conclusions."
+        ),
+    }
+
+
+
+def evaluate_holdout_fingerprints(
+    floor_id: str,
+    *,
+    k: int = 3,
+    min_overlap: int = 2,
+    holdout_fraction: float = 0.25,
+    min_samples_per_zone: int = 3,
+    db_path=None,
+) -> dict[str, object]:
+    """Evaluate later, time-ordered samples against earlier references only."""
+    if not 0.1 <= float(holdout_fraction) <= 0.5:
+        raise ValueError("holdout_fraction must be between 0.1 and 0.5.")
+    if min_samples_per_zone < 3:
+        raise ValueError("min_samples_per_zone must be at least 3.")
+    if k < 1 or min_overlap < 1:
+        raise ValueError("k and min_overlap must be positive integers.")
+
+    samples = list_fingerprints(floor_id, db_path=db_path)
+    grouped: dict[str, list[dict[str, object]]] = {}
+    for sample in samples:
+        grouped.setdefault(sample["zone_id"], []).append(sample)
+
+    training_samples = []
+    holdout_samples = []
+    skipped_zones = 0
+    for zone_id, zone_samples in grouped.items():
+        ordered = sorted(
+            zone_samples,
+            key=lambda item: (item["observed_at"], item["sample_id"]),
+        )
+        if len(ordered) < min_samples_per_zone:
+            skipped_zones += 1
+            continue
+        holdout_count = max(1, math.ceil(len(ordered) * holdout_fraction))
+        holdout_count = min(holdout_count, len(ordered) - 2)
+        training_samples.extend(ordered[:-holdout_count])
+        holdout_samples.extend(ordered[-holdout_count:])
+
+    if not holdout_samples:
+        return {
+            "status": "insufficient_reference_samples",
+            "sample_count": len(samples),
+            "training_count": 0,
+            "holdout_count": 0,
+            "eligible_zone_count": 0,
+            "skipped_zone_count": skipped_zones,
+            "accuracy": None,
+            "coverage": None,
+            "correct": 0,
+            "incorrect": 0,
+            "ambiguous": 0,
+            "insufficient": 0,
+            "per_zone": [],
+            "outcomes": [],
+            "message": (
+                f"At least {min_samples_per_zone} samples per zone are required "
+                "for a time-ordered holdout test."
+            ),
+        }
+
+    reference_ids = {sample["sample_id"] for sample in training_samples}
+    outcomes = []
+    for sample in holdout_samples:
+        estimate = estimate_zone(
+            floor_id,
+            sample["measurements"],
+            k=k,
+            min_overlap=min_overlap,
+            reference_sample_ids=reference_ids,
+            db_path=db_path,
+        )
+        outcomes.append({
+            "sample_id": sample["sample_id"],
+            "expected_zone_id": sample["zone_id"],
+            "predicted_zone_id": estimate.get("zone_id", ""),
+            "status": estimate["status"],
+            "correct": (
+                estimate["status"] == "estimated"
+                and estimate.get("zone_id") == sample["zone_id"]
+            ),
+        })
+
+    correct = sum(item["correct"] for item in outcomes)
+    incorrect = sum(
+        item["status"] == "estimated" and not item["correct"] for item in outcomes
+    )
+    ambiguous = sum(item["status"] == "ambiguous" for item in outcomes)
+    insufficient = sum(
+        item["status"] == "insufficient_evidence" for item in outcomes
+    )
+    predicted = correct + incorrect
+    accuracy = correct / predicted if predicted else None
+    coverage = predicted / len(holdout_samples)
+
+    per_zone = []
+    eligible_zone_ids = sorted({sample["zone_id"] for sample in holdout_samples})
+    for zone_id in eligible_zone_ids:
+        zone_outcomes = [
+            item for item in outcomes if item["expected_zone_id"] == zone_id
+        ]
+        zone_correct = sum(item["correct"] for item in zone_outcomes)
+        zone_predicted = sum(item["status"] == "estimated" for item in zone_outcomes)
+        per_zone.append({
+            "zone_id": zone_id,
+            "training_samples": sum(
+                sample["zone_id"] == zone_id for sample in training_samples
+            ),
+            "holdout_samples": len(zone_outcomes),
+            "correct": zone_correct,
+            "estimated": zone_predicted,
+            "accuracy": (
+                round(zone_correct / zone_predicted, 3) if zone_predicted else None
+            ),
+            "coverage": round(zone_predicted / len(zone_outcomes), 3),
+        })
+
+    return {
+        "status": "evaluated",
+        "sample_count": len(samples),
+        "training_count": len(training_samples),
+        "holdout_count": len(holdout_samples),
+        "eligible_zone_count": len(eligible_zone_ids),
+        "skipped_zone_count": skipped_zones,
+        "accuracy": round(accuracy, 3) if accuracy is not None else None,
+        "coverage": round(coverage, 3),
+        "correct": correct,
+        "incorrect": incorrect,
+        "ambiguous": ambiguous,
+        "insufficient": insufficient,
+        "per_zone": per_zone,
+        "outcomes": outcomes,
+        "message": (
+            "Time-ordered holdout: later samples were evaluated only against earlier "
+            "reference samples. This is more independent than leave-one-out, but it "
+            "still reflects this device, environment, survey schedule, and dataset; "
+            "it is not a guarantee of future accuracy."
         ),
     }
