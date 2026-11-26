@@ -82,3 +82,11 @@ The capability-audit tests are offline and do not inspect the user's live adapte
 - Map common Windows WLAN error codes to actionable, non-identifying explanations.
 - Verify the capability audit reports RSSI backend implementation separately from per-adapter support.
 - Verify non-Windows reports do not claim the Windows RSSI collector is available.
+
+
+## Windows target validation
+
+GitHub Actions also runs the Windows WLAN ABI, platform capability, and app
+syntax tests on `windows-latest`. These tests validate Windows ctypes structure
+layout and the Windows-specific contracts without requiring a physical Wi-Fi
+adapter or invoking live WLAN APIs.
