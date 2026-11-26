@@ -54,6 +54,20 @@ def build_observation_identity_keys(observations):
     return identity_keys
 
 
+def classify_observation_evidence(source, status):
+    """Return a precise evidence label without implying device certainty."""
+    source = str(source or "").strip().casefold()
+    status = str(status or "").strip().casefold()
+
+    if source == "windows_local" and status == "responding":
+        return "icmp_echo_reply"
+    if source == "windows_local" and status == "arp_seen":
+        return "arp_cache_entry"
+    if source == "windows_arp_cache" or status == "arp_cache":
+        return "arp_cache_entry"
+    return "adapter_reported_observation"
+
+
 def build_device_profiles(observations):
     grouped = {}
     identity_keys = build_observation_identity_keys(observations)
@@ -163,7 +177,7 @@ class DiscoveryEngine:
                         "status": raw.get("status", ""),
                         "gateway": raw.get("gateway", network.get("gateway", "")),
                         "adapter": raw.get("adapter", network.get("adapter", "")),
-                        "evidence": "Windows local discovery",
+                        "evidence": classify_observation_evidence(source, raw.get("status", "")),
                         "raw_data": json.dumps(raw, ensure_ascii=False)
                     })
 
