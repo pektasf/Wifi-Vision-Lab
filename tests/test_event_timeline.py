@@ -191,3 +191,50 @@ def test_live_ping_timeline_keeps_mac_identity_and_ip_separately():
     assert result.iloc[0]["ip"] == "192.0.2.8"
     assert result.iloc[0]["old_value"] == "responding"
     assert result.iloc[0]["new_value"] == "not_responding"
+
+
+
+def test_filter_event_timeline_combines_exact_filters_and_literal_search():
+    from scripts.event_timeline import filter_event_timeline
+
+    frame = pd.DataFrame([
+        {"event_type": "IP_CHANGED", "source": "Ağ olayları", "severity": "warning",
+         "subject": "AA:BB:CC:DD:EE:01", "details": "Address changed"},
+        {"event_type": "PING_NOT_RESPONDING", "source": "Canlı izleme", "severity": "warning",
+         "subject": "AA:BB:CC:DD:EE:02", "details": "Ping timeout"},
+        {"event_type": "IP_CHANGED", "source": "Ağ olayları", "severity": "review",
+         "subject": "AA:BB:CC:DD:EE:03", "details": "Needs review"},
+    ])
+
+    result = filter_event_timeline(
+        frame, search="AA:BB", source="Ağ olayları", severity="warning",
+        event_type="IP_CHANGED",
+    )
+
+    assert len(result) == 1
+    assert result.iloc[0]["subject"] == "AA:BB:CC:DD:EE:01"
+    assert result.index.tolist() == [0]
+
+
+def test_filter_event_timeline_search_treats_regex_characters_literally():
+    from scripts.event_timeline import filter_event_timeline
+
+    frame = pd.DataFrame([
+        {"event_type": "IP_CHANGED", "details": "Address [192.0.2.1] changed"},
+        {"event_type": "IP_CHANGED", "details": "Address 192x0x2x1 changed"},
+    ])
+
+    result = filter_event_timeline(frame, search="[192.0.2.1]")
+
+    assert len(result) == 1
+    assert result.iloc[0]["details"] == "Address [192.0.2.1] changed"
+
+
+def test_filter_event_timeline_handles_missing_columns_and_empty_input():
+    from scripts.event_timeline import filter_event_timeline
+
+    frame = pd.DataFrame([{"event_type": "IP_CHANGED"}])
+
+    assert filter_event_timeline(frame, source="Ağ olayları").empty
+    assert filter_event_timeline(pd.DataFrame()).empty
+    assert filter_event_timeline(None).empty
