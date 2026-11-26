@@ -16,7 +16,7 @@ SOURCE_FIELDS = ["source", "status", "devices_found", "checked_at", "error"]
 DEVICE_FIELDS = [
     "device_id", "identity_basis", "network_id", "mac",
     "ips", "hostnames", "sources", "source_count",
-    "statuses", "evidence_types", "last_seen"
+    "statuses", "evidence_types", "identity_assessment", "identity_signals", "last_seen"
 ]
 
 
@@ -74,9 +74,11 @@ def classify_observation_evidence(source, status, mac=""):
     return "adapter_reported_observation"
 
 
-def build_device_profiles(observations):
+def build_device_profiles(observations, history=None):
+    from scripts.discovery.identity_signals import analyze_identity_variation
     grouped = {}
     identity_keys = build_observation_identity_keys(observations)
+    identity_signals = analyze_identity_variation(observations, history)
 
     for observation, identity in zip(observations, identity_keys):
         network = str(observation.get("network_id", "")).strip()
@@ -102,6 +104,8 @@ def build_device_profiles(observations):
                 "sources": set(),
                 "statuses": set(),
                 "evidence_types": set(),
+                "identity_assessment": "no_indicator_observed",
+                "identity_signals": set(),
                 "last_seen": ""
             }
 
@@ -128,6 +132,14 @@ def build_device_profiles(observations):
                 value for value in str(evidence).split(";") if value
             )
 
+        signal = identity_signals.get(identity, {})
+        if signal.get("identity_assessment") == "review":
+            item["identity_assessment"] = "review"
+        elif signal.get("identity_assessment") == "indicator" and item["identity_assessment"] != "review":
+            item["identity_assessment"] = "indicator"
+        if signal.get("identity_signals"):
+            item["identity_signals"].update(signal["identity_signals"].split(";"))
+
         observed_at = observation.get("observed_at", "")
         if observed_at > item["last_seen"]:
             item["last_seen"] = observed_at
@@ -146,6 +158,8 @@ def build_device_profiles(observations):
             "source_count": len(item["sources"]),
             "statuses": ";".join(sorted(item["statuses"])),
             "evidence_types": ";".join(sorted(item["evidence_types"])),
+            "identity_assessment": item["identity_assessment"],
+            "identity_signals": ";".join(sorted(item["identity_signals"])),
             "last_seen": item["last_seen"]
         })
 
@@ -223,7 +237,10 @@ class DiscoveryEngine:
         if observations:
             overwrite_rows(DATA / "discovery_observations.csv", observations, FIELDS)
 
-        profiles = build_device_profiles(observations)
+        from scripts.discovery.identity_signals import load_identity_history, save_identity_history
+        identity_history = load_identity_history()
+        profiles = build_device_profiles(observations, history=identity_history)
+        save_identity_history(observations, history=identity_history)
 
         overwrite_rows(
             DATA / "discovery_devices.csv",
@@ -238,7 +255,8 @@ class DiscoveryEngine:
             inventory_rows,
             [
                 "timestamp", "ip", "mac", "hostname",
-                "status", "gateway", "adapter", "subnet"
+                "status", "gateway", "adapter", "subnet",
+                "identity_assessment", "identity_signals"
             ]
         )
 
@@ -306,7 +324,9 @@ def build_inventory_rows(observations, profiles):
                 (item.get("adapter", "") for item in matches if item.get("adapter")),
                 ""
             ),
-            "subnet": profile["network_id"]
+            "subnet": profile["network_id"],
+            "identity_assessment": profile.get("identity_assessment", "no_indicator_observed"),
+            "identity_signals": profile.get("identity_signals", "")
         })
 
     return rows
