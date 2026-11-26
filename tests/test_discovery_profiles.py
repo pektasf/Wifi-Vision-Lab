@@ -181,6 +181,9 @@ def test_discovery_evidence_labels_distinguish_ping_and_arp_sources():
     assert classify_observation_evidence("windows_local", "responding") == (
         "icmp_echo_reply"
     )
+    assert classify_observation_evidence(
+        "windows_local", "responding", "AA:BB:CC:DD:EE:FF"
+    ) == "arp_cache_entry;icmp_echo_reply"
     assert classify_observation_evidence("windows_local", "arp_seen") == (
         "arp_cache_entry"
     )
