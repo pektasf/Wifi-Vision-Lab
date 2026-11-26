@@ -707,10 +707,10 @@ def history_page():
 
     if "observed_at" in history.columns:
         history["_parsed_time"] = pd.to_datetime(
-            history["observed_at"], errors="coerce"
+            history["observed_at"], utc=True, errors="coerce"
         )
         history = history.sort_values(
-            "_parsed_time", ascending=False, na_position="last"
+            "_parsed_time", ascending=False, na_position="last", kind="stable"
         )
 
     total_devices = (
@@ -722,6 +722,12 @@ def history_page():
         history["observed_at"].iloc[0]
         if "observed_at" in history.columns and len(history) else "-"
     )
+    if "observed_at" in history.columns and len(history):
+        parsed_latest = pd.to_datetime(latest, utc=True, errors="coerce")
+        if pd.notna(parsed_latest):
+            latest = parsed_latest.to_pydatetime().astimezone().strftime(
+                "%d.%m.%Y %H:%M:%S"
+            )
 
     c1, c2, c3 = st.columns(3)
     c1.metric("Toplam g\u00f6zlem", f"{len(history):,}")
@@ -743,7 +749,8 @@ def history_page():
         identities = ["T\u00fcm cihazlar"]
         if "identity_key" in history.columns:
             identities += sorted(
-                history["identity_key"].astype(str).unique().tolist()
+                value for value in history["identity_key"].astype(str).unique().tolist()
+                if value.strip()
             )
         selected = st.selectbox(
             "Cihaz filtresi", identities, key="history_device_v2"
@@ -756,7 +763,7 @@ def history_page():
 
     if search.strip():
         mask = result.astype(str).apply(
-            lambda col: col.str.contains(search.strip(), case=False, na=False)
+            lambda col: col.str.contains(search.strip(), case=False, na=False, regex=False)
         ).any(axis=1)
         result = result[mask]
 
@@ -1713,8 +1720,8 @@ def spatial_intelligence_page():
             type="rect", x0=0, y0=0,
             x1=float(selected_floor["width_m"]),
             y1=float(selected_floor["height_m"]),
-            line={"color": "#334155", "width": 2},
-            fillcolor="rgba(148, 163, 184, 0.04)",
+            line={"color": "#A8B8B2", "width": 2},
+            fillcolor="rgba(220, 229, 225, 0.25)",
         )
         for zone in zones:
             figure.add_shape(
@@ -1722,22 +1729,22 @@ def spatial_intelligence_page():
                 x0=float(zone["x_m"]), y0=float(zone["y_m"]),
                 x1=float(zone["x_m"]) + float(zone["width_m"]),
                 y1=float(zone["y_m"]) + float(zone["height_m"]),
-                line={"color": "#2563EB", "width": 2},
-                fillcolor="rgba(37, 99, 235, 0.10)",
+                line={"color": "#087F78", "width": 2},
+                fillcolor="rgba(8, 127, 120, 0.10)",
             )
             figure.add_annotation(
                 x=float(zone["x_m"]) + float(zone["width_m"]) / 2,
                 y=float(zone["y_m"]) + float(zone["height_m"]) / 2,
                 text=str(zone["name"]),
                 showarrow=False,
-                font={"color": "#1E3A8A"},
+                font={"color": "#066A65"},
             )
 
         marker_styles = {
-            "access_point": ("Erişim noktası", "diamond", "#DC2626"),
-            "laptop": ("Laptop", "square", "#0F766E"),
-            "sensor": ("Sensör", "circle", "#7C3AED"),
-            "manual_reference": ("Referans", "x", "#475569"),
+            "access_point": ("Erişim noktası", "diamond", "#087F78"),
+            "laptop": ("Laptop", "square", "#426C8C"),
+            "sensor": ("Sensör", "circle", "#8A5A12"),
+            "manual_reference": ("Referans", "x", "#73827F"),
         }
         for anchor_type, (label, symbol, color) in marker_styles.items():
             group = [item for item in anchors if item["anchor_type"] == anchor_type]
@@ -1763,10 +1770,16 @@ def spatial_intelligence_page():
             scaleanchor="x", scaleratio=1,
         )
         figure.update_layout(
-            height=520, margin={"l": 10, "r": 10, "t": 20, "b": 10},
+            height=520,
+            margin={"l": 10, "r": 10, "t": 20, "b": 10},
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="#FFFFFF",
+            font={"family": "Segoe UI, sans-serif", "color": "#182B2A", "size": 11},
             legend={"orientation": "h"},
         )
-        st.plotly_chart(figure, use_container_width=True)
+        st.plotly_chart(
+            figure, width="stretch", config={"displayModeBar": False}
+        )
     except ImportError:
         st.warning("Kat planı çizimi için Plotly kurulu değil.")
 
