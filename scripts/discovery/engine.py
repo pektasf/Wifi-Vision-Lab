@@ -191,7 +191,9 @@ class DiscoveryEngine:
                         "status": raw.get("status", ""),
                         "gateway": raw.get("gateway", network.get("gateway", "")),
                         "adapter": raw.get("adapter", network.get("adapter", "")),
-                        "evidence": classify_observation_evidence(\n                            source, raw.get("status", ""), raw.get("mac", "")\n                        ),
+                        "evidence": classify_observation_evidence(
+                            source, raw.get("status", ""), raw.get("mac", "")
+                        ),
                         "raw_data": json.dumps(raw, ensure_ascii=False)
                     })
 
