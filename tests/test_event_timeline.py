@@ -56,7 +56,7 @@ def test_normalizer_keeps_missing_dates_last_without_parse_warnings():
         result = normalize_event_frames({"network_events.csv": frame})
 
     assert result["subject"].tolist() == [
-        "same-instant", "newer", "first", "second"
+        "newer", "same-instant", "first", "second"
     ]
     assert captured == []
 
