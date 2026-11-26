@@ -53,6 +53,46 @@ def _time_sort_key(value):
         return (0, value)
 
 
+def build_inventory_identity_index(inventory):
+    """Index inventory rows once so multiple evidence sources share match rules."""
+    mac_index = {}
+    ip_index = {}
+    for item in _records(inventory):
+        mac = normalize_mac(item.get("mac"))
+        ip = _normalize_ipv4(item.get("ip"))
+        if mac:
+            mac_index.setdefault(mac, []).append(item)
+        if ip:
+            ip_index.setdefault(ip, []).append(item)
+    return {"mac": mac_index, "ip": ip_index}
+
+
+def correlate_inventory_observation(row, inventory_index, mac_value=None, ip_value=None):
+    """Match an observation without assuming that an IP belongs to one LAN."""
+    mac = normalize_mac(row.get("mac") if mac_value is None else mac_value)
+    ip = _normalize_ipv4(row.get("ip") if ip_value is None else ip_value)
+    if mac and mac in inventory_index["mac"]:
+        candidates = inventory_index["mac"][mac]
+        scope = _network_scope(row)
+        matches = [
+            item for item in candidates
+            if not (scope and _network_scope(item)
+                    and scope != _network_scope(item))
+        ]
+        return ("exact_mac", matches) if matches else ("network_mismatch", [])
+    if ip and ip in inventory_index["ip"]:
+        candidates = inventory_index["ip"][ip]
+        scope = _network_scope(row)
+        if not scope or not any(_network_scope(item) for item in candidates):
+            return "ip_scope_unknown", []
+        matches = [
+            item for item in candidates
+            if _network_scope(item) == scope
+        ]
+        return ("exact_ip", matches) if matches else ("network_mismatch", [])
+    return "unmatched", []
+
+
 def build_identity_evidence_timeline(
     inventory=None,
     local_observations=None,
@@ -68,17 +108,7 @@ def build_identity_evidence_timeline(
     networks. IP-only matches require an explicit, equal network scope on both
     sides because an IPv4 address can be reused on another network.
     """
-    inventory_rows = _records(inventory)
-    mac_index = {}
-    ip_index = {}
-    for item in inventory_rows:
-        mac = normalize_mac(item.get("mac"))
-        ip = _normalize_ipv4(item.get("ip"))
-        if mac:
-            mac_index.setdefault(mac, []).append(item)
-        if ip:
-            ip_index.setdefault(ip, []).append(item)
-
+    inventory_index = build_inventory_identity_index(inventory)
     timeline = []
 
     def append(source, row, mac_value="", ip_value="", hostname="", evidence="", details=""):
@@ -87,36 +117,9 @@ def build_identity_evidence_timeline(
         if not mac and not ip:
             return
 
-        scope = _network_scope(row)
-        matches = []
-        correlation = "unmatched"
-
-        if mac and mac in mac_index:
-            candidates = mac_index[mac]
-            matches = [
-                item for item in candidates
-                if not (scope and _network_scope(item)
-                        and scope != _network_scope(item))
-            ]
-            if matches:
-                correlation = "exact_mac"
-            else:
-                correlation = "network_mismatch"
-        elif ip and ip in ip_index:
-            candidates = ip_index[ip]
-            if not scope or not any(_network_scope(item) for item in candidates):
-                correlation = "ip_scope_unknown"
-            else:
-                matches = [
-                    item for item in candidates
-                    if _network_scope(item) == scope
-                ]
-                if matches:
-                    correlation = "exact_ip"
-                elif any(_network_scope(item) for item in candidates):
-                    correlation = "network_mismatch"
-                else:
-                    correlation = "ip_scope_unknown"
+        correlation, matches = correlate_inventory_observation(
+            row, inventory_index, mac_value=mac, ip_value=ip
+        )
 
         assessments = sorted({
             str(item.get("identity_assessment", "")).strip()
