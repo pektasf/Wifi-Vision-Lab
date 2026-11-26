@@ -200,9 +200,9 @@ def render():
 
     a, b, c, d = st.columns(4)
     a.metric("Toplam cihaz", f"{total:,}")
-    b.metric("Altyapi kaydi", f"{len(infrastructure):,}")
-    c.metric("Ekipman adayi", f"{len(candidates):,}")
-    d.metric("Wi-Fi AP kaydi", f"{len(access_points):,}")
+    b.metric("Altyapı kaydı", f"{len(infrastructure):,}")
+    c.metric("Ekipman adayı", f"{len(candidates):,}")
+    d.metric("Wi-Fi AP kaydı", f"{len(access_points):,}")
 
     st.divider()
 
@@ -273,7 +273,7 @@ def render():
         )
 
     with inventory_tab:
-        st.subheader("Ag ekipmani envanteri")
+        st.subheader("Ağ ekipmanı envanteri")
 
         filters = st.columns([2, 1, 1])
         with filters[0]:
@@ -389,13 +389,13 @@ def render():
             )
 
     with wifi_tab:
-        st.subheader("Mevcut Wi-Fi baglantisi")
+        st.subheader("Mevcut Wi-Fi bağlantısı")
         if wifi.empty:
             st.info("Wi-Fi baglanti verisi bulunamadi.")
         else:
             st.dataframe(wifi, width="stretch", hide_index=True)
 
-        st.subheader("Kesfedilen erisim noktalari")
+        st.subheader("Keşfedilen erişim noktaları")
         if access_points.empty:
             st.info("Kesfedilmis access point kaydi bulunamadi.")
         else:
@@ -412,7 +412,7 @@ def render():
         )
 
     with evidence_tab:
-        st.subheader("KanIt ve veri kaynaklari")
+        st.subheader("Kanıt ve veri kaynakları")
         st.markdown(
             "- **Kayitli siniflandirma:** Kaynak dosyada cihaz turu veya siniflandirma var.\n"
             "- **Uretici bilgisine dayali aday:** Uretici ag ekipmani markasi olarak taniniyor; rol kesin degil.\n"
