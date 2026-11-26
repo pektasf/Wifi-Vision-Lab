@@ -103,3 +103,29 @@ def test_invalid_timestamp_and_non_finite_lease_values_are_not_estimated():
     rows = analyze_dhcp_lease_windows([bad_time, bad_lease])
     assert rows[0]["lease_analysis"] == "Geçerli zaman damgası yok"
     assert rows[1]["lease_analysis"] == "Geçerli kira süresi yok"
+
+
+
+def test_reuse_after_unknown_scope_is_not_labeled_as_confirmed_same_scope():
+    rows = analyze_dhcp_lease_windows([
+        lease("00:11:22:33:44:55", "2026-11-26T10:00:00Z", seconds=3600, scope=""),
+        lease("00:11:22:33:44:66", "2026-11-26T11:00:01Z", seconds=3600,
+              scope="192.168.1.0/24"),
+    ])
+    assert rows[1]["lease_analysis"] == (
+        "Farklı MAC sonrası yeniden kullanım · ağ kapsamı bilinmiyor"
+    )
+
+
+def test_missing_transaction_duration_uses_lower_precision_start_estimate():
+    row = lease("00:11:22:33:44:55", "2026-11-26T10:00:00+03:00", duration="")
+    result = analyze_dhcp_lease_windows([row])[0]
+    assert result["lease_start_estimate"] == "2026-11-26T07:00:00.000000Z"
+    assert result["lease_timing_quality"] == "first_message_estimate"
+
+
+def test_extreme_lease_duration_is_rejected_without_datetime_overflow():
+    row = lease("00:11:22:33:44:55", "2026-11-26T10:00:00Z", seconds="999999999999")
+    result = analyze_dhcp_lease_windows([row])[0]
+    assert result["lease_analysis"] == "Geçerli kira süresi yok"
+    assert result["lease_expiry_estimate"] == ""
