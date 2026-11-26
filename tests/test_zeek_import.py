@@ -218,3 +218,29 @@ def test_zeek_dhcp_import_leaves_network_scope_unknown_when_not_supplied():
         "server_addr": "192.168.1.1",
     }]))
     assert rows[0]["network_id"] == ""
+
+
+
+def test_zeek_import_does_not_apply_explicit_scope_to_out_of_subnet_assignment():
+    rows = normalize_zeek_dhcp_export(
+        json.dumps([{
+            "mac": "00:11:22:33:44:55",
+            "assigned_addr": "192.168.2.42",
+            "server_addr": "192.168.1.1",
+        }]),
+        network_id="192.168.1.0/24",
+    )
+    assert rows[0]["network_id"] == ""
+    assert "network_scope_address_mismatch" in rows[0]["evidence_status"]
+
+
+def test_zeek_import_keeps_scope_when_assigned_ip_is_inside_network():
+    rows = normalize_zeek_dhcp_export(
+        json.dumps([{
+            "mac": "00:11:22:33:44:55",
+            "assigned_addr": "192.168.1.42",
+        }]),
+        network_id="192.168.1.0/24",
+    )
+    assert rows[0]["network_id"] == "192.168.1.0/24"
+    assert "network_scope_address_mismatch" not in rows[0]["evidence_status"]
