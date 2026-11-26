@@ -658,6 +658,18 @@ def events_page():
     c2.metric("Olay kaynagi", f"{data['source'].nunique():,}")
     c3.metric("Farkli olay turu", f"{data['event_type'].nunique():,}")
 
+    severity_counts = summarize_event_severity(data)
+    known_levels = ("critical", "warning", "review", "info")
+    severity_columns = st.columns(4)
+    for column, level in zip(severity_columns, known_levels):
+        column.metric(level.title(), f"{severity_counts.get(level, 0):,}")
+    other_count = sum(
+        count for level, count in severity_counts.items()
+        if level not in known_levels
+    )
+    if other_count:
+        st.caption(f"Diger/ozel onem seviyeleri: {other_count:,}")
+
     st.divider()
     st.subheader("Olay zaman cizelgesi")
 
