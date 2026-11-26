@@ -85,7 +85,9 @@ A Streamlit floor-plan editor now creates floors, rectangular zones, and manual 
 - Its match-agreement score is not a calibrated probability; it does not output metres or coordinates.
 - No automatic Wi-Fi scan is launched. Windows signal percentage is not silently converted to dBm.
 
-**Still pending:** a verified Windows API/driver RSSI collector, repeat-survey calibration, held-out validation metrics, and a reliable error bound.
+Leave-one-out validation is now available in the UI. It excludes each tested sample from its own reference set and reports accuracy separately from prediction coverage; zones with fewer than two samples are skipped. This is an initial internal check, not independent validation.
+
+**Still pending:** a verified Windows API/driver RSSI collector, repeated surveys across time/orientation, independent held-out validation, and a reliable error bound.
 
 Do not infer the position of every other network client from the laptop's own RSSI measurements. Remote-client positioning requires measurements supplied by that client or by compatible AP infrastructure.
 
