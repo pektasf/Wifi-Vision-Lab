@@ -55,3 +55,12 @@ See [SCAN_EVENTS.md](SCAN_EVENTS.md) for the stdout progress-event contract.
 - Non-Windows behavior without command execution.
 
 The capability-audit tests are offline and do not inspect the user's live adapter.
+
+
+## Spatial Intelligence RSSI fingerprint tests
+
+- Validate local AP aliases and RSSI dBm ranges; reject MAC/BSSID-shaped keys.
+- Parse survey measurements without network access.
+- Verify local SQLite persistence and floor/zone ownership.
+- Test zone estimation, insufficient overlap, ambiguous ties, and floor isolation.
+- CI does not invoke Wi-Fi scans, packet capture, or live adapter APIs.
