@@ -303,6 +303,7 @@ def render():
             imported = normalize_kismet_export(
                 kismet_upload.getvalue(),
                 imported_at=pd.Timestamp.now(tz="UTC").isoformat(),
+                network_id=zeek_network_scope.strip(),
             )
             if not imported:
                 st.warning(
@@ -482,6 +483,16 @@ def render():
         "Yetkili Zeek sensöründen alınan dhcp.log JSON/NDJSON kayıtlarını içe aktar. "
         "Bu kaynak, DHCP istemcisinin MAC, hostname ve IP kira bilgisini birlikte gözlemleyebilir."
     )
+    zeek_network_scope = st.text_input(
+        "Zeek kayıtlarının ağ kapsamı (IPv4 CIDR, isteğe bağlı)",
+        placeholder="192.168.1.0/24",
+        help=(
+            "Yalnızca dosyanın tek bir IPv4 ağından geldiğinden eminsen doldur. "
+            "Birden fazla VLAN/ağ varsa boş bırak; DHCP sunucu IP'si ağ kapsamı "
+            "olarak otomatik kullanılmaz."
+        ),
+        key="zeek_network_scope",
+    )
     zeek_upload = st.file_uploader(
         "Zeek dhcp.log JSON dosyası",
         type=["json", "log", "txt"],
@@ -510,6 +521,7 @@ def render():
                         row.get("observed_at", ""), row.get("server_ip", ""),
                         row.get("mac", ""), row.get("assigned_ip", ""),
                         row.get("message_types", ""),
+                        row.get("network_id", ""),
                         row.get("relay_circuit_id", ""),
                         row.get("relay_agent_remote_id", ""),
                     )
@@ -519,7 +531,8 @@ def render():
                     key = (
                         row["observed_at"], row["server_ip"],
                         row["mac"], row["assigned_ip"],
-                        row["message_types"], row["relay_circuit_id"],
+                        row["message_types"], row["network_id"],
+                        row["relay_circuit_id"],
                         row["relay_agent_remote_id"],
                     )
                     if key not in seen:
