@@ -422,3 +422,61 @@ def test_dhcp_server_is_not_added_when_dhcp_is_disabled_or_address_invalid():
         nodes, edges = build_topology(inventory, network_context=context)
         assert not any(node["node_type"] == "dhcp_server_address" for node in nodes)
         assert not any(edge["relation"] == "configured_dhcp_server" for edge in edges)
+
+
+def test_distinct_bssids_with_same_ssid_are_not_merged_into_one_physical_ap():
+    inventory = pd.DataFrame([{"ip": "192.168.1.20", "mac": "AA:BB:CC:DD:EE:20", "subnet": "192.168.1.0/24"}])
+    relationships = pd.DataFrame([
+        {"client_mac": "AA:BB:CC:DD:EE:20", "ap_bssid": "AA:BB:CC:DD:EE:01", "ssid": "Office", "source": "windows_wlan", "evidence_type": "direct_association", "verification_status": "verified", "observed_at": "2026-11-26T10:00:00Z"},
+        {"client_mac": "AA:BB:CC:DD:EE:21", "ap_bssid": "AA:BB:CC:DD:EE:02", "ssid": "Office", "source": "windows_wlan", "evidence_type": "direct_association", "verification_status": "verified", "observed_at": "2026-11-26T10:01:00Z"},
+    ])
+
+    nodes, edges = build_topology(inventory, ap_relationships=relationships)
+    radios = [node for node in nodes if node["node_type"] == "access_point_radio"]
+    physical = [node for node in nodes if node["node_type"] == "access_point_device"]
+
+    assert len(radios) == 2
+    assert len(physical) == 0
+    assert not any(edge["relation"] == "radio_of" for edge in edges)
+
+
+def test_bssid_is_grouped_only_with_explicit_verified_ap_device_identity():
+    inventory = pd.DataFrame([{"ip": "192.168.1.20", "mac": "AA:BB:CC:DD:EE:20", "subnet": "192.168.1.0/24"}])
+    relationships = pd.DataFrame([{
+        "client_mac": "AA:BB:CC:DD:EE:20",
+        "ap_bssid": "AA:BB:CC:DD:EE:01",
+        "ap_device_mac": "AA:BB:CC:DD:EF:00",
+        "device_identity_verification": "verified",
+        "device_identity_evidence": "direct_ap_device_identity",
+        "device_identity_source": "trusted_local_controller",
+        "ssid": "Office", "source": "windows_wlan",
+        "evidence_type": "direct_association", "verification_status": "verified",
+        "observed_at": "2026-11-26T10:00:00Z",
+    }])
+
+    nodes, edges = build_topology(inventory, ap_relationships=relationships)
+    physical = next(node for node in nodes if node["node_type"] == "access_point_device")
+    radio_edge = next(edge for edge in edges if edge["relation"] == "radio_of")
+
+    assert physical["id"] == "AP_DEVICE:AA:BB:CC:DD:EF:00"
+    assert physical["confidence"] == "verified"
+    assert radio_edge["source"] == physical["id"]
+    assert radio_edge["target"] == "BSSID:AA:BB:CC:DD:EE:01"
+    assert radio_edge["confidence"] == "verified"
+
+
+def test_unverified_or_invalid_ap_device_identity_does_not_group_radios():
+    inventory = pd.DataFrame([{"ip": "192.168.1.20", "mac": "AA:BB:CC:DD:EE:20", "subnet": "192.168.1.0/24"}])
+    for identity in [
+        {"ap_device_mac": "AA:BB:CC:DD:EF:00", "device_identity_verification": "inferred", "device_identity_evidence": "direct_ap_device_identity"},
+        {"ap_device_mac": "not-a-mac", "device_identity_verification": "verified", "device_identity_evidence": "direct_ap_device_identity"},
+    ]:
+        relationships = pd.DataFrame([{
+            "client_mac": "AA:BB:CC:DD:EE:20", "ap_bssid": "AA:BB:CC:DD:EE:01",
+            "ssid": "Office", "source": "windows_wlan",
+            "evidence_type": "direct_association", "verification_status": "verified",
+            "observed_at": "2026-11-26T10:00:00Z", **identity,
+        }])
+        nodes, edges = build_topology(inventory, ap_relationships=relationships)
+        assert not any(node["node_type"] == "access_point_device" for node in nodes)
+        assert not any(edge["relation"] == "radio_of" for edge in edges)
