@@ -16,6 +16,7 @@ from scripts.discovery.nmap_import import (
 from scripts.discovery.zeek_import import (
     ZEEK_DHCP_FIELDS, normalize_zeek_dhcp_export, MAX_ZEEK_BYTES,
 )
+from scripts.discovery.evidence_timeline import build_identity_evidence_timeline
 
 
 DATA = Path(__file__).resolve().parent.parent / "data" / "processed"
@@ -98,6 +99,7 @@ def render():
     access_points = read_data("wifi_access_points.csv")
     ap_client_history = read_data("ap_client_relationships.csv")
     network_context = read_data("network_context.csv")
+    local_observations = read_data("discovery_observations.csv")
 
     st.markdown(
         '<div class="wv-page-header"><h1>Ağ altyapısı</h1>'
@@ -611,6 +613,72 @@ def render():
                     "aynı hostname kullanan birden fazla cihazdan kaynaklanabilir. "
                     "Tek başına kimlik gizleme veya kötü niyet kanıtı değildir."
                 )
+
+    identity_timeline = build_identity_evidence_timeline(
+        inventory=inventory.to_dict("records") if not inventory.empty else [],
+        local_observations=local_observations.to_dict("records") if not local_observations.empty else [],
+        endpoint_observations=endpoint_evidence.to_dict("records") if not endpoint_evidence.empty else [],
+        wireless_observations=wireless_evidence.to_dict("records") if not wireless_evidence.empty else [],
+        nmap_observations=nmap_evidence.to_dict("records") if not nmap_evidence.empty else [],
+        zeek_observations=zeek_evidence.to_dict("records") if not zeek_evidence.empty else [],
+    )
+    if identity_timeline:
+        st.markdown("### Birleşik kimlik kanıtı zaman çizelgesi")
+        timeline_frame = pd.DataFrame(identity_timeline)
+        timeline_frame["correlation_method"] = timeline_frame[
+            "correlation_method"
+        ].map({
+            "exact_mac": "MAC birebir",
+            "exact_ip": "IP birebir · daha zayıf",
+            "unmatched": "Envanter eşleşmesi yok",
+        }).fillna("Bilinmiyor")
+        matched_count = int(
+            timeline_frame["correlation_method"].ne("Envanter eşleşmesi yok").sum()
+        )
+        randomized_count = int(
+            timeline_frame["identity_indicator"].eq("Kismet randomized MAC").sum()
+        )
+        local_mac_count = int(
+            timeline_frame["identity_indicator"].eq("Locally administered MAC").sum()
+        )
+        timeline_metrics = st.columns(4)
+        timeline_metrics[0].metric("Toplam kanıt olayı", len(timeline_frame))
+        timeline_metrics[1].metric("Envanterle eşleşen", matched_count)
+        timeline_metrics[2].metric("Kismet randomized MAC", randomized_count)
+        timeline_metrics[3].metric("Yerel yönetimli MAC", local_mac_count)
+        timeline_display = timeline_frame.rename(columns={
+            "observed_at": "Gözlem zamanı",
+            "source": "Kanıt kaynağı",
+            "mac": "MAC adresi",
+            "ip": "IPv4",
+            "hostname": "Cihaz adı",
+            "evidence": "Kanıt türü",
+            "identity_indicator": "Kimlik göstergesi",
+            "correlation_method": "Envanter eşleşmesi",
+            "inventory_identity_assessment": "Kimlik değerlendirmesi",
+            "inventory_identity_signals": "Kimlik sinyalleri",
+            "details": "Ayrıntı",
+        })
+        visible_columns = [
+            "Gözlem zamanı", "Kanıt kaynağı", "MAC adresi", "IPv4",
+            "Cihaz adı", "Kanıt türü", "Kimlik göstergesi",
+            "Envanter eşleşmesi", "Kimlik değerlendirmesi",
+            "Kimlik sinyalleri", "Ayrıntı",
+        ]
+        st.dataframe(
+            timeline_display[
+                [column for column in visible_columns if column in timeline_display.columns]
+            ],
+            width="stretch",
+            hide_index=True,
+            height=460,
+        )
+        st.caption(
+            "Zaman çizelgesi kaynak kayıtlarını birleştirip silmez. MAC eşleşmesi "
+            "aynı adresin gözlemlendiğini, IP eşleşmesi ise yalnızca aynı IP'nin "
+            "görüldüğünü belirtir; hiçbiri tek başına fiziksel cihaz veya kişi "
+            "kimliğini kanıtlamaz. En yeni 10.000 olay gösterilir."
+        )
 
     if inventory.empty and nodes.empty and classification.empty:
         st.warning("Altyapi envanteri icin henuz veri bulunamadi.")
