@@ -23,7 +23,7 @@ def test_initialize_database_is_idempotent_and_versioned(tmp_path):
     initialize_database(db_path)
     initialize_database(db_path)
     with connect(db_path) as connection:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 4
         tables = {
             row["name"] for row in connection.execute(
                 "SELECT name FROM sqlite_master WHERE type='table'"
@@ -190,7 +190,7 @@ def test_existing_schema_v1_upgrades_without_losing_rows(tmp_path):
     initialize_database(db_path)
 
     with connect(db_path) as connection:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 4
         row = connection.execute(
             "SELECT current_ip FROM devices WHERE identity_key=?",
             ("AA:BB:CC:DD:EE:FF",),
@@ -262,7 +262,7 @@ def test_sqlite_backup_and_restore_preserve_runtime_data(tmp_path):
 
     with connect(restored) as connection:
         assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 4
 
 
 def test_backup_and_restore_refuse_to_overwrite_existing_files(tmp_path):

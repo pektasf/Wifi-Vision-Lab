@@ -75,14 +75,19 @@ A Streamlit floor-plan editor now creates floors, rectangular zones, and manual 
 
 ### SI-2 — Laptop-observable device positioning
 
-- Collect signal observations only from supported Windows APIs/commands.
-- Build a local fingerprint survey workflow with manually labelled reference
-  zones.
-- Estimate zones using deterministic fingerprint matching and report measured
-  validation error.
-- Do not infer the position of every other network client from the laptop's own
-  RSSI measurements. Remote-client positioning requires measurements supplied
-  by that client or by compatible AP infrastructure.
+**Initial fingerprint workflow implemented (schema v4).**
+
+- Local SQLite stores manually labelled RSSI fingerprints for floor zones.
+- The Streamlit page supports reference survey entry and a new-observation zone estimate.
+- A deterministic k-nearest-neighbour matcher compares AP-alias/RSSI vectors.
+- Inputs are local aliases such as AP-01; MAC/BSSID values are rejected by the survey API.
+- The estimator reports estimated, ambiguous, or insufficient-evidence states.
+- Its match-agreement score is not a calibrated probability; it does not output metres or coordinates.
+- No automatic Wi-Fi scan is launched. Windows signal percentage is not silently converted to dBm.
+
+**Still pending:** a verified Windows API/driver RSSI collector, repeat-survey calibration, held-out validation metrics, and a reliable error bound.
+
+Do not infer the position of every other network client from the laptop's own RSSI measurements. Remote-client positioning requires measurements supplied by that client or by compatible AP infrastructure.
 
 ### SI-3 — Laptop-only passive sensing feasibility
 
