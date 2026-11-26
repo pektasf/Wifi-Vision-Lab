@@ -94,3 +94,15 @@ BSSIDs remain separate radio nodes by default. A physical AP node and
 vendor OUI, and BSSID proximity are not identity evidence. The Windows WLAN
 client association collector currently reports BSSID, not a physical AP base
 MAC or controller identity, so it does not populate these fields by itself.
+
+
+### Switch and mesh neighbor evidence
+
+The topology accepts `neighbor_relationships.csv` rows only when endpoint
+MACs are valid and records carry explicit verified status and protocol-specific
+evidence. Supported evidence is LLDP/CDP neighbor advertisement or a mesh peer
+relationship exported by a source marked trusted. LLDP/CDP means advertised
+Layer-2 adjacency, not a complete cable path. Mesh edges mean controller-
+reported peer relationships, not a cable. Hostname, subnet, vendor and generic
+scan results are not accepted. This release defines the local import contract;
+it does not claim to automatically query switches or mesh controllers.
