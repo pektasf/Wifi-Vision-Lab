@@ -72,7 +72,7 @@ def analyze_identity_variation(observations, history=None):
         ip = str(row.get("ip", "")).strip()
         hostname = str(row.get("hostname", "")).strip().casefold()
         mac = normalize_mac(row.get("mac"))
-        matching_macs = current_ip_macs.get((network, ip), set()) if ip and not mac else set()
+        matching_macs = ip_macs.get((network, ip), set()) if ip and not mac else set()
         resolved_mac = next(iter(matching_macs)) if len(matching_macs) == 1 else mac
         identity = (
             f"{network}|mac|{resolved_mac}" if resolved_mac
