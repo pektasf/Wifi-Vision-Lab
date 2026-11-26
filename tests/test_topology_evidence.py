@@ -519,3 +519,12 @@ def test_unverified_untrusted_or_invalid_neighbor_records_are_rejected():
         {"protocol": "lldp", "local_mac": "bad", "neighbor_mac": "AA:BB:CC:DD:EE:02", "verification_status": "verified", "evidence_type": "lldp_neighbor_advertisement"},
     ])
     assert prepare_verified_neighbor_edges(records) == []
+
+
+def test_topology_ui_assigns_physical_ap_and_neighbor_lanes():
+    from scripts.topology_evidence import topology_node_lane
+    assert topology_node_lane("access_point_device")[0] == "Fiziksel erişim noktası"
+    assert topology_node_lane("access_point_radio")[0] == "AP radyosu"
+    assert topology_node_lane("network_neighbor")[0] == "Switch / Mesh komşusu"
+    assert topology_node_lane("endpoint")[0] == "Uç cihaz"
+    assert topology_node_lane("unrecognized")[0] == "Diğer / sınıflandırılmamış"
