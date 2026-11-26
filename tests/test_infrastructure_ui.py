@@ -79,6 +79,8 @@ def test_build_network_context_summary_formats_latest_local_adapter_snapshot():
         {
             "captured_at": "2026-11-26T11:00:00+03:00",
             "adapter": "Local Area Connection* 12",
+            "adapter_description": "Microsoft Wi-Fi Direct Virtual Adapter",
+            "adapter_kind": "virtual_wlan",
             "interface_index": "19",
             "local_ipv4": "192.168.137.1",
             "network_cidr": "192.168.137.0/24",
@@ -93,6 +95,8 @@ def test_build_network_context_summary_formats_latest_local_adapter_snapshot():
     summary = build_network_context_summary(frame)
 
     assert summary["adapter"] == "Local Area Connection* 12"
+    assert summary["adapter_description"] == "Microsoft Wi-Fi Direct Virtual Adapter"
+    assert summary["adapter_kind"] == "virtual_wlan"
     assert summary["local_ipv4"] == "192.168.137.1"
     assert summary["network_cidr"] == "192.168.137.0/24"
     assert summary["gateway"] == "Yok"
@@ -112,3 +116,14 @@ def test_build_network_context_summary_handles_missing_and_unknown_state():
     assert summary["dhcp_status"] == "Bilinmiyor"
     assert summary["adapter"] == "Bilinmiyor"
     assert summary["gateway"] == "Yok"
+
+
+
+def test_build_network_context_summary_defaults_adapter_kind_to_unknown():
+    from scripts.infrastructure_ui import build_network_context_summary
+    summary = build_network_context_summary(pd.DataFrame([{
+        "adapter": "Wi-Fi",
+        "dhcp_enabled": "unknown",
+    }]))
+    assert summary["adapter_kind"] == "unknown"
+    assert summary["adapter_description"] == "Bilinmiyor"
