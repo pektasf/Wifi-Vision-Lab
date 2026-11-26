@@ -96,3 +96,64 @@ def test_prepare_temporal_context_handles_missing_columns_and_invalid_counts():
     assert result.iloc[0]["hostname"] == ""
     assert prepare_temporal_context(pd.DataFrame()).empty
     assert prepare_temporal_context(pd.DataFrame({"hostname": ["unknown"]})).empty
+
+
+
+def test_prepare_temporal_context_adds_history_span_and_latest_ip_event():
+    from scripts.behavior_analysis import prepare_temporal_context
+
+    profiles = pd.DataFrame([{
+        "identity_key": "AA:01", "hostname": "laptop",
+        "ip_history": "192.0.2.1; 192.0.2.2", "ip_change_count": "1",
+        "observation_count": "8", "first_seen": "2026-01-01T00:00:00Z",
+        "last_seen": "2026-01-11T00:00:00Z", "status": "seen_in_latest_scan",
+    }])
+    events = pd.DataFrame([
+        {"event_time": "2026-01-05T12:00:00Z", "identity_key": "AA:01",
+         "event_type": "ip_changed", "old_value": "192.0.2.1",
+         "new_value": "192.0.2.2"},
+        {"event_time": "2026-01-06T12:00:00Z", "identity_key": "AA:01",
+         "event_type": "seen_again", "old_value": "", "new_value": ""},
+    ])
+
+    result = prepare_temporal_context(profiles, events)
+
+    assert result.iloc[0]["history_span_days"] == 10.0
+    assert result.iloc[0]["latest_observation_status"] == "seen_in_latest_scan"
+    assert result.iloc[0]["ip_change_events"] == 1
+    assert result.iloc[0]["last_ip_change_from"] == "192.0.2.1"
+    assert result.iloc[0]["last_ip_change_to"] == "192.0.2.2"
+
+
+def test_prepare_ip_change_history_filters_and_sorts_events():
+    from scripts.behavior_analysis import prepare_ip_change_history
+
+    events = pd.DataFrame([
+        {"event_time": "2026-01-01T10:00:00Z", "identity_key": "AA:01",
+         "event_type": "ip_changed", "old_value": "192.0.2.1", "new_value": "192.0.2.2"},
+        {"event_time": "2026-01-03T10:00:00Z", "identity_key": "AA:01",
+         "event_type": "seen_again", "old_value": "", "new_value": ""},
+        {"event_time": "2026-01-02T10:00:00Z", "identity_key": "AA:02",
+         "event_type": "ip_changed", "old_value": "192.0.2.3", "new_value": "192.0.2.4"},
+    ])
+
+    result = prepare_ip_change_history(events)
+
+    assert result["identity_key"].tolist() == ["AA:02", "AA:01"]
+    assert len(result) == 2
+    assert prepare_ip_change_history(pd.DataFrame()).empty
+
+
+def test_prepare_temporal_context_handles_empty_or_missing_event_data():
+    from scripts.behavior_analysis import prepare_temporal_context
+
+    profiles = pd.DataFrame([{
+        "identity_key": "AA:01", "ip_change_count": "1",
+        "observation_count": "2",
+    }])
+
+    result = prepare_temporal_context(profiles, pd.DataFrame())
+
+    assert len(result) == 1
+    assert result.iloc[0]["ip_change_events"] == ""
+    assert result.iloc[0]["history_span_days"] == ""
