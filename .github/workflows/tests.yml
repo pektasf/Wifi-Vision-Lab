@@ -38,3 +38,26 @@ jobs:
 
       - name: Run tests
         run: python -m pytest
+
+  windows-wlan-abi:
+    name: Windows WLAN ABI / Python 3.12
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+
+      - name: Validate Windows WLAN ABI and capability contracts
+        run: python -m pytest tests/test_windows_wlan.py tests/test_spatial_capabilities.py tests/test_app_syntax.py
