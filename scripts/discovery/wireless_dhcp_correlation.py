@@ -74,7 +74,7 @@ def correlate_wireless_dhcp_observations(
         if mac and observed is not None:
             dhcp.append((index, row, mac, observed))
 
-    from bisect import bisect_left, bisect_right
+    from bisect import bisect_left
 
     by_mac = {}
     for item in wireless:
@@ -82,21 +82,39 @@ def correlate_wireless_dhcp_observations(
     for items in by_mac.values():
         items.sort(key=lambda item: item[3])
         timestamps = [item[3].timestamp() for item in items]
-        items[:] = [(item, timestamps[index]) for index, item in enumerate(items)]
+        items[:] = (items, timestamps)
 
     pairs = []
     for dhcp_index, dhcp_row, mac, dhcp_time in dhcp:
-        items = by_mac.get(mac, [])
+        indexed = by_mac.get(mac)
+        if not indexed:
+            continue
+        items, timestamps = indexed
         center = dhcp_time.timestamp()
-        left = bisect_left(items, center - window, key=lambda item: item[1])
-        right = bisect_right(items, center + window, key=lambda item: item[1])
-        for (wireless_index, wireless_row, wireless_mac, wireless_time), _ in items[left:right]:
+        insertion = bisect_left(timestamps, center)
+        left = insertion - 1
+        right = insertion
+        nearest = []
+        # Keep work and memory bounded even when a MAC has many repeated observations.
+        while len(nearest) < 20 and (left >= 0 or right < len(items)):
+            left_delta = abs(center - timestamps[left]) if left >= 0 else float('inf')
+            right_delta = abs(timestamps[right] - center) if right < len(items) else float('inf')
+            if left_delta <= right_delta:
+                if left_delta > window:
+                    break
+                nearest.append(items[left])
+                left -= 1
+            else:
+                if right_delta > window:
+                    break
+                nearest.append(items[right])
+                right += 1
+        for wireless_index, wireless_row, wireless_mac, wireless_time in nearest:
             delta = abs((dhcp_time - wireless_time).total_seconds())
             wireless_scope = _scope(wireless_row)
             dhcp_scope = _scope(dhcp_row)
             if wireless_scope and dhcp_scope and wireless_scope != dhcp_scope:
                 continue
-
             random_flag = str(wireless_row.get('randomized_mac', '')).strip().casefold()
             if random_flag not in {'true', 'false'}:
                 random_flag = 'unknown'
@@ -109,7 +127,6 @@ def correlate_wireless_dhcp_observations(
             else:
                 status = 'exact_mac_time_near_scope_unknown'
                 interpretation = 'MAC ve zaman yakın; ağ kapsamı eksik'
-
             pairs.append({
                 'wireless_observed_at': str(wireless_row.get('observed_at') or wireless_row.get('ts') or ''),
                 'dhcp_observed_at': str(dhcp_row.get('observed_at') or dhcp_row.get('ts') or ''),
@@ -128,7 +145,8 @@ def correlate_wireless_dhcp_observations(
                 'dhcp_source_index': dhcp_index,
             })
             if len(pairs) >= max_pairs:
-                return pairs
-
+                break
+        if len(pairs) >= max_pairs:
+            break
     pairs.sort(key=lambda row: (row['time_delta_seconds'], row['dhcp_observed_at']))
     return pairs
