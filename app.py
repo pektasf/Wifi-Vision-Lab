@@ -971,6 +971,85 @@ def signal_page():
 
 
 
+
+def spatial_intelligence_page():
+    page_header(
+        "Mekânsal Zekâ",
+        "Laptop Wi-Fi donanımının konumlandırma ve pasif algılama için sağlayabildiği verileri denetleyin."
+    )
+    st.info(
+        "Bu ilk denetim yalnızca mevcut laptop'ın sürücü ve arayüz bilgilerini okur. "
+        "Ağ taraması başlatmaz, SSID/BSSID kaydetmez ve adaptör ayarlarını değiştirmez."
+    )
+
+    if st.button("Laptop Wi-Fi yeteneklerini denetle", key="spatial_capability_audit"):
+        from scripts.spatial_capabilities import collect_capabilities
+        with st.spinner("Wi-Fi adaptörü ve Windows sürücü bilgileri okunuyor..."):
+            st.session_state["spatial_capability_report"] = collect_capabilities()
+
+    report = st.session_state.get("spatial_capability_report")
+    if not report:
+        st.caption(
+            "Henüz denetim yapılmadı. Başlamak için yukarıdaki butona basın. "
+            "Bu işlem ağ keşfi veya paket yakalama yapmaz."
+        )
+        return
+
+    st.caption(
+        f"Denetim zamanı: {report.get('generated_at', '-')} | "
+        f"İşletim sistemi: {report.get('operating_system', '-')}"
+    )
+
+    driver = report.get("driver", {})
+    adapters = report.get("physical_adapters", [])
+    interface = report.get("active_interface", {})
+
+    st.subheader("Wi-Fi adaptörü ve sürücü")
+    if adapters:
+        st.dataframe(pd.DataFrame(adapters), width="stretch", hide_index=True)
+    elif driver:
+        st.write(driver)
+    else:
+        st.warning("Adaptör ayrıntısı alınamadı.")
+
+    if driver:
+        with st.expander("Windows Wi-Fi sürücü ayrıntıları", expanded=True):
+            st.json(driver)
+
+    st.subheader("Aktif Wi-Fi arayüzü")
+    if interface:
+        a, b, c = st.columns(3)
+        a.metric("Bağlantı", "Bağlı" if interface.get("connected") else "Bağlı değil")
+        signal = interface.get("signal_percent")
+        b.metric("Sinyal", f"{signal}%" if signal is not None else "Alınamadı")
+        c.metric("Kanal", interface.get("channel") or "Bilinmiyor")
+        st.caption(f"Radyo tipi: {interface.get('radio_type') or 'Bilinmiyor'}")
+    else:
+        st.warning("Aktif arayüz bilgisi alınamadı.")
+
+    st.subheader("Konumlandırma ve algılama yetenekleri")
+    capabilities = report.get("capabilities", {})
+    rows = [
+        {
+            "Yetenek": key.replace("_", " ").upper(),
+            "Durum": value.get("status", "unknown"),
+            "Açıklama": value.get("detail", ""),
+        }
+        for key, value in capabilities.items()
+    ]
+    if rows:
+        st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+
+    with st.expander("Denetim komutlarının durumu"):
+        st.json(report.get("commands", {}))
+
+    st.caption(
+        "Bilinmiyor durumu desteklenmiyor anlamına gelmez. CSI, monitor mode ve RTT "
+        "ancak gerçek donanım/sürücü kanıtıyla doğrulanabilir. Sinyal yüzdesi tek başına "
+        "metre cinsinden mesafe veya başka cihazların konumunu göstermez."
+    )
+
+
 def reports_page():
     page_header(
         "Raporlar",
@@ -1043,6 +1122,7 @@ PAGES = [
     "A\u011f Topolojisi",
     "Canl\u0131 \u0130zleme",
     "Wi-Fi Sinyali",
+    "Mekânsal Zekâ",
     "A\u011f Altyap\u0131s\u0131",
     "Raporlar"
 ]
@@ -1050,8 +1130,8 @@ PAGES = [
 NAV_GROUPS = [
     ("GENEL BAKI\u015e", [PAGES[0]]),
     ("C\u0130HAZ Y\u00d6NET\u0130M\u0130", PAGES[1:4]),
-    ("A\u011e ANAL\u0130Z\u0130", PAGES[4:10]),
-    ("S\u0130STEM", [PAGES[10]])
+    ("A\u011e ANAL\u0130Z\u0130", PAGES[4:11]),
+    ("S\u0130STEM", [PAGES[11]])
 ]
 
 
@@ -1197,8 +1277,9 @@ PAGE_RENDERERS = {
     PAGES[6]: topology_page,
     PAGES[7]: live_page,
     PAGES[8]: signal_page,
-    PAGES[9]: infrastructure_page,
-    PAGES[10]: reports_page,
+    PAGES[9]: spatial_intelligence_page,
+    PAGES[10]: infrastructure_page,
+    PAGES[11]: reports_page,
 }
 
 renderer = PAGE_RENDERERS.get(page)
