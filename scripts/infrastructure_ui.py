@@ -58,6 +58,8 @@ def build_network_context_summary(frame):
     return {
         "captured_at": str(row.get("captured_at", "") or "Bilinmiyor"),
         "adapter": str(row.get("adapter", "") or "Bilinmiyor"),
+        "adapter_description": str(row.get("adapter_description", "") or "Bilinmiyor"),
+        "adapter_kind": str(row.get("adapter_kind", "") or "unknown"),
         "interface_index": str(row.get("interface_index", "") or "Bilinmiyor"),
         "local_ipv4": str(row.get("local_ipv4", "") or "Bilinmiyor"),
         "network_cidr": str(row.get("network_cidr", "") or "Bilinmiyor"),
@@ -97,6 +99,16 @@ def render():
         context_columns[1].metric("Yerel IPv4", context["local_ipv4"])
         context_columns[2].metric("Alt ağ", context["network_cidr"])
         context_columns[3].metric("Ağ geçidi", context["gateway"])
+        adapter_kind_labels = {
+            "physical": "Fiziksel donanım",
+            "virtual_wlan": "Sanal WLAN / Wi-Fi Direct",
+            "virtual_or_software": "Sanal / yazılım adaptörü",
+            "unknown": "Bilinmiyor",
+        }
+        st.caption(
+            f"Arayüz türü: {adapter_kind_labels.get(context['adapter_kind'], 'Bilinmiyor')} "
+            f"· {context['adapter_description']}"
+        )
         with st.expander("DHCP ve kiralama ayrıntıları"):
             detail_left, detail_right = st.columns(2)
             with detail_left:
@@ -112,6 +124,8 @@ def render():
                 )
                 st.markdown(f"**Son kayıt:** {context['captured_at']}")
         st.caption(
+            "Adaptör sınıflandırması yalnızca taramayı yapan bu bilgisayarın yerel "
+            "arayüzünü tanımlar; ağdaki uzak cihazların sanal arayüzlerini kanıtlamaz. "
             "Bu bilgiler bilgisayarın seçili yerel adaptörüne aittir; "
             "router üzerindeki tüm DHCP istemci kayıtlarını temsil etmez."
         )

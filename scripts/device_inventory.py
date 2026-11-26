@@ -11,6 +11,20 @@ from scripts.common import DATA, stamp, overwrite_rows
 from scripts.scan_policy import build_scan_targets, load_scan_settings
 
 
+def classify_network_adapter(hardware_interface, adapter="", description=""):
+    """Classify a local Windows interface without inferring remote endpoints."""
+    if hardware_interface is True:
+        return "physical"
+    if hardware_interface is not False:
+        return "unknown"
+    text = f"{adapter} {description}".casefold()
+    markers = (
+        "wi-fi direct", "wifi direct", "hosted network",
+        "wireless virtual", "virtual wi-fi", "virtual wifi",
+    )
+    return "virtual_wlan" if any(marker in text for marker in markers) else "virtual_or_software"
+
+
 def list_network_interfaces():
     """Return local IPv4 interfaces, including Windows hosted-network adapters."""
     if platform.system() != "Windows":
@@ -41,6 +55,8 @@ def list_network_interfaces():
         "Gateway=$gateway; "
         "Adapter=$_.InterfaceAlias; "
         "InterfaceIndex=$_.InterfaceIndex; "
+        "HardwareInterface=[string]$_.NetAdapter.HardwareInterface; "
+        "InterfaceDescription=$_.NetAdapter.InterfaceDescription; "
         "DHCPEnabled=$dhcpEnabled; "
         "DHCPServer=$dhcpServer; "
         "DHCPLeaseObtained=$leaseObtained; "
@@ -74,10 +90,17 @@ def list_network_interfaces():
             gateway = str(row.get("Gateway") or "").strip()
             if gateway:
                 gateway = str(ipaddress.ip_address(gateway))
+            hardware_text = str(row.get("HardwareInterface") or "").strip().casefold()
+            hardware_interface = True if hardware_text == "true" else False if hardware_text == "false" else None
+            adapter = str(row.get("Adapter") or "Unknown")
+            description = str(row.get("InterfaceDescription") or "")
             interfaces.append({
                 "ip": str(interface.ip),
                 "gateway": gateway,
-                "adapter": str(row.get("Adapter") or "Unknown"),
+                "adapter": adapter,
+                "adapter_description": description,
+                "hardware_interface": hardware_interface,
+                "adapter_kind": classify_network_adapter(hardware_interface, adapter, description),
                 "interface_index": int(row.get("InterfaceIndex") or 0),
                 "network": str(interface.network),
                 "has_default_gateway": bool(gateway),
@@ -121,6 +144,9 @@ def get_network(interface_alias=None):
         "ip": selected["ip"],
         "gateway": selected["gateway"],
         "adapter": selected["adapter"],
+        "adapter_description": selected.get("adapter_description", ""),
+        "hardware_interface": selected.get("hardware_interface"),
+        "adapter_kind": selected.get("adapter_kind", "unknown"),
         "network": selected["network"],
         "interface_index": selected["interface_index"],
         "has_default_gateway": selected["has_default_gateway"],
@@ -221,7 +247,7 @@ def resolve_hostnames(ips):
 
 
 NETWORK_CONTEXT_FIELDS = [
-    "captured_at", "adapter", "interface_index", "local_ipv4",
+    "captured_at", "adapter", "adapter_description", "adapter_kind", "interface_index", "local_ipv4",
     "network_cidr", "gateway", "dhcp_enabled", "dhcp_server",
     "dhcp_lease_obtained", "dhcp_lease_expires", "evidence_source"
 ]
@@ -238,6 +264,8 @@ def build_network_context_row(net, captured_at=None):
     return {
         "captured_at": captured_at or stamp(),
         "adapter": str(net.get("adapter") or ""),
+        "adapter_description": str(net.get("adapter_description") or ""),
+        "adapter_kind": str(net.get("adapter_kind") or "unknown"),
         "interface_index": str(net.get("interface_index") or ""),
         "local_ipv4": str(net.get("ip") or ""),
         "network_cidr": str(net.get("network") or ""),
@@ -262,6 +290,8 @@ def format_network_diagnostics(net):
     return (
         "Tarama ağ bağlamı: "
         f"adaptör={str(net.get('adapter') or 'bilinmiyor')}; "
+        f"adaptör türü={str(net.get('adapter_kind') or 'unknown')}; "
+        f"donanım açıklaması={str(net.get('adapter_description') or 'bilinmiyor')}; "
         f"IPv4={str(net.get('ip') or 'bilinmiyor')}; "
         f"alt ağ={str(net.get('network') or 'bilinmiyor')}; "
         f"ağ geçidi={gateway}; "
