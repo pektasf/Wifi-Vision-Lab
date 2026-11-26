@@ -114,3 +114,12 @@ adapter or invoking live WLAN APIs.
 - Verify the local compatibility report serializes as JSON.
 - Verify the export does not include SSID, BSSID, or network names.
 - Verify adapter/driver and platform capability details remain available.
+
+
+## RSSI observation freshness
+
+- Convert Windows WLAN BSS host FILETIME timestamps to age seconds.
+- Parse Linux `iw scan dump` last-seen age when available.
+- Preserve RSSI measurements without inventing age when timestamps are missing.
+- Show a UI warning for timestamped measurements older than 120 seconds.
+- Confirm freshness metadata contains aliases/ages only, never raw SSID/BSSID.
