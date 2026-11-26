@@ -3,7 +3,11 @@ from __future__ import annotations
 
 import pandas as pd
 
-from scripts.common import DATA, stamp, write_rows
+from scripts.common import DATA, overwrite_rows, stamp, write_rows
+
+EVENT_FIELDS = [
+    "timestamp", "event", "ip", "identity_key", "old_value", "new_value",
+]
 
 
 def _identity(row: pd.Series) -> str:
@@ -33,17 +37,25 @@ def compare_inventories(previous: pd.DataFrame, current: pd.DataFrame) -> list[d
     events = []
 
     for key in sorted(new_by_id.keys() - old_by_id.keys()):
+        ip = new_by_id[key]
         events.append({
             "timestamp": timestamp,
             "event": "FIRST_OBSERVED",
-            "ip": new_by_id[key],
+            "ip": ip,
+            "identity_key": key,
+            "old_value": "",
+            "new_value": ip,
         })
 
     for key in sorted(old_by_id.keys() - new_by_id.keys()):
+        ip = old_by_id[key]
         events.append({
             "timestamp": timestamp,
             "event": "NOT_IN_LATEST_SCAN",
-            "ip": old_by_id[key],
+            "ip": ip,
+            "identity_key": key,
+            "old_value": ip,
+            "new_value": "",
         })
 
     for key in sorted(old_by_id.keys() & new_by_id.keys()):
@@ -53,9 +65,34 @@ def compare_inventories(previous: pd.DataFrame, current: pd.DataFrame) -> list[d
                 "timestamp": timestamp,
                 "event": "IP_CHANGED",
                 "ip": new_ip,
+                "identity_key": key,
+                "old_value": old_ip,
+                "new_value": new_ip,
             })
 
     return events
+
+
+def _migrate_event_csv_schema(path) -> None:
+    """Append new event context columns while retaining all legacy event rows."""
+    if not path.exists() or not path.stat().st_size:
+        return
+
+    existing = pd.read_csv(path, dtype=str).fillna("")
+    columns = list(existing.columns)
+    if columns == EVENT_FIELDS:
+        return
+
+    unexpected = set(columns) - set(EVENT_FIELDS)
+    if unexpected:
+        raise ValueError(
+            f"Unexpected network event columns in {path}: {sorted(unexpected)!r}"
+        )
+
+    for field in EVENT_FIELDS:
+        if field not in existing.columns:
+            existing[field] = ""
+    overwrite_rows(path, existing.reindex(columns=EVENT_FIELDS).to_dict("records"), EVENT_FIELDS)
 
 
 def run():
@@ -72,11 +109,9 @@ def run():
     )
 
     events = compare_inventories(previous, current)
-    write_rows(
-        DATA / "network_events.csv",
-        events,
-        ["timestamp", "event", "ip"],
-    )
+    event_path = DATA / "network_events.csv"
+    _migrate_event_csv_schema(event_path)
+    write_rows(event_path, events, EVENT_FIELDS)
     current.to_csv(previous_path, index=False)
     return events
 
