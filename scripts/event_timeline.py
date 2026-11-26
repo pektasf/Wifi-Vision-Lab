@@ -14,6 +14,14 @@ TIME_FIELDS = ("event_time", "timestamp", "observed_at", "time")
 TYPE_FIELDS = ("event_type", "event", "type", "event_name")
 DETAIL_FIELDS = ("details", "detail", "description", "message")
 
+EVENT_SEVERITY = {
+    "ip_changed": "warning",
+    "not_in_latest_scan": "warning",
+    "ping_not_responding": "warning",
+    "multiple_ips_same_mac": "review",
+    "multiple_macs_same_ip": "review",
+}
+
 
 def _value(row: pd.Series, fields: tuple[str, ...], default: str = "") -> str:
     for field in fields:
@@ -21,6 +29,13 @@ def _value(row: pd.Series, fields: tuple[str, ...], default: str = "") -> str:
         if pd.notna(value) and str(value).strip():
             return str(value).strip()
     return default
+
+
+def _severity(row: pd.Series, event_type: str) -> str:
+    explicit = _value(row, ("severity",))
+    if explicit:
+        return explicit
+    return EVENT_SEVERITY.get(event_type.strip().lower(), "info")
 
 
 def normalize_event_frames(frames: dict[str, pd.DataFrame]) -> pd.DataFrame:
@@ -39,7 +54,7 @@ def normalize_event_frames(frames: dict[str, pd.DataFrame]) -> pd.DataFrame:
                 "event_time": _value(row, TIME_FIELDS),
                 "event_type": _value(row, TYPE_FIELDS, "unknown_event"),
                 "subject": subject,
-                "severity": _value(row, ("severity",), "info"),
+                "severity": _severity(row, _value(row, TYPE_FIELDS, "unknown_event")),
                 "old_value": _value(row, ("old_value",)),
                 "new_value": _value(row, ("new_value",)),
                 "details": _value(row, DETAIL_FIELDS),
