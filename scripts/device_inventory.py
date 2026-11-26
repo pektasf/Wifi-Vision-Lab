@@ -220,6 +220,36 @@ def resolve_hostnames(ips):
         return {}
 
 
+NETWORK_CONTEXT_FIELDS = [
+    "captured_at", "adapter", "interface_index", "local_ipv4",
+    "network_cidr", "gateway", "dhcp_enabled", "dhcp_server",
+    "dhcp_lease_obtained", "dhcp_lease_expires", "evidence_source"
+]
+
+
+def build_network_context_row(net, captured_at=None):
+    """Build a local-only snapshot of the selected adapter's network context."""
+    dhcp_enabled = net.get("dhcp_enabled")
+    dhcp_state = (
+        "enabled" if dhcp_enabled is True
+        else "disabled" if dhcp_enabled is False
+        else "unknown"
+    )
+    return {
+        "captured_at": captured_at or stamp(),
+        "adapter": str(net.get("adapter") or ""),
+        "interface_index": str(net.get("interface_index") or ""),
+        "local_ipv4": str(net.get("ip") or ""),
+        "network_cidr": str(net.get("network") or ""),
+        "gateway": str(net.get("gateway") or ""),
+        "dhcp_enabled": dhcp_state,
+        "dhcp_server": str(net.get("dhcp_server") or ""),
+        "dhcp_lease_obtained": str(net.get("dhcp_lease_obtained") or ""),
+        "dhcp_lease_expires": str(net.get("dhcp_lease_expires") or ""),
+        "evidence_source": "windows_ip_configuration",
+    }
+
+
 def format_network_diagnostics(net):
     """Format selected local adapter context for the scan's local output."""
     gateway = str(net.get("gateway") or "").strip() or "yok (varsayılan ağ geçidi yok)"
@@ -248,6 +278,11 @@ def scan(scan_cidr=None, approved=False, confirmation=None, interface_alias=None
     selected_alias = interface_alias or os.getenv("WIFI_VISION_INTERFACE_ALIAS", "").strip() or None
     net = get_network(selected_alias)
     print(format_network_diagnostics(net), flush=True)
+    overwrite_rows(
+        DATA / "network_context.csv",
+        [build_network_context_row(net)],
+        NETWORK_CONTEXT_FIELDS,
+    )
     active_network = net["network"]
 
     requested_cidr = (
