@@ -1,4 +1,7 @@
-from scripts.discovery.evidence_timeline import (\n    build_identity_evidence_timeline, build_inventory_identity_index,\n    correlate_inventory_observation,\n)
+from scripts.discovery.evidence_timeline import (
+    build_identity_evidence_timeline, build_inventory_identity_index,
+    correlate_inventory_observation,
+)
 
 
 def test_timeline_prefers_exact_mac_over_conflicting_ip_match():
