@@ -13,6 +13,9 @@ from scripts.discovery.kismet_import import (
 from scripts.discovery.nmap_import import (
     NMAP_DISCOVERY_FIELDS, normalize_nmap_xml, MAX_NMAP_XML_BYTES,
 )
+from scripts.discovery.zeek_import import (
+    ZEEK_DHCP_FIELDS, normalize_zeek_dhcp_export, MAX_ZEEK_BYTES,
+)
 
 
 DATA = Path(__file__).resolve().parent.parent / "data" / "processed"
@@ -466,6 +469,148 @@ def render():
             "kanıtıdır; yönlendirilmiş ağlarda MAC görünmeyebilir. Bu kayıtlar "
             "envanterle otomatik fiziksel kimlik birleştirmesi yapmaz."
         )
+
+    st.markdown("### Zeek DHCP kira kayıtları")
+    st.caption(
+        "Yetkili Zeek sensöründen alınan dhcp.log JSON/NDJSON kayıtlarını içe aktar. "
+        "Bu kaynak, DHCP istemcisinin MAC, hostname ve IP kira bilgisini birlikte gözlemleyebilir."
+    )
+    zeek_upload = st.file_uploader(
+        "Zeek dhcp.log JSON dosyası",
+        type=["json", "log", "txt"],
+        key="zeek_dhcp_upload",
+    )
+    if zeek_upload and st.button(
+        "Zeek DHCP kayıtlarını içe aktar",
+        key="zeek_dhcp_import",
+    ):
+        try:
+            if zeek_upload.size > MAX_ZEEK_BYTES:
+                raise ValueError("Zeek dosyası 20 MB sınırını aşıyor.")
+            imported = normalize_zeek_dhcp_export(
+                zeek_upload.getvalue(),
+                imported_at=pd.Timestamp.now(tz="UTC").isoformat(),
+            )
+            if not imported:
+                st.warning("Dosyada kullanılabilir Zeek DHCP kaydı bulunamadı.")
+            else:
+                existing = read_data("zeek_dhcp_observations.csv")
+                combined = (
+                    existing.to_dict("records") if not existing.empty else []
+                )
+                seen = {
+                    (
+                        row.get("observed_at", ""), row.get("server_ip", ""),
+                        row.get("mac", ""), row.get("assigned_ip", ""),
+                        row.get("message_types", ""),
+                    )
+                    for row in combined
+                }
+                for row in imported:
+                    key = (
+                        row["observed_at"], row["server_ip"],
+                        row["mac"], row["assigned_ip"],
+                        row["message_types"],
+                    )
+                    if key not in seen:
+                        combined.append(row)
+                        seen.add(key)
+                combined = combined[-50000:]
+                overwrite_rows(
+                    DATA / "zeek_dhcp_observations.csv",
+                    combined,
+                    ZEEK_DHCP_FIELDS,
+                )
+                st.success(
+                    f"{len(imported)} Zeek DHCP kaydı yerel olarak içe aktarıldı."
+                )
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError, OSError) as exc:
+            st.error(f"Zeek DHCP dosyası içe aktarılamadı: {exc}")
+
+    zeek_evidence = read_data("zeek_dhcp_observations.csv")
+    if not zeek_evidence.empty:
+        local_mac_count = int(
+            zeek_evidence["mac_address_type"].eq("locally_administered").sum()
+        )
+        assigned_count = int(
+            zeek_evidence["assigned_ip"].astype(str).str.strip().ne("").sum()
+        )
+        distinct_mac_count = int(
+            zeek_evidence["mac"].astype(str).str.strip().replace("", pd.NA).nunique()
+        )
+        zeek_metrics = st.columns(4)
+        zeek_metrics[0].metric("DHCP işlemi", len(zeek_evidence))
+        zeek_metrics[1].metric("Atanmış IP", assigned_count)
+        zeek_metrics[2].metric("Farklı MAC", distinct_mac_count)
+        zeek_metrics[3].metric("Yerel yönetimli MAC", local_mac_count)
+
+        inventory_macs = set(
+            inventory.get("mac", pd.Series(dtype=str)).astype(str)
+            .str.upper().str.replace("-", ":", regex=False)
+        ) if not inventory.empty else set()
+        inventory_ips = set(
+            inventory.get("ip", pd.Series(dtype=str)).astype(str)
+        ) if not inventory.empty else set()
+        zeek_evidence["inventory_match"] = zeek_evidence.apply(
+            lambda row: (
+                "Eşleşti"
+                if (
+                    str(row.get("mac", "")).upper() in inventory_macs
+                    and str(row.get("mac", "")).strip()
+                ) or (
+                    str(row.get("assigned_ip", "")) in inventory_ips
+                    and str(row.get("assigned_ip", "")).strip()
+                ) or (
+                    str(row.get("client_ip", "")) in inventory_ips
+                    and str(row.get("client_ip", "")).strip()
+                )
+                else "Eşleşme yok"
+            ),
+            axis=1,
+        )
+        st.dataframe(
+            zeek_evidence,
+            width="stretch",
+            hide_index=True,
+            height=min(420, 58 + 35 * min(len(zeek_evidence), 10)),
+        )
+
+        hostname_field = zeek_evidence["hostname"].astype(str).str.strip()
+        fqdn_field = zeek_evidence["client_fqdn"].astype(str).str.strip()
+        zeek_evidence["_client_label"] = hostname_field.where(
+            hostname_field.ne(""), fqdn_field
+        )
+        named = zeek_evidence[
+            zeek_evidence["_client_label"].ne("")
+            & zeek_evidence["server_ip"].astype(str).str.strip().ne("")
+            & zeek_evidence["mac"].astype(str).str.strip().ne("")
+        ]
+        if not named.empty:
+            variations = (
+                named.groupby(["server_ip", "_client_label"], dropna=False)
+                .agg(
+                    mac_count=("mac", "nunique"),
+                    mac_addresses=("mac", lambda values: ";".join(sorted(set(values)))),
+                    assigned_ips=("assigned_ip", lambda values: ";".join(sorted({
+                        str(value) for value in values if str(value).strip()
+                    }))),
+                    observations=("mac", "size"),
+                )
+                .reset_index()
+            )
+            variations = variations[variations["mac_count"] > 1]
+            if not variations.empty:
+                st.markdown("#### Aynı DHCP istemci adında farklı MAC adresleri")
+                st.dataframe(
+                    variations,
+                    width="stretch",
+                    hide_index=True,
+                )
+                st.caption(
+                    "Bu durum MAC randomization, cihazın ağ arayüzü değişimi veya "
+                    "aynı hostname kullanan birden fazla cihazdan kaynaklanabilir. "
+                    "Tek başına kimlik gizleme veya kötü niyet kanıtı değildir."
+                )
 
     if inventory.empty and nodes.empty and classification.empty:
         st.warning("Altyapi envanteri icin henuz veri bulunamadi.")
