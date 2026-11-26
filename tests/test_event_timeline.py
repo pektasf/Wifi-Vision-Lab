@@ -768,3 +768,41 @@ def test_sort_event_review_queue_oldest_open_and_action_required_modes():
     assert sort_event_review_queue(frame, "open")["event_key"].tolist() == [
         "older-action", "newer-new", "oldest-reviewed", "resolved-old"
     ]
+
+
+
+def test_upsert_event_review_state_noop_preserves_timestamp_and_existing_snapshot():
+    from scripts.event_timeline import event_review_key, upsert_event_review_state
+
+    event = pd.Series({
+        "source": "Ağ olayları", "event_time": "2026-11-26T09:00:00Z",
+        "event_type": "IP_CHANGED", "identity_key": "AA:01",
+    })
+    states = pd.DataFrame([{
+        "event_key": event_review_key(event), "status": "reviewed",
+        "note": "  Kontrol edildi  ", "updated_at": "2026-11-25T12:00:00Z",
+        "priority": "high", "assignee": "Ağ ekibi",
+    }])
+    updated = upsert_event_review_state(
+        states, event, "reviewed", "Kontrol edildi", "2026-11-26T12:00:00Z",
+        priority="high", assignee="Ağ ekibi",
+    )
+    pd.testing.assert_frame_equal(updated, states)
+
+
+def test_upsert_event_review_state_updates_timestamp_when_a_review_field_changes():
+    from scripts.event_timeline import event_review_key, upsert_event_review_state
+
+    event = pd.Series({
+        "source": "Ağ olayları", "event_time": "2026-11-26T09:00:00Z",
+        "event_type": "IP_CHANGED", "identity_key": "AA:01",
+    })
+    states = pd.DataFrame([{
+        "event_key": event_review_key(event), "status": "new", "note": "",
+        "updated_at": "old", "priority": "normal", "assignee": "",
+    }])
+    updated = upsert_event_review_state(
+        states, event, "reviewed", "", "2026-11-26T12:00:00Z",
+    )
+    assert updated.iloc[0]["status"] == "reviewed"
+    assert updated.iloc[0]["updated_at"] == "2026-11-26T12:00:00Z"
