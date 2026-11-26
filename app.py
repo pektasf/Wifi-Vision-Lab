@@ -1245,6 +1245,7 @@ def events_page():
         filter_event_review_assignment,
         merge_event_review_states,
         upsert_event_review_state,
+        bulk_update_event_review,
         append_event_review_history,
         filter_event_review_history,
         filter_event_review_history_for_events,
@@ -1443,6 +1444,92 @@ def events_page():
     )
     if len(display) > 150:
         st.caption("Tabloda ilk 150 kayıt gösteriliyor; dışa aktarma tüm filtrelenmiş kayıtları içerir.")
+
+    with st.expander("Birden fazla olayı toplu güncelle", expanded=False):
+        st.caption(
+            "Yalnızca seçtiğiniz inceleme alanları güncellenir. Her olay için ayrı işlem geçmişi yazılır; "
+            "kaynak olay kayıtları değiştirilmez. Listede mevcut filtrelerle eşleşen ilk 150 olay bulunur."
+        )
+        bulk_candidates = filtered.head(150).drop_duplicates("event_key")
+        bulk_labels = {
+            str(row["event_key"]): (
+                f"{row['event_time'] or 'Zaman bilinmiyor'} · "
+                f"{event_labels.get(str(row['event_type']), str(row['event_type']))} · "
+                f"{row['subject'] or 'Genel ağ olayı'}"
+            )
+            for _, row in bulk_candidates.iterrows()
+        }
+        with st.form("bulk_event_review_form"):
+            bulk_selected_keys = st.multiselect(
+                "Toplu güncellenecek olaylar",
+                options=list(bulk_labels),
+                format_func=lambda key: bulk_labels.get(key, key[:12]),
+                key="bulk_event_review_selection",
+            )
+            bulk_status_labels = {
+                "leave": "Değiştirme", "new": "Yeni", "reviewed": "İncelendi",
+                "action_required": "İşlem gerekli", "resolved": "Çözüldü",
+            }
+            bulk_priority_labels = {
+                "leave": "Değiştirme", "low": "Düşük", "normal": "Normal",
+                "high": "Yüksek", "critical": "Kritik",
+            }
+            bulk_status_col, bulk_priority_col = st.columns(2)
+            with bulk_status_col:
+                bulk_status = st.selectbox(
+                    "Yeni inceleme durumu", options=list(bulk_status_labels),
+                    format_func=lambda value: bulk_status_labels[value],
+                    key="bulk_event_review_status",
+                )
+            with bulk_priority_col:
+                bulk_priority = st.selectbox(
+                    "Yeni iş önceliği", options=list(bulk_priority_labels),
+                    format_func=lambda value: bulk_priority_labels[value],
+                    key="bulk_event_review_priority",
+                )
+            bulk_change_assignee = st.checkbox(
+                "Sorumlu kişi / ekibi de güncelle", key="bulk_event_review_change_assignee"
+            )
+            bulk_assignee = st.text_input(
+                "Yeni sorumlu (boş bırakırsanız mevcut atama temizlenir)",
+                max_chars=120, key="bulk_event_review_assignee",
+                disabled=not bulk_change_assignee,
+            )
+            bulk_submit = st.form_submit_button(
+                "Seçili olayları güncelle", type="primary",
+                disabled=not bool(bulk_selected_keys),
+            )
+        if bulk_submit:
+            bulk_status_value = None if bulk_status == "leave" else bulk_status
+            bulk_priority_value = None if bulk_priority == "leave" else bulk_priority
+            bulk_assignee_value = bulk_assignee if bulk_change_assignee else None
+            if bulk_status_value is None and bulk_priority_value is None and bulk_assignee_value is None:
+                st.warning("Güncellenecek en az bir alan seçin.")
+            else:
+                from datetime import datetime
+                from scripts.common import DATA, overwrite_rows
+                selected_bulk_events = bulk_candidates[
+                    bulk_candidates["event_key"].astype(str).isin(bulk_selected_keys)
+                ].drop_duplicates("event_key")
+                bulk_updated_at = datetime.now().astimezone().isoformat(timespec="seconds")
+                updated_states, updated_history, changed_count = bulk_update_event_review(
+                    review_states, review_history, selected_bulk_events,
+                    updated_at=bulk_updated_at, status=bulk_status_value,
+                    priority=bulk_priority_value, assignee=bulk_assignee_value,
+                )
+                overwrite_rows(
+                    DATA / "event_review_states.csv", updated_states.to_dict("records"),
+                    ["event_key", "status", "note", "updated_at", "priority", "assignee"],
+                )
+                overwrite_rows(
+                    DATA / "event_review_history.csv", updated_history.to_dict("records"),
+                    ["action_id", "event_key", "updated_at", "changes", "status",
+                     "priority", "assignee", "note"],
+                )
+                st.success(
+                    f"{len(selected_bulk_events)} olay işlendi; {changed_count} olayda yeni değişiklik kaydedildi."
+                )
+                st.rerun()
 
     st.markdown("### Seçili olayın kanıtı")
     options = list(range(min(len(filtered), 150)))
