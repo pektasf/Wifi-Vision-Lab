@@ -1341,6 +1341,22 @@ def spatial_intelligence_page():
                             f"{capture['measurement_count']} erişim noktası için RSSI "
                             "ölçümü alındı. Ham SSID/BSSID gösterilmedi veya kaydedilmedi."
                         )
+                        measurement_ages = capture.get("measurement_ages_seconds", {})
+                        if measurement_ages:
+                            oldest_age = max(measurement_ages.values())
+                            st.caption(
+                                f"Zaman damgası bulunan ölçümlerin en eskisi: {oldest_age:.1f} saniye"
+                            )
+                            if oldest_age > 120:
+                                st.warning(
+                                    "Bazı RSSI kayıtları 2 dakikadan eski. Konum tahmini için "
+                                    "bu veriler güncelliğini yitirmiş olabilir."
+                                )
+                        elif capture["measurement_count"]:
+                            st.caption(
+                                "Sürücü/işletim sistemi ölçüm yaşı bilgisi sağlamadı; "
+                                "veri güncelliği doğrulanamadı."
+                            )
                         for warning in capture.get("errors", []):
                             st.warning(warning["message"])
                     elif capture["status"] == "no_wifi_interface":
