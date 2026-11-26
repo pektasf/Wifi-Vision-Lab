@@ -1,7 +1,11 @@
 import pandas as pd
 import pytest
 
-from scripts.reporting import filter_events_by_period, summarize_report_counts
+from scripts.reporting import (
+    filter_events_by_period,
+    local_timestamp_iso,
+    summarize_report_counts,
+)
 
 
 def test_filter_events_by_period_keeps_only_recent_valid_timestamps():
@@ -53,3 +57,10 @@ def test_report_counts_do_not_infer_open_or_closed_findings():
         "findings": 1,
         "attention_events": 2,
     }
+
+
+def test_local_timestamp_iso_includes_timezone_offset():
+    value = local_timestamp_iso()
+    parsed = pd.Timestamp(value)
+    assert parsed.tzinfo is not None
+    assert parsed.utcoffset() is not None
