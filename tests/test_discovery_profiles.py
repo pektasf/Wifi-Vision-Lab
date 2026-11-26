@@ -1,4 +1,4 @@
-from scripts.discovery.engine import build_device_profiles, build_inventory_rows
+from scripts.discovery.engine import (\n    build_device_profiles, build_inventory_rows, classify_observation_evidence\n)
 
 
 def test_profiles_merge_same_mac_across_sources_and_ips():
@@ -172,3 +172,45 @@ def test_ip_only_observation_does_not_join_mac_from_another_network():
     assert {profile["identity_basis"] for profile in profiles} == {
         "mac", "network_ip"
     }
+
+
+
+def test_discovery_evidence_labels_distinguish_ping_and_arp_sources():
+    assert classify_observation_evidence("windows_local", "responding") == (
+        "icmp_echo_reply"
+    )
+    assert classify_observation_evidence("windows_local", "arp_seen") == (
+        "arp_cache_entry"
+    )
+    assert classify_observation_evidence("windows_arp_cache", "arp_cache") == (
+        "arp_cache_entry"
+    )
+    assert classify_observation_evidence("future_adapter", "unknown") == (
+        "adapter_reported_observation"
+    )
+
+
+def test_device_profile_aggregates_distinct_evidence_types():
+    observations = [
+        {
+            "network_id": "192.168.30.0/24",
+            "ip": "192.168.30.10",
+            "mac": "00:11:22:33:44:55",
+            "source": "windows_local",
+            "status": "responding",
+        },
+        {
+            "network_id": "192.168.30.0/24",
+            "ip": "192.168.30.10",
+            "mac": "00:11:22:33:44:55",
+            "source": "windows_arp_cache",
+            "status": "arp_cache",
+        },
+    ]
+
+    profiles = build_device_profiles(observations)
+
+    assert len(profiles) == 1
+    assert profiles[0]["evidence_types"] == (
+        "arp_cache_entry;icmp_echo_reply"
+    )
