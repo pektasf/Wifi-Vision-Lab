@@ -1,13 +1,15 @@
 """Report-period helpers for local network observations."""
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pandas as pd
 
 
 PERIODS = {
-    "Son 24 saat": pd.Timedelta("24h"),
-    "Son 7 gün": pd.Timedelta("7d"),
-    "Son 30 gün": pd.Timedelta("30d"),
+    "Son 24 saat": timedelta(hours=24),
+    "Son 7 gün": timedelta(days=7),
+    "Son 30 gün": timedelta(days=30),
     "Tüm zamanlar": None,
 }
 
