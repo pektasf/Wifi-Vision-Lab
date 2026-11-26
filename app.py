@@ -811,9 +811,10 @@ def detail_page():
 def events_page():
     from scripts.event_timeline import normalize_event_frames, summarize_event_severity
 
-    st.title("Ag Olaylari")
-    st.caption("Cihaz, ag, canli izleme ve davranis bulgularini tek bir yerel zaman cizelgesinde inceleyin.")
-
+    page_header(
+        "Olay merkezi",
+        "Cihaz, ağ, ping ve davranış olaylarını kanıtı ve kimliğiyle birlikte incele.",
+    )
     filenames = [
         "device_events.csv",
         "network_events.csv",
@@ -824,52 +825,139 @@ def events_page():
     data = normalize_event_frames(frames)
 
     if data.empty:
-        st.info("Henuz olay kaydi bulunmuyor.")
+        st.info(
+            "Henüz olay kaydı yok. İlk ağ taraması ve canlı izleme kayıtlarından "
+            "sonra olaylar bu sayfada birleştirilir."
+        )
+        if st.button("Ağ taramasını başlat", type="primary", key="events_empty_scan"):
+            run_scan()
         return
 
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Toplam olay", f"{len(data):,}")
-    c2.metric("Olay kaynagi", f"{data['source'].nunique():,}")
-    c3.metric("Farkli olay turu", f"{data['event_type'].nunique():,}")
-
     severity_counts = summarize_event_severity(data)
-    known_levels = ("critical", "warning", "review", "info")
-    severity_columns = st.columns(4)
-    for column, level in zip(severity_columns, known_levels):
-        column.metric(level.title(), f"{severity_counts.get(level, 0):,}")
-    other_count = sum(
-        count for level, count in severity_counts.items()
-        if level not in known_levels
+    metrics = st.columns(4)
+    metrics[0].metric("Toplam olay", f"{len(data):,}")
+    metrics[1].metric("Kritik", f"{severity_counts.get('critical', 0):,}")
+    metrics[2].metric("Uyarı", f"{severity_counts.get('warning', 0):,}")
+    metrics[3].metric("İnceleme", f"{severity_counts.get('review', 0):,}")
+    st.caption(
+        f"{data['source'].nunique()} kaynak · {data['event_type'].nunique()} olay türü · "
+        "En yeni kayıt üstte"
     )
-    if other_count:
-        st.caption(f"Diger/ozel onem seviyeleri: {other_count:,}")
 
-    st.divider()
-    st.subheader("Olay zaman cizelgesi")
-
-    f1, f2, f3 = st.columns([2, 1, 1])
-    with f1:
-        term = st.text_input("Olay ara", placeholder="IP, MAC, cihaz, olay turu veya aciklama...", key="unified_event_search")
-    with f2:
-        source_values = ["Tum kaynaklar"] + sorted(data["source"].unique().tolist())
-        selected_source = st.selectbox("Kaynak", source_values, key="unified_event_source")
-    with f3:
-        severity_values = ["Tum seviyeler"] + sorted(data["severity"].unique().tolist())
-        selected_severity = st.selectbox("Onem", severity_values, key="unified_event_severity")
+    st.markdown("### Olayları filtrele")
+    filter_search, filter_source, filter_severity = st.columns([2.1, 1.1, 1])
+    with filter_search:
+        term = st.text_input(
+            "Olay ara",
+            placeholder="MAC, IP, olay türü veya açıklama",
+            key="unified_event_search",
+        )
+    with filter_source:
+        source_values = ["Tüm kaynaklar"] + sorted(data["source"].unique().tolist())
+        selected_source = st.selectbox(
+            "Kaynak", source_values, key="unified_event_source"
+        )
+    with filter_severity:
+        severity_values = ["Tüm seviyeler"] + sorted(
+            data["severity"].fillna("").astype(str).unique().tolist()
+        )
+        selected_severity = st.selectbox(
+            "Önem", severity_values, key="unified_event_severity"
+        )
 
     filtered = data.copy()
-    if selected_source != "Tum kaynaklar":
+    if selected_source != "Tüm kaynaklar":
         filtered = filtered[filtered["source"] == selected_source]
-    if selected_severity != "Tum seviyeler":
+    if selected_severity != "Tüm seviyeler":
         filtered = filtered[filtered["severity"] == selected_severity]
     if term.strip():
-        mask = filtered.astype(str).apply(lambda column: column.str.contains(term.strip(), case=False, na=False, regex=False)).any(axis=1)
+        mask = filtered.astype(str).apply(
+            lambda column: column.str.contains(
+                term.strip(), case=False, na=False, regex=False
+            )
+        ).any(axis=1)
         filtered = filtered[mask]
+    filtered = filtered.reset_index(drop=True)
 
-    st.caption(f"{len(filtered):,} olay gosteriliyor - En yeni kayit en ustte")
-    st.dataframe(filtered, width="stretch", hide_index=True, height=500)
+    st.caption(f"{len(filtered):,} olay eşleşti.")
+    if filtered.empty:
+        st.info("Bu filtrelerle eşleşen olay bulunamadı. Filtreleri temizleyip yeniden deneyin.")
+        return
+
+    event_labels = {
+        "IP_CHANGED": "IP adresi değişti",
+        "FIRST_OBSERVED": "İlk kez gözlemlendi",
+        "NOT_IN_LATEST_SCAN": "Son taramada bulunamadı",
+        "PING_RESPONDING": "Ping yanıtı geri geldi",
+        "PING_NOT_RESPONDING": "Ping yanıtı kesildi",
+        "MULTIPLE_IPS_SAME_MAC": "Aynı MAC için birden fazla IP",
+        "MULTIPLE_MACS_SAME_IP": "Aynı IP için birden fazla MAC",
+        "new_device": "Yeni cihaz",
+        "seen_again": "Yeniden görüldü",
+        "baseline_snapshot": "Başlangıç anlık görüntüsü",
+    }
+    severity_labels = {
+        "critical": "Kritik",
+        "warning": "Uyarı",
+        "review": "İnceleme",
+        "info": "Bilgi",
+    }
+
+    display = filtered.copy()
+    display["event_type"] = display["event_type"].map(
+        lambda value: event_labels.get(str(value), str(value).replace("_", " ").title())
+    )
+    display["severity"] = display["severity"].map(
+        lambda value: severity_labels.get(str(value).casefold(), str(value))
+    )
+    display = display.rename(columns={
+        "event_time": "Zaman",
+        "event_type": "Olay",
+        "subject": "Cihaz / kimlik",
+        "identity_key": "Kimlik anahtarı",
+        "ip": "IP adresi",
+        "severity": "Önem",
+        "old_value": "Önceki değer",
+        "new_value": "Yeni değer",
+        "details": "Açıklama",
+        "source": "Kaynak",
+    })
+    st.dataframe(
+        display.head(150),
+        width="stretch",
+        hide_index=True,
+        height=min(540, 58 + 35 * min(len(display), 12)),
+    )
+    if len(display) > 150:
+        st.caption("Tabloda ilk 150 kayıt gösteriliyor; dışa aktarma tüm filtrelenmiş kayıtları içerir.")
+
+    st.markdown("### Seçili olayın kanıtı")
+    options = list(range(min(len(filtered), 150)))
+    selected_index = st.selectbox(
+        "İncelenecek olay",
+        options=options,
+        format_func=lambda index: (
+            f"{filtered.iloc[index]['event_time'] or 'Zaman bilinmiyor'} · "
+            f"{event_labels.get(str(filtered.iloc[index]['event_type']), str(filtered.iloc[index]['event_type']))} · "
+            f"{filtered.iloc[index]['subject'] or 'Genel ağ olayı'}"
+        ),
+        key="event_detail_selection",
+    )
+    selected = filtered.iloc[selected_index]
+    detail_left, detail_right = st.columns(2)
+    with detail_left:
+        st.markdown("**Kaynak ve kimlik**")
+        st.write(str(selected.get("source", "") or "Bilinmiyor"))
+        st.write(str(selected.get("identity_key", "") or selected.get("subject", "") or "Kimlik yok"))
+        st.write(str(selected.get("ip", "") or "IP bilgisi yok"))
+    with detail_right:
+        st.markdown("**Değişim bağlamı**")
+        st.write(str(selected.get("old_value", "") or "Önceki değer kaydedilmemiş"))
+        st.write(str(selected.get("new_value", "") or "Yeni değer kaydedilmemiş"))
+        st.write(str(selected.get("details", "") or "Ek açıklama yok"))
+
     st.download_button(
-        "Filtrelenmis olaylari CSV indir",
+        "Filtrelenmiş olayları CSV indir",
         filtered.to_csv(index=False).encode("utf-8-sig"),
         file_name="wifi_vision_event_timeline.csv",
         mime="text/csv",
@@ -877,144 +965,145 @@ def events_page():
     )
 
 
-def behavior_page():
-    st.title("Davranis Analizi")
-    st.caption("Cihaz davranis bulgulari ve mevcut cihaz zekasi kayitlari.")
-
-    findings = load("behavior_findings.csv")
-    intelligence = load("device_intelligence.csv")
-
-    if findings.empty and intelligence.empty:
-        st.info("Henuz davranis analizi kaydi bulunmuyor.")
-        return
-
-    a, b = st.columns(2)
-    a.metric("Davranis bulgusu", f"{len(findings):,}")
-    b.metric("Cihaz zekasi kaydi", f"{len(intelligence):,}")
-
-    st.markdown("---")
-
-    if not findings.empty:
-        st.markdown("### Davranis bulgulari")
-
-        data = findings.copy()
-        term = st.text_input(
-            "Bulgularda ara",
-            placeholder="Cihaz, IP veya bulgu aciklamasi..."
-        )
-
-        if term.strip():
-            term = term.strip().lower()
-            mask = data.astype(str).apply(
-                lambda col: col.str.lower().str.contains(term, regex=False)
-            ).any(axis=1)
-            data = data[mask]
-
-        st.markdown(f"**{len(data):,}** bulgu kaydi")
-        st.dataframe(
-            data,
-            width="stretch",
-            hide_index=True,
-            height=350
-        )
-    else:
-        st.info("Davranis bulgusu dosyasi henuz bos.")
-
-    st.markdown("---")
-
-    if not intelligence.empty:
-        st.markdown("### Cihaz zekasi")
-        st.dataframe(
-            intelligence,
-            width="stretch",
-            hide_index=True,
-            height=350
-        )
-    else:
-        st.info("Cihaz zekasi kaydi bulunmuyor.")
-
-
 def live_page():
-    st.title("Canli Izleme")
-    st.caption("Envanter durumu, ping gecisleri ve tarama karsilastirmalarini yerel kayitlardan izleyin.")
+    from scripts.dashboard_summary import (
+        inventory_status_summary,
+        latest_observation_timestamp,
+    )
 
+    page_header(
+        "Canlı izleme",
+        "Ping erişilebilirlik geçişlerini ve tarama karşılaştırmalarını cihaz kimliğiyle takip et.",
+    )
     monitor = load("network_monitor.csv")
     live_events = load("live_events.csv")
     inventory = load("device_inventory.csv")
+    summary = inventory_status_summary(inventory)
+    latest = latest_observation_timestamp(inventory, live_events, monitor)
 
-    total = len(inventory)
-    responding = 0
-    if not inventory.empty and "status" in inventory.columns:
-        responding = int(
-            inventory["status"].astype(str).str.lower()
-            .isin(["responding", "online", "active"]).sum()
+    metrics = st.columns(4)
+    metrics[0].metric("Envanter cihazı", f"{summary['total']:,}")
+    metrics[1].metric("Yanıt veren", f"{summary['responding']:,}")
+    metrics[2].metric("Ping geçişi", f"{len(live_events):,}")
+    metrics[3].metric("Tarama olayı", f"{len(monitor):,}")
+
+    if latest is not None:
+        local_latest = latest.to_pydatetime().astimezone()
+        st.caption(
+            f"Son kayıtlı gözlem: {local_latest.strftime('%d.%m.%Y %H:%M:%S')}"
         )
+    st.info(
+        "Bu sayfa yerel kayıtlardaki son durumu gösterir; kendi başına sürekli ping "
+        "veya ağ taraması başlatmaz."
+    )
 
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Envanter kaydi", f"{total:,}")
-    c2.metric("Yanıt veren cihaz", f"{responding:,}")
-    c3.metric("Tarama karsilastirma olayi", f"{len(monitor):,}")
-    c4.metric("Canli ping gecisi", f"{len(live_events):,}")
-
-    st.divider()
-    left, right = st.columns(2)
-
-    with left:
-        st.subheader("Canli ping olaylari")
-        if live_events.empty:
-            st.info("Canli ping olay kaydi bulunmuyor. Canli izleyici calistirildiginda durum degisimleri burada gorunur.")
-        else:
-            events = live_events.copy()
-            time_col = next((c for c in ["timestamp", "event_time"] if c in events.columns), None)
-            if time_col:
-                events["_parsed_time"] = pd.to_datetime(events[time_col], utc=True, errors="coerce")
-                events = events.sort_values("_parsed_time", ascending=False, na_position="last")
-                events = events.drop(columns=["_parsed_time"])
-            st.dataframe(events.head(100), width="stretch", hide_index=True, height=320)
-
-    with right:
-        st.subheader("Tarama karsilastirmalari")
-        if monitor.empty:
-            st.info("network_monitor.csv dosyasinda karsilastirma kaydi bulunmuyor.")
-        else:
-            events = monitor.copy()
-            time_col = next((c for c in ["timestamp", "event_time"] if c in events.columns), None)
-            if time_col:
-                events["_parsed_time"] = pd.to_datetime(events[time_col], utc=True, errors="coerce")
-                events = events.sort_values("_parsed_time", ascending=False, na_position="last")
-                events = events.drop(columns=["_parsed_time"])
-            st.dataframe(events.head(100), width="stretch", hide_index=True, height=320)
-
-    st.divider()
-    st.subheader("Son envanter")
-    if inventory.empty:
-        st.info("Cihaz envanteri henuz olusturulmamis.")
-    else:
-        timestamp_col = next(
-            (c for c in ["timestamp", "observed_at", "last_seen"] if c in inventory.columns),
-            None
+    def prepare_event_table(frame, preferred_columns):
+        if frame is None or frame.empty:
+            return pd.DataFrame()
+        result = frame.copy()
+        time_col = next(
+            (column for column in ["timestamp", "event_time"] if column in result.columns),
+            None,
         )
-        if timestamp_col:
-            parsed = pd.to_datetime(inventory[timestamp_col], utc=True, errors="coerce")
-            latest = parsed.max()
-            st.write("Son kayit:", latest.isoformat() if pd.notna(latest) else "Bilinmiyor")
-        st.caption("Bu ekran kayitli verileri gosterir; kendi basina surekli tarama yapmaz.")
-        if "status" in inventory.columns:
-            status = (
-                inventory["status"].replace("", "Bilinmiyor")
-                .value_counts().rename_axis("Durum")
-                .reset_index(name="Cihaz sayisi")
-                .set_index("Durum")
+        if time_col:
+            result["_sort_time"] = pd.to_datetime(
+                result[time_col], utc=True, errors="coerce"
             )
-            st.bar_chart(status, height=220)
+            result = result.sort_values(
+                "_sort_time", ascending=False, na_position="last"
+            ).drop(columns=["_sort_time"])
+        columns = [column for column in preferred_columns if column in result.columns]
+        return result[columns].head(100)
 
-        preferred = ["timestamp", "ip", "hostname", "mac", "status"]
+    live_columns = [
+        "timestamp", "event", "identity_key", "ip", "old_value", "new_value",
+    ]
+    monitor_columns = [
+        "timestamp", "event", "identity_key", "ip", "old_value", "new_value",
+    ]
+
+    ping_col, scan_col = st.columns([1.1, 1], gap="large")
+    with ping_col:
+        st.markdown("### Ping erişilebilirlik geçişleri")
+        if live_events.empty:
+            st.info(
+                "Henüz ping geçişi kaydedilmedi. Canlı izleyici ilk durum değişimini "
+                "algıladığında burada görünecek."
+            )
+        else:
+            ping_events = prepare_event_table(live_events, live_columns)
+            display = ping_events.rename(columns={
+                "timestamp": "Zaman",
+                "event": "Geçiş",
+                "identity_key": "Cihaz kimliği",
+                "ip": "IP adresi",
+                "old_value": "Önceki durum",
+                "new_value": "Yeni durum",
+            })
+            st.dataframe(
+                display,
+                width="stretch",
+                hide_index=True,
+                height=min(390, 58 + 35 * len(display)),
+            )
+            if "identity_key" not in ping_events.columns or (
+                ping_events["identity_key"].fillna("").astype(str).str.strip().eq("").any()
+            ):
+                st.caption(
+                    "Kimlik alanı boş olan satırlar eski CSV şemasından kalmış kayıtlardır; "
+                    "bu satırlara geriye dönük MAC adresi atanmadı."
+                )
+
+    with scan_col:
+        st.markdown("### Envanter karşılaştırmaları")
+        if monitor.empty:
+            st.info(
+                "Henüz ardışık envanter karşılaştırması yok. Yeni taramalar arasındaki "
+                "cihaz geliş/gidiş ve IP değişimleri burada listelenir."
+            )
+        else:
+            scan_events = prepare_event_table(monitor, monitor_columns)
+            display = scan_events.rename(columns={
+                "timestamp": "Zaman",
+                "event": "Değişim",
+                "identity_key": "Cihaz kimliği",
+                "ip": "IP adresi",
+                "old_value": "Önceki değer",
+                "new_value": "Yeni değer",
+            })
+            st.dataframe(
+                display,
+                width="stretch",
+                hide_index=True,
+                height=min(390, 58 + 35 * len(display)),
+            )
+
+    st.markdown("### Mevcut cihaz envanteri")
+    if inventory.empty:
+        st.info("Cihaz envanteri henüz oluşturulmadı.")
+    else:
+        preferred = [
+            "timestamp", "observed_at", "ip", "hostname", "mac", "status",
+        ]
         columns = [column for column in preferred if column in inventory.columns]
         if columns:
-            st.dataframe(inventory[columns].head(20), width="stretch", hide_index=True)
+            st.dataframe(
+                inventory[columns].head(100).rename(columns={
+                    "timestamp": "Zaman",
+                    "observed_at": "Gözlem zamanı",
+                    "ip": "IP adresi",
+                    "hostname": "Cihaz",
+                    "mac": "MAC adresi",
+                    "status": "Durum",
+                }),
+                width="stretch",
+                hide_index=True,
+                height=300,
+            )
 
-    if st.button("Envanter taramasini baslat", key="live_scan_button"):
+    if st.button("Yeni envanter taraması başlat", type="primary", key="live_scan_button"):
         run_scan()
+
 
 
 def signal_page():
