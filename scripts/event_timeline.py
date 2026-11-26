@@ -120,3 +120,45 @@ def filter_event_timeline(
         ).any(axis=1)
         result = result[mask]
     return result.reset_index(drop=True)
+
+
+def related_event_context(
+    frame: pd.DataFrame,
+    selected_event: pd.Series,
+    window_minutes: float = 15,
+) -> pd.DataFrame:
+    """Return nearby events for the same stable device identity.
+
+    Legacy rows without an identity key are intentionally not correlated by IP
+    or subject because those values can change or be reused.
+    """
+    try:
+        window = float(window_minutes)
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError("window_minutes must be a non-negative number")
+    if pd.isna(window) or window < 0:
+        raise ValueError("window_minutes must be a non-negative number")
+    if frame is None or frame.empty or selected_event is None:
+        return pd.DataFrame(columns=frame.columns if frame is not None else [])
+    if "identity_key" not in frame.columns or "event_time" not in frame.columns:
+        return frame.iloc[0:0].copy()
+
+    identity = str(selected_event.get("identity_key", "") or "").strip()
+    selected_time = pd.to_datetime(
+        selected_event.get("event_time", ""), format="mixed", utc=True, errors="coerce"
+    )
+    if not identity or pd.isna(selected_time):
+        return frame.iloc[0:0].copy()
+
+    identities = frame["identity_key"].fillna("").astype(str).str.strip()
+    times = pd.to_datetime(
+        frame["event_time"], format="mixed", utc=True, errors="coerce"
+    )
+    mask = identities.eq(identity) & times.notna()
+    mask &= (times - selected_time).abs() <= pd.Timedelta(minutes=window)
+    result = frame.loc[mask].copy()
+    result["_context_time"] = times.loc[mask]
+    result = result.sort_values(
+        "_context_time", ascending=False, kind="stable"
+    ).drop(columns=["_context_time"])
+    return result.reset_index(drop=True)
