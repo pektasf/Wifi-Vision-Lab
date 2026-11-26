@@ -1,3 +1,6 @@
+import ipaddress
+import os
+
 from scripts.device_inventory import get_network, arp_map
 from scripts.common import stamp
 
