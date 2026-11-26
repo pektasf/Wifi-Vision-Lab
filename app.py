@@ -1274,6 +1274,7 @@ def spatial_intelligence_page():
     from scripts.spatial_fingerprints import (
         estimate_zone,
         evaluate_fingerprints,
+        evaluate_holdout_fingerprints,
         list_fingerprints,
         parse_measurement_lines,
         save_fingerprint,
@@ -1480,6 +1481,44 @@ def spatial_intelligence_page():
         if st.button("Referans ölçümlerini doğrula (leave-one-out)", key="spatial_fingerprint_validate"):
             validation = evaluate_fingerprints(selected_floor_id, k=3, min_overlap=2)
             st.session_state["spatial_fingerprint_validation"] = validation
+
+        if st.button(
+            "Sonraki ölçümlerle bağımsız doğrulama yap",
+            key="spatial_fingerprint_holdout_validate",
+        ):
+            holdout_validation = evaluate_holdout_fingerprints(
+                selected_floor_id,
+                k=3,
+                min_overlap=2,
+                holdout_fraction=0.25,
+                min_samples_per_zone=3,
+            )
+            st.session_state["spatial_fingerprint_holdout_validation"] = holdout_validation
+
+        holdout_validation = st.session_state.get(
+            "spatial_fingerprint_holdout_validation"
+        )
+        if holdout_validation:
+            st.markdown("**Zaman sıralı bağımsız doğrulama**")
+            if holdout_validation["status"] == "evaluated":
+                h1, h2, h3, h4 = st.columns(4)
+                h1.metric("Eğitim ölçümü", holdout_validation["training_count"])
+                h2.metric("Test ölçümü", holdout_validation["holdout_count"])
+                h3.metric(
+                    "Test doğruluğu",
+                    f"{holdout_validation['accuracy'] * 100:.1f}%"
+                    if holdout_validation["accuracy"] is not None else "—",
+                )
+                h4.metric("Test kapsamı", f"{holdout_validation['coverage'] * 100:.1f}%")
+                st.caption(holdout_validation["message"])
+                if holdout_validation["per_zone"]:
+                    st.dataframe(
+                        pd.DataFrame(holdout_validation["per_zone"]),
+                        width="stretch",
+                        hide_index=True,
+                    )
+            else:
+                st.info(holdout_validation["message"])
 
         validation = st.session_state.get("spatial_fingerprint_validation")
         if validation:
