@@ -123,3 +123,12 @@ adapter or invoking live WLAN APIs.
 - Preserve RSSI measurements without inventing age when timestamps are missing.
 - Show a UI warning for timestamped measurements older than 120 seconds.
 - Confirm freshness metadata contains aliases/ages only, never raw SSID/BSSID.
+
+
+## Time-ordered fingerprint holdout validation
+
+- Enforce holdout fractions between 10% and 50%.
+- Require at least three samples per eligible zone and retain at least two training samples.
+- Verify held-out samples are evaluated only against training sample IDs.
+- Report accuracy separately from prediction coverage and include per-zone results.
+- Skip under-sampled zones and return an explicit insufficient-data status when none are eligible.
