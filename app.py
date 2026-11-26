@@ -1482,6 +1482,7 @@ def events_page():
         type="primary",
         key=f"save_event_review_{selected['event_key'][:12]}",
     ):
+        from datetime import datetime
         from scripts.common import DATA, overwrite_rows
         updated_states = upsert_event_review_state(
             review_states,
