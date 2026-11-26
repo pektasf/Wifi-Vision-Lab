@@ -132,3 +132,21 @@ def test_timeline_ignores_observations_without_ip_or_mac():
         zeek_observations=[{"hostname": "only-hostname"}],
     )
     assert rows == []
+
+
+
+def test_timeline_sorts_timestamps_by_instant_not_timezone_string():
+    rows = build_identity_evidence_timeline(
+        nmap_observations=[
+            {
+                "observed_at": "2026-11-26T09:30:00+03:00",
+                "ip": "192.168.1.10",
+            },
+            {
+                "observed_at": "2026-11-26T07:00:00Z",
+                "ip": "192.168.1.11",
+            },
+        ],
+    )
+    assert rows[0]["ip"] == "192.168.1.10"
+    assert rows[1]["ip"] == "192.168.1.11"
