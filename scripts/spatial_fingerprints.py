@@ -152,6 +152,7 @@ def estimate_zone(
     k: int = 3,
     min_overlap: int = 2,
     missing_penalty_db: float = 12.0,
+    exclude_sample_id: str | None = None,
     db_path=None,
 ) -> dict[str, object]:
     query = validate_measurements(measurements)
@@ -160,6 +161,8 @@ def estimate_zone(
     samples = list_fingerprints(floor_id, db_path=db_path)
     candidates = []
     for sample in samples:
+        if exclude_sample_id and sample["sample_id"] == exclude_sample_id:
+            continue
         distance, overlap = _distance(
             query, sample["measurements"],
             missing_penalty_db=float(missing_penalty_db),
@@ -226,5 +229,112 @@ def estimate_zone(
         "message": (
             "This is a fingerprint similarity score, not a calibrated probability "
             "or a measured physical distance."
+        ),
+    }
+
+
+
+def evaluate_fingerprints(
+    floor_id: str,
+    *,
+    k: int = 3,
+    min_overlap: int = 2,
+    db_path=None,
+) -> dict[str, object]:
+    """Leave-one-out validation; only zones with >=2 samples are evaluable."""
+    samples = list_fingerprints(floor_id, db_path=db_path)
+    zone_counts: dict[str, int] = {}
+    for sample in samples:
+        zone_counts[sample["zone_id"]] = zone_counts.get(sample["zone_id"], 0) + 1
+
+    eligible = [
+        sample for sample in samples if zone_counts[sample["zone_id"]] >= 2
+    ]
+    skipped_single_sample_zones = len(samples) - len(eligible)
+    if not eligible:
+        return {
+            "status": "insufficient_reference_samples",
+            "sample_count": len(samples),
+            "evaluated_count": 0,
+            "skipped_count": skipped_single_sample_zones,
+            "accuracy": None,
+            "coverage": None,
+            "correct": 0,
+            "incorrect": 0,
+            "ambiguous": 0,
+            "insufficient": 0,
+            "per_zone": [],
+            "message": "At least two reference samples per zone are required.",
+        }
+
+    outcomes = []
+    for sample in eligible:
+        estimate = estimate_zone(
+            floor_id,
+            sample["measurements"],
+            k=k,
+            min_overlap=min_overlap,
+            exclude_sample_id=sample["sample_id"],
+            db_path=db_path,
+        )
+        outcomes.append({
+            "sample_id": sample["sample_id"],
+            "expected_zone_id": sample["zone_id"],
+            "predicted_zone_id": estimate.get("zone_id", ""),
+            "status": estimate["status"],
+            "correct": (
+                estimate["status"] == "estimated"
+                and estimate.get("zone_id") == sample["zone_id"]
+            ),
+        })
+
+    correct = sum(item["correct"] for item in outcomes)
+    incorrect = sum(
+        item["status"] == "estimated" and not item["correct"] for item in outcomes
+    )
+    ambiguous = sum(item["status"] == "ambiguous" for item in outcomes)
+    insufficient = sum(
+        item["status"] == "insufficient_evidence" for item in outcomes
+    )
+    evaluable_predictions = correct + incorrect
+    accuracy = correct / evaluable_predictions if evaluable_predictions else None
+    coverage = evaluable_predictions / len(eligible)
+
+    per_zone = []
+    for zone_id in sorted(zone_counts):
+        zone_outcomes = [
+            item for item in outcomes if item["expected_zone_id"] == zone_id
+        ]
+        if not zone_outcomes:
+            continue
+        zone_correct = sum(item["correct"] for item in zone_outcomes)
+        zone_predicted = sum(item["status"] == "estimated" for item in zone_outcomes)
+        per_zone.append({
+            "zone_id": zone_id,
+            "sample_count": len(zone_outcomes),
+            "correct": zone_correct,
+            "estimated": zone_predicted,
+            "accuracy": (
+                round(zone_correct / zone_predicted, 3) if zone_predicted else None
+            ),
+        })
+
+    return {
+        "status": "evaluated",
+        "sample_count": len(samples),
+        "evaluated_count": len(eligible),
+        "skipped_count": skipped_single_sample_zones,
+        "accuracy": round(accuracy, 3) if accuracy is not None else None,
+        "coverage": round(coverage, 3),
+        "correct": correct,
+        "incorrect": incorrect,
+        "ambiguous": ambiguous,
+        "insufficient": insufficient,
+        "per_zone": per_zone,
+        "outcomes": outcomes,
+        "message": (
+            "Leave-one-out results on this small local survey set; not a guarantee "
+            "of future accuracy. Collect independent repeat surveys across times "
+            "and device orientations before drawing conclusions."
         ),
     }
