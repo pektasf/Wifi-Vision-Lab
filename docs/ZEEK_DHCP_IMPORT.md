@@ -82,3 +82,20 @@ connected until expiry: early release, clock skew, packet loss, relay
 topology, and missing DHCP messages can change the real state. Different
 explicit network scopes are never compared. A DHCP server address alone is
 not treated as a network identifier.
+
+
+## Optional DHCP relay metadata
+
+When the Zeek sensor has the DHCP sub-options policy loaded, the importer
+also retains relay circuit ID and relay remote ID. It can also retain the
+reported DHCP client/server software and domain. These fields are optional
+and may be absent from ordinary Zeek exports.
+
+A relay circuit ID is an agent-local circuit identifier (often an interface
+reference); it is not globally unique by itself. A relay remote ID identifies
+the remote host end of a circuit, but it is still relay-provided context rather
+than cryptographic device identity. WiFi Vision Lab stores these fields as
+separate evidence and displays them for review. It does not use either field
+as a network/subnet identifier, merge devices, or treat them as proof that
+two observations came from the same physical endpoint. Subscriber ID is
+intentionally not retained.

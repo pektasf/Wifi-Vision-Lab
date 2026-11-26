@@ -147,6 +147,8 @@ def build_identity_evidence_timeline(
         event_material = "|".join([
             source, observed_at, mac, ip,
             str(row.get("device_key") or row.get("server_ip") or ""),
+            str(row.get("relay_circuit_id") or ""),
+            str(row.get("relay_agent_remote_id") or ""),
             str(evidence or ""),
         ])
         event_id = hashlib.sha256(event_material.encode("utf-8")).hexdigest()[:20]
@@ -220,7 +222,11 @@ def build_identity_evidence_timeline(
             row.get("assigned_ip") or row.get("client_ip"),
             row.get("hostname") or row.get("client_fqdn"),
             row.get("evidence_status"),
-            f"DHCP sunucusu: {row.get('server_ip', '')} · Mesajlar: {row.get('message_types', '')}",
+            f"DHCP sunucusu: {row.get('server_ip', '')} · Mesajlar: {row.get('message_types', '')}"
+            + (f" · Relay circuit: {row.get('relay_circuit_id', '')}"
+               if row.get("relay_circuit_id") else "")
+            + (f" · Relay remote ID: {row.get('relay_agent_remote_id', '')}"
+               if row.get("relay_agent_remote_id") else ""),
         )
 
     timeline.sort(key=lambda item: _time_sort_key(item["observed_at"]), reverse=True)

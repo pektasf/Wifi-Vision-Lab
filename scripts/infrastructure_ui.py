@@ -510,6 +510,8 @@ def render():
                         row.get("observed_at", ""), row.get("server_ip", ""),
                         row.get("mac", ""), row.get("assigned_ip", ""),
                         row.get("message_types", ""),
+                        row.get("relay_circuit_id", ""),
+                        row.get("relay_agent_remote_id", ""),
                     )
                     for row in combined
                 }
@@ -517,7 +519,8 @@ def render():
                     key = (
                         row["observed_at"], row["server_ip"],
                         row["mac"], row["assigned_ip"],
-                        row["message_types"],
+                        row["message_types"], row["relay_circuit_id"],
+                        row["relay_agent_remote_id"],
                     )
                     if key not in seen:
                         combined.append(row)
@@ -640,6 +643,8 @@ def render():
                 "server_ip": "DHCP sunucusu",
                 "assigned_ip": "Atanan IP",
                 "mac": "İstemci MAC",
+                "relay_circuit_id": "Relay circuit ID",
+                "relay_agent_remote_id": "Relay remote ID",
                 "lease_time_seconds": "Kira süresi (sn)",
                 "lease_start_estimate": "Tahmini kira başlangıcı",
                 "lease_expiry_estimate": "Tahmini kira bitişi",
