@@ -11,7 +11,7 @@ from typing import Any, Iterable, Mapping
 
 from scripts.common import DATA, stamp
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 DEFAULT_DB_PATH = DATA / "wifi_vision.db"
 
 MIGRATIONS = {
@@ -95,6 +95,48 @@ MIGRATIONS = {
     );
     CREATE INDEX IF NOT EXISTS idx_dataset_rows_dataset
         ON dataset_rows(dataset, row_number);
+    """,
+    3: """
+    CREATE TABLE IF NOT EXISTS spatial_floors (
+        floor_id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        width_m REAL NOT NULL CHECK(width_m > 0),
+        height_m REAL NOT NULL CHECK(height_m > 0),
+        unit TEXT NOT NULL DEFAULT 'm',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS spatial_zones (
+        zone_id TEXT PRIMARY KEY,
+        floor_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        x_m REAL NOT NULL CHECK(x_m >= 0),
+        y_m REAL NOT NULL CHECK(y_m >= 0),
+        width_m REAL NOT NULL CHECK(width_m > 0),
+        height_m REAL NOT NULL CHECK(height_m > 0),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY(floor_id) REFERENCES spatial_floors(floor_id)
+            ON UPDATE CASCADE ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_spatial_zones_floor
+        ON spatial_zones(floor_id, name);
+    CREATE TABLE IF NOT EXISTS spatial_anchors (
+        anchor_id TEXT PRIMARY KEY,
+        floor_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        anchor_type TEXT NOT NULL,
+        x_m REAL NOT NULL CHECK(x_m >= 0),
+        y_m REAL NOT NULL CHECK(y_m >= 0),
+        source TEXT NOT NULL DEFAULT 'manual',
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY(floor_id) REFERENCES spatial_floors(floor_id)
+            ON UPDATE CASCADE ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_spatial_anchors_floor
+        ON spatial_anchors(floor_id, anchor_type);
     """,
 }
 
