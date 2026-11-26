@@ -54,3 +54,21 @@ Additional indicator:
 IP-only observations are linked to a MAC profile only when the same network/IP
 maps to exactly one MAC across the available local history. Ambiguous mappings
 remain separate.
+
+
+## Cross-source evidence timeline
+
+The Network Infrastructure page also presents a unified timeline from local
+Windows discovery, authorized endpoint reports, Kismet Wi-Fi exports, Nmap
+XML, and Zeek DHCP logs. Source observations remain separate rows; they are
+not merged into one asserted physical identity.
+
+Inventory correlation prefers an exact MAC match. If no MAC match exists, an
+exact IPv4 match may be shown as weaker context because addresses can be
+reassigned. The timeline can carry identity indicators already attached to a
+matched inventory row, but a correlation is not proof of a person or device
+identity.
+
+Kismet's explicit randomized-MAC field and the locally-administered MAC bit
+are shown as indicators only. Multiple randomized addresses are never
+automatically grouped by this timeline.
