@@ -26,3 +26,20 @@ ordinary IP/ARP observations alone. Detecting remote virtual interfaces needs
 trusted endpoint telemetry or a supported controller/agent export. The local
 Windows scanner can separately identify whether its selected adapter is
 hardware-backed; that does not reveal the interface type of every remote host.
+
+
+## Local virtual WLAN adapter evidence
+
+On Windows, the scanner also records whether the selected local network
+interface is reported as hardware-backed by Get-NetAdapter, along with its
+interface description. A non-hardware interface explicitly described as
+Wi-Fi Direct / hosted network is classified as virtual_wlan; other
+non-hardware interfaces remain virtual_or_software. Missing metadata stays
+unknown. This is evidence about the scanner computer's own interface only.
+
+A remote phone, laptop, or other endpoint may use a virtual interface behind
+an access point, hotspot, bridge, or tethering device. Standard LAN scans do
+not expose that endpoint's complete adapter list. To identify remote virtual
+interfaces, the platform needs an authorized endpoint agent or a trusted
+router/AP/controller export. Shared SSID, vendor prefix, IP range, or signal
+strength are not sufficient proof.
