@@ -365,7 +365,7 @@ def render():
             node_labels = {
                 str(row.get(detail_ids_col, "")).strip(): str(row.get("_label", "")).strip()
                 for _, row in device_nodes.iterrows()
-                if str(row.get(ids_col, "")).strip()
+                if str(row.get(detail_ids_col, "")).strip()
             }
         source_label = node_labels.get(selected_source, selected_source)
         target_label = node_labels.get(selected_target, selected_target)
