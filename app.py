@@ -1247,6 +1247,7 @@ def spatial_intelligence_page():
     )
     from scripts.spatial_fingerprints import (
         estimate_zone,
+        evaluate_fingerprints,
         list_fingerprints,
         parse_measurement_lines,
         save_fingerprint,
@@ -1341,6 +1342,27 @@ def spatial_intelligence_page():
                 for item in stored_samples
             ]
             st.dataframe(pd.DataFrame(sample_rows), width="stretch", hide_index=True)
+
+        if st.button("Referans ölçümlerini doğrula (leave-one-out)", key="spatial_fingerprint_validate"):
+            validation = evaluate_fingerprints(selected_floor_id, k=3, min_overlap=2)
+            st.session_state["spatial_fingerprint_validation"] = validation
+
+        validation = st.session_state.get("spatial_fingerprint_validation")
+        if validation:
+            if validation["status"] == "evaluated":
+                v1, v2, v3, v4 = st.columns(4)
+                v1.metric("Örnek", validation["evaluated_count"])
+                v2.metric(
+                    "Doğru bölge",
+                    f"{validation['accuracy'] * 100:.1f}%" if validation["accuracy"] is not None else "—",
+                )
+                v3.metric("Tahmin kapsamı", f"{validation['coverage'] * 100:.1f}%")
+                v4.metric("Belirsiz / kanıtsız", validation["ambiguous"] + validation["insufficient"])
+                st.caption(validation["message"])
+                if validation["per_zone"]:
+                    st.dataframe(pd.DataFrame(validation["per_zone"]), width="stretch", hide_index=True)
+            else:
+                st.warning(validation["message"])
     else:
         st.info("Parmak izi ölçümü için önce en az bir bölge/oda tanımlayın.")
 

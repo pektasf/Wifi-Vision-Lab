@@ -64,3 +64,5 @@ The capability-audit tests are offline and do not inspect the user's live adapte
 - Verify local SQLite persistence and floor/zone ownership.
 - Test zone estimation, insufficient overlap, ambiguous ties, and floor isolation.
 - CI does not invoke Wi-Fi scans, packet capture, or live adapter APIs.
+
+- Leave-one-out fingerprint validation excludes each tested reference and separates accuracy from prediction coverage.
