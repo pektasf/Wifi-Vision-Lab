@@ -38,6 +38,16 @@ def _severity(row: pd.Series, event_type: str) -> str:
     return EVENT_SEVERITY.get(event_type.strip().lower(), "info")
 
 
+def summarize_event_severity(frame: pd.DataFrame) -> dict[str, int]:
+    """Count normalized severity levels, including any custom explicit levels."""
+    if frame is None or frame.empty or "severity" not in frame.columns:
+        return {}
+    values = frame["severity"].fillna("").astype(str).str.strip().str.lower()
+    values = values[values != ""]
+    counts = values.value_counts()
+    return {str(level): int(count) for level, count in counts.items()}
+
+
 def normalize_event_frames(frames: dict[str, pd.DataFrame]) -> pd.DataFrame:
     """Return a stable, newest-first timeline without discarding source context."""
     records: list[dict[str, str]] = []
