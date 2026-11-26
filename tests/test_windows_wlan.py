@@ -1,5 +1,5 @@
 import ctypes
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from scripts.windows_wlan import (
     _WLAN_BSS_ENTRY,
@@ -12,6 +12,7 @@ from scripts.windows_wlan import (
     describe_wlan_error,
     _decode_interface_description,
     _interface_state_name,
+    _windows_filetime_age_seconds,
 )
 
 
@@ -77,7 +78,15 @@ def test_collector_report_privacy_and_measurements(tmp_path):
     original_query = windows_wlan._query_bss_entries
     try:
         windows_wlan._query_bss_entries = lambda _api: {
-            "entries": [(bytes.fromhex("AABBCCDDEEFF"), -63)],
+            "entries": [(
+                bytes.fromhex("AABBCCDDEEFF"),
+                -63,
+                int((
+                    datetime(2026, 11, 26, tzinfo=timezone.utc)
+                    - timedelta(seconds=30)
+                    - datetime(1601, 1, 1, tzinfo=timezone.utc)
+                ).total_seconds() * 10_000_000),
+            )],
             "interfaces_seen": 1,
             "interfaces_queried": 1,
             "interfaces_with_entries": 1,
@@ -106,6 +115,7 @@ def test_collector_report_privacy_and_measurements(tmp_path):
     assert next(iter(report["measurements"].values())) == -63
     assert report["interfaces"][0]["name"] == "Intel(R) Wi-Fi 6E AX211"
     assert report["interfaces"][0]["status"] == "available"
+    assert next(iter(report["measurement_ages_seconds"].values())) == 30.0
 
 
 def test_platform_availability_is_explicit():
@@ -242,3 +252,14 @@ def test_collector_exposes_adapter_specific_errors_without_network_identifiers(t
     assert report["interfaces"][0]["error_code"] == 1062
     assert "ssid" not in str(report["interfaces"]).casefold()
     assert "bssid" not in str(report["interfaces"]).casefold()
+
+
+
+def test_windows_filetime_age_conversion_and_missing_timestamp():
+    observed = datetime(2026, 11, 26, 12, 0, tzinfo=timezone.utc)
+    filetime = int((
+        observed - timedelta(seconds=45) - datetime(1601, 1, 1, tzinfo=timezone.utc)
+    ).total_seconds() * 10_000_000)
+
+    assert _windows_filetime_age_seconds(filetime, observed) == 45.0
+    assert _windows_filetime_age_seconds(0, observed) is None
