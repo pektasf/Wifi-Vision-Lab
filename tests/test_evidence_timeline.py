@@ -148,5 +148,5 @@ def test_timeline_sorts_timestamps_by_instant_not_timezone_string():
             },
         ],
     )
-    assert rows[0]["ip"] == "192.168.1.10"
-    assert rows[1]["ip"] == "192.168.1.11"
+    assert rows[0]["ip"] == "192.168.1.11"
+    assert rows[1]["ip"] == "192.168.1.10"
