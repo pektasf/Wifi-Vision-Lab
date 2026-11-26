@@ -261,7 +261,7 @@ def test_scan_network_diagnostics_show_gateway_when_present():
     })
 
     assert "ağ geçidi=192.168.1.1" in message
-    assert "DHCP=devre dışı/bilinmiyor" in message
+    assert "DHCP=bilinmiyor" in message
     assert "yok" not in message
 
 
