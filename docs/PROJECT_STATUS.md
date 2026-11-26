@@ -12,10 +12,13 @@ Laptop-only Spatial Intelligence work has started.
 - SI-1 local Spatial Core is implemented: SQLite floor, zone, and anchor records with coordinate validation.
 - SI-1 Streamlit floor-plan editor is implemented for manual floor, zone, and anchor placement.
 - SI-2 manual RSSI fingerprint survey, experimental zone matching, and leave-one-out validation metrics are implemented locally (schema v4).
-- Automatic RSSI collection and passive human/object sensing remain unimplemented and hardware-gated.
+- Windows RSSI collection has an initial read-only Native WLAN API BSS-list backend; it does not call WlanScan and pseudonymises BSSIDs locally.
+- Linux/macOS native RSSI collectors are not implemented; core app features remain platform-independent where their dependencies permit.
+- Passive human/object sensing remains unimplemented and hardware-gated.
 - The audit reads Windows Wi-Fi driver/interface metadata and physical adapter details.
 - The audit is read-only: it does not scan nearby networks, capture packets, alter adapter settings, or store SSID/BSSID.
 - CSI, monitor mode, and Wi-Fi RTT/FTM remain unknown until verified against the actual laptop adapter and driver.
 - Calibrated indoor positioning and passive presence/motion sensing are not implemented yet.
+- The Windows BSS collector is driver-dependent; an empty result is reported rather than fabricated.
 
 Roadmap: see SPATIAL_INTELLIGENCE.md.

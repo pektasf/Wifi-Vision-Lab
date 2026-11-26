@@ -162,7 +162,8 @@ def _process_is_running(pid):
         try:
             state = open(stat_path, encoding="utf-8").read().split(") ", 1)[1][0]
             return state != "Z"
-        except FileNotFoundError:
+        except OSError:
+            # The process may exit between the /proc path lookup and read.
             return False
     try:
         os.kill(pid, 0)
