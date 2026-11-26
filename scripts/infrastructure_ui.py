@@ -1,6 +1,12 @@
 from pathlib import Path
+import json
 import pandas as pd
 import streamlit as st
+
+from scripts.common import overwrite_rows
+from scripts.discovery.endpoint_adapter_evidence import (
+    ENDPOINT_ADAPTER_FIELDS, normalize_endpoint_adapter_payload,
+)
 
 
 DATA = Path(__file__).resolve().parent.parent / "data" / "processed"
@@ -172,6 +178,93 @@ def render():
             "Bu liste fiziksel, sanal, devre dışı ve gizli Windows adaptörlerini "
             "kapsayabilir. Yalnızca tarama bilgisayarının yerel envanteridir; "
             "uzak cihazların adaptör listesini göstermez."
+        )
+
+    st.markdown("### Yetkili uzak cihaz adaptör kanıtı")
+    st.caption(
+        "Bu bölüm, yalnızca sahibi olduğunuz veya yönetme yetkiniz bulunan Windows "
+        "cihazlarında çalıştırılan endpoint collector dosyalarını içe aktarır."
+    )
+    endpoint_upload = st.file_uploader(
+        "Endpoint adaptör JSON dosyası",
+        type=["json"],
+        key="endpoint_adapter_upload",
+    )
+    if endpoint_upload and st.button(
+        "Endpoint kayıtlarını içe aktar",
+        key="endpoint_adapter_import",
+    ):
+        try:
+            payload = json.loads(endpoint_upload.getvalue().decode("utf-8-sig"))
+            imported = normalize_endpoint_adapter_payload(payload)
+            if not imported:
+                st.warning("Dosyada kullanılabilir adaptör/IP/MAC kaydı bulunamadı.")
+            else:
+                existing = read_data("endpoint_adapter_evidence.csv")
+                combined = (
+                    existing.to_dict("records") if not existing.empty else []
+                )
+                seen = {
+                    (
+                        row.get("observed_at", ""), row.get("endpoint_mac", ""),
+                        row.get("endpoint_ip", ""), row.get("adapter_name", ""),
+                    )
+                    for row in combined
+                }
+                for row in imported:
+                    key = (
+                        row["observed_at"], row["endpoint_mac"],
+                        row["endpoint_ip"], row["adapter_name"],
+                    )
+                    if key not in seen:
+                        combined.append(row)
+                        seen.add(key)
+                combined = combined[-20000:]
+                overwrite_rows(
+                    DATA / "endpoint_adapter_evidence.csv",
+                    combined,
+                    ENDPOINT_ADAPTER_FIELDS,
+                )
+                st.success(f"{len(imported)} endpoint adaptör kaydı yerel olarak içe aktarıldı.")
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError, OSError) as exc:
+            st.error(f"Endpoint dosyası içe aktarılamadı: {exc}")
+
+    endpoint_evidence = read_data("endpoint_adapter_evidence.csv")
+    if not endpoint_evidence.empty:
+        inventory_macs = set(
+            inventory.get("mac", pd.Series(dtype=str)).astype(str).str.upper()
+        ) if not inventory.empty else set()
+        inventory_ips = set(
+            inventory.get("ip", pd.Series(dtype=str)).astype(str)
+        ) if not inventory.empty else set()
+        endpoint_evidence["inventory_match"] = endpoint_evidence.apply(
+            lambda row: (
+                "Eşleşti"
+                if (
+                    str(row.get("endpoint_mac", "")).upper() in inventory_macs
+                    and str(row.get("endpoint_mac", "")).strip()
+                ) or (
+                    str(row.get("endpoint_ip", "")) in inventory_ips
+                    and str(row.get("endpoint_ip", "")).strip()
+                )
+                else "Eşleşme yok"
+            ),
+            axis=1,
+        )
+        remote_virtual_count = int(
+            endpoint_evidence["adapter_kind"].eq("virtual_wlan").sum()
+        )
+        st.metric("Endpoint tarafından bildirilen sanal WLAN", remote_virtual_count)
+        st.dataframe(
+            endpoint_evidence,
+            width="stretch",
+            hide_index=True,
+            height=min(420, 58 + 35 * min(len(endpoint_evidence), 10)),
+        )
+        st.caption(
+            "Endpoint kayıtları endpoint_reported kanıtıdır; kriptografik olarak "
+            "doğrulanmış cihaz kimliği sayılmaz. Eşleşme, yalnızca IP veya MAC "
+            "gözlemiyle ilişki kurar; gerçek kişi kimliğini belirlemez."
         )
 
     if inventory.empty and nodes.empty and classification.empty:
