@@ -930,6 +930,169 @@ def detail_page():
 
 
 
+
+def behavior_page():
+    from scripts.behavior_analysis import run as run_behavior_analysis
+
+    page_header(
+        "Davranış analizi",
+        "Mevcut envanterdeki adres eşleşmelerini ve inceleme gerektiren tutarsızlıkları kanıtlarıyla gözden geçir.",
+    )
+    inventory = load("device_inventory.csv")
+    findings = load("behavior_findings.csv")
+
+    action_col, note_col = st.columns([1, 2.2])
+    with action_col:
+        if st.button(
+            "Analizi çalıştır",
+            type="primary",
+            key="behavior_run_analysis",
+            width="stretch",
+        ):
+            try:
+                with st.spinner("Yerel cihaz envanteri analiz ediliyor..."):
+                    run_behavior_analysis()
+            except (OSError, ValueError, RuntimeError) as exc:
+                st.error(f"Analiz tamamlanamadı: {exc}")
+            else:
+                st.rerun()
+    with note_col:
+        st.caption(
+            "Analiz yalnızca kayıtlı envanteri okur; ağ taraması veya sürekli izleme "
+            "başlatmaz. Bulgular inceleme sinyalidir, saldırı/ihlal kanıtı değildir."
+        )
+
+    if findings.empty:
+        st.info(
+            "Henüz davranış bulgusu kaydedilmedi. Analizi çalıştırarak mevcut envanterdeki "
+            "MAC/IP eşleşmelerini kontrol edebilirsiniz."
+        )
+        return
+
+    severity = (
+        findings["severity"].fillna("").astype(str).str.casefold()
+        if "severity" in findings.columns
+        else pd.Series("", index=findings.index)
+    )
+    review_count = int(severity.eq("review").sum())
+    subject_count = (
+        findings["subject"].astype(str).nunique()
+        if "subject" in findings.columns else 0
+    )
+    metrics = st.columns(4)
+    metrics[0].metric("Bulgu kaydı", f"{len(findings):,}")
+    metrics[1].metric("İnceleme seviyesi", f"{review_count:,}")
+    metrics[2].metric("Etkilenen kimlik", f"{subject_count:,}")
+    metrics[3].metric("Envanter cihazı", f"{len(inventory):,}")
+
+    st.markdown("### Bulguları filtrele")
+    search_col, severity_col, type_col = st.columns([2, 1, 1])
+    with search_col:
+        search = st.text_input(
+            "Bulgu ara",
+            placeholder="MAC, IP veya açıklama",
+            key="behavior_search",
+        )
+    with severity_col:
+        severity_values = ["Tüm seviyeler"] + sorted(
+            findings["severity"].fillna("").astype(str).unique().tolist()
+        ) if "severity" in findings.columns else ["Tüm seviyeler"]
+        selected_severity = st.selectbox(
+            "Önem", severity_values, key="behavior_severity_filter"
+        )
+    with type_col:
+        type_values = ["Tüm türler"] + sorted(
+            findings["type"].fillna("").astype(str).unique().tolist()
+        ) if "type" in findings.columns else ["Tüm türler"]
+        selected_type = st.selectbox(
+            "Bulgu türü", type_values, key="behavior_type_filter"
+        )
+
+    filtered = findings.copy()
+    if selected_severity != "Tüm seviyeler" and "severity" in filtered.columns:
+        filtered = filtered[filtered["severity"].astype(str) == selected_severity]
+    if selected_type != "Tüm türler" and "type" in filtered.columns:
+        filtered = filtered[filtered["type"].astype(str) == selected_type]
+    if search.strip():
+        mask = filtered.astype(str).apply(
+            lambda column: column.str.contains(
+                search.strip(), case=False, na=False, regex=False
+            )
+        ).any(axis=1)
+        filtered = filtered[mask]
+    filtered = filtered.reset_index(drop=True)
+
+    st.caption(f"{len(filtered):,} bulgu eşleşti.")
+    if filtered.empty:
+        st.info("Bu filtrelerle eşleşen bulgu bulunamadı.")
+        return
+
+    type_labels = {
+        "MULTIPLE_IPS_SAME_MAC": "Aynı MAC için birden fazla IP",
+        "MULTIPLE_MACS_SAME_IP": "Aynı IP için birden fazla MAC",
+    }
+    severity_labels = {
+        "critical": "Kritik",
+        "warning": "Uyarı",
+        "review": "İnceleme",
+        "info": "Bilgi",
+    }
+    display = filtered.copy()
+    if "type" in display.columns:
+        display["type"] = display["type"].map(
+            lambda value: type_labels.get(str(value), str(value).replace("_", " ").title())
+        )
+    if "severity" in display.columns:
+        display["severity"] = display["severity"].map(
+            lambda value: severity_labels.get(str(value).casefold(), str(value))
+        )
+    display = display.rename(columns={
+        "timestamp": "Zaman",
+        "severity": "Önem",
+        "type": "Bulgu türü",
+        "subject": "Cihaz / kimlik",
+        "detail": "Kanıt açıklaması",
+    })
+    st.dataframe(
+        display.head(150),
+        width="stretch",
+        hide_index=True,
+        height=min(500, 58 + 35 * min(len(display), 12)),
+    )
+
+    st.markdown("### Seçili bulgunun ayrıntısı")
+    selected_index = st.selectbox(
+        "İncelenecek bulgu",
+        options=list(range(len(filtered))),
+        format_func=lambda index: (
+            f"{filtered.iloc[index].get('timestamp', 'Zaman bilinmiyor')} · "
+            f"{type_labels.get(str(filtered.iloc[index].get('type', '')), str(filtered.iloc[index].get('type', '')))} · "
+            f"{filtered.iloc[index].get('subject', 'Kimlik yok')}"
+        ),
+        key="behavior_detail_selection",
+    )
+    selected = filtered.iloc[selected_index]
+    left, right = st.columns(2)
+    with left:
+        st.markdown("**Bulgu bağlamı**")
+        st.write(str(selected.get("type", "") or "Tür belirtilmemiş"))
+        st.write(str(selected.get("subject", "") or "Kimlik belirtilmemiş"))
+        st.write(str(selected.get("severity", "") or "Önem belirtilmemiş"))
+    with right:
+        st.markdown("**Kaydedilen kanıt**")
+        st.write(str(selected.get("detail", "") or "Ek açıklama yok"))
+        st.caption(str(selected.get("timestamp", "") or "Zaman bilgisi yok"))
+
+    st.download_button(
+        "Filtrelenmiş bulguları CSV indir",
+        filtered.to_csv(index=False).encode("utf-8-sig"),
+        file_name="wifi_vision_behavior_findings.csv",
+        mime="text/csv",
+        key="behavior_export",
+    )
+
+
+
 def events_page():
     from scripts.event_timeline import normalize_event_frames, summarize_event_severity
 
