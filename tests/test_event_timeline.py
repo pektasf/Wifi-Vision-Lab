@@ -64,3 +64,60 @@ def test_empty_event_sources_return_expected_columns():
         "event_time", "event_type", "subject", "severity",
         "old_value", "new_value", "details", "source",
     ]
+
+
+def test_known_event_types_receive_inferred_severity_and_explicit_value_wins():
+    frames = {
+        "device_events.csv": pd.DataFrame([
+            {"event_time": "2026-03-01T10:00:00Z", "event_type": "ip_changed"},
+            {"event_time": "2026-03-01T09:00:00Z", "event_type": "new_device"},
+            {"event_time": "2026-03-01T08:00:00Z", "event_type": "ping_not_responding", "severity": "critical"},
+        ]),
+        "network_events.csv": pd.DataFrame([
+            {"timestamp": "2026-03-01T07:00:00Z", "event": "NOT_IN_LATEST_SCAN", "ip": "192.168.1.2"},
+        ]),
+        "behavior_findings.csv": pd.DataFrame([
+            {"timestamp": "2026-03-01T06:00:00Z", "type": "MULTIPLE_IPS_SAME_MAC"},
+        ]),
+    }
+
+    result = normalize_event_frames(frames)
+
+    assert result["severity"].tolist() == [
+        "warning", "info", "critical", "warning", "review"
+    ]
+
+
+def test_severity_mapping_matches_event_names_emitted_by_project_modules():
+    frames = {
+        "device_events.csv": pd.DataFrame([
+            {"event_time": "2026-03-02T12:00:00Z", "event_type": "new_device"},
+            {"event_time": "2026-03-02T11:00:00Z", "event_type": "seen_again"},
+            {"event_time": "2026-03-02T10:00:00Z", "event_type": "baseline_snapshot"},
+            {"event_time": "2026-03-02T09:00:00Z", "event_type": "ip_changed"},
+        ]),
+        "network_events.csv": pd.DataFrame([
+            {"timestamp": "2026-03-02T08:00:00Z", "event": "FIRST_OBSERVED"},
+            {"timestamp": "2026-03-02T07:00:00Z", "event": "NOT_IN_LATEST_SCAN"},
+            {"timestamp": "2026-03-02T06:00:00Z", "event": "IP_CHANGED"},
+        ]),
+        "live_events.csv": pd.DataFrame([
+            {"timestamp": "2026-03-02T05:00:00Z", "event": "PING_RESPONDING"},
+            {"timestamp": "2026-03-02T04:00:00Z", "event": "PING_NOT_RESPONDING"},
+        ]),
+    }
+
+    result = normalize_event_frames(frames)
+    severity_by_type = dict(zip(result["event_type"], result["severity"]))
+
+    assert severity_by_type == {
+        "new_device": "info",
+        "seen_again": "info",
+        "baseline_snapshot": "info",
+        "ip_changed": "warning",
+        "FIRST_OBSERVED": "info",
+        "NOT_IN_LATEST_SCAN": "warning",
+        "IP_CHANGED": "warning",
+        "PING_RESPONDING": "info",
+        "PING_NOT_RESPONDING": "warning",
+    }
