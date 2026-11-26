@@ -1254,27 +1254,27 @@ def spatial_intelligence_page():
     )
 
     if zones:
-        from scripts.windows_wlan import (
+        from scripts.wlan_rssi import (
             collector_availability,
-            collect_windows_rssi_measurements,
+            collect_rssi_measurements,
         )
 
         collector_info = collector_availability()
         if collector_info["status"] == "implemented":
             st.caption(
-                "Windows WLAN API desteği: mevcut BSS listesinden gerçek RSSI (dBm) "
-                "okunabilir. Bu işlem WlanScan çağırmaz; ölçüm güncelliği sürücü ve "
-                "Windows WLAN hizmetinin tuttuğu listeye bağlıdır."
+                f"{collector_info['backend']} desteği: mevcut Wi-Fi BSS listesinden "
+                "gerçek RSSI (dBm) okunabilir. Bu işlem yeni tarama başlatmaz; "
+                "ölçüm güncelliği sürücü ve işletim sisteminin tuttuğu listeye bağlıdır."
             )
             if st.button(
-                "Windows Wi-Fi listesinden RSSI ölçümü al",
+                "Wi-Fi listesinden RSSI ölçümü al",
                 key="spatial_capture_windows_rssi",
             ):
                 try:
-                    with st.spinner("Windows WLAN BSS listesi okunuyor..."):
-                        capture = collect_windows_rssi_measurements()
+                    with st.spinner("Wi-Fi BSS listesi okunuyor..."):
+                        capture = collect_rssi_measurements()
                 except (OSError, RuntimeError, ValueError) as exc:
-                    st.error(f"Windows RSSI ölçümü alınamadı: {exc}")
+                    st.error(f"RSSI ölçümü alınamadı: {exc}")
                 else:
                     adapter_rows = [
                         {
@@ -1319,16 +1319,17 @@ def spatial_intelligence_page():
                             st.warning(warning["message"])
                     elif capture["status"] == "no_wifi_interface":
                         st.warning(
-                            "Windows etkin bir Wi-Fi arayüzü bulamadı. Adaptörün devre dışı "
-                            "olmadığını ve Windows tarafından tanındığını kontrol edin."
+                            "Etkin bir Wi-Fi arayüzü bulunamadı. Adaptörün devre dışı "
+                            "olmadığını ve işletim sistemi tarafından tanındığını kontrol edin."
                         )
                     elif capture["status"] == "unavailable":
                         for error in capture.get("errors", []):
                             st.error(error["message"])
                     else:
                         st.info(
-                            "Wi-Fi arayüzü bulundu ancak WLAN hizmetinin listesinde şu anda "
-                            "RSSI ölçümü yok. Bu işlem yeni tarama başlatmaz; daha sonra tekrar deneyin."
+                            "Wi-Fi arayüzü bulundu ancak işletim sisteminin önbelleğindeki "
+                            "BSS listesinde şu anda RSSI ölçümü yok. Yeni tarama başlatılmadı; "
+                            "daha sonra tekrar deneyin."
                         )
         else:
             st.info(
