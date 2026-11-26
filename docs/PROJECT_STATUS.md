@@ -19,6 +19,7 @@ Laptop-only Spatial Intelligence work has started.
 - The audit is read-only: it does not scan nearby networks, capture packets, alter adapter settings, or store SSID/BSSID.
 - CSI, monitor mode, and Wi-Fi RTT/FTM remain unknown until verified against the actual laptop adapter and driver.
 - Calibrated indoor positioning and passive presence/motion sensing are not implemented yet.
-- The Windows BSS collector is driver-dependent; an empty result is reported rather than fabricated.
+- The Windows BSS collector is driver-dependent; the UI distinguishes missing interfaces, empty BSS results, permission/service/driver errors, and partial results rather than fabricating measurements.
+- Capability reporting distinguishes a Windows RSSI backend being implemented from a specific adapter successfully returning measurements; Linux/macOS RSSI is explicitly marked not implemented.
 
 Roadmap: see SPATIAL_INTELLIGENCE.md.

@@ -74,3 +74,11 @@ The capability-audit tests are offline and do not inspect the user's live adapte
 - Test stable HMAC pseudonyms, local key persistence, RSSI range filtering, and duplicate BSSID handling.
 - Test the result contract without exposing SSID/BSSID.
 - CI never calls the native WLAN API, WlanScan, or a live adapter.
+
+
+## Windows WLAN diagnostics
+
+- Distinguish no Wi-Fi interface, successful empty BSS list, partial interface errors, and API failures.
+- Map common Windows WLAN error codes to actionable, non-identifying explanations.
+- Verify the capability audit reports RSSI backend implementation separately from per-adapter support.
+- Verify non-Windows reports do not claim the Windows RSSI collector is available.

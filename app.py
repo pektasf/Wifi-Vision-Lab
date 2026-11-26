@@ -1276,7 +1276,7 @@ def spatial_intelligence_page():
                 except (OSError, RuntimeError, ValueError) as exc:
                     st.error(f"Windows RSSI ölçümü alınamadı: {exc}")
                 else:
-                    if capture["status"] == "available":
+                    if capture["status"] in {"available", "available_with_warnings"}:
                         measurement_text = "\n".join(
                             f"{alias},{rssi}"
                             for alias, rssi in capture["measurements"].items()
@@ -1289,10 +1289,20 @@ def spatial_intelligence_page():
                             f"{capture['measurement_count']} erişim noktası için RSSI "
                             "ölçümü alındı. Ham SSID/BSSID gösterilmedi veya kaydedilmedi."
                         )
-                    else:
+                        for warning in capture.get("errors", []):
+                            st.warning(warning["message"])
+                    elif capture["status"] == "no_wifi_interface":
                         st.warning(
-                            "Windows WLAN listesinde kullanılabilir RSSI ölçümü bulunamadı. "
-                            "Wi-Fi adaptörünün açık ve WLAN hizmetinin çalışır durumda olduğunu kontrol edin."
+                            "Windows etkin bir Wi-Fi arayüzü bulamadı. Adaptörün devre dışı "
+                            "olmadığını ve Windows tarafından tanındığını kontrol edin."
+                        )
+                    elif capture["status"] == "unavailable":
+                        for error in capture.get("errors", []):
+                            st.error(error["message"])
+                    else:
+                        st.info(
+                            "Wi-Fi arayüzü bulundu ancak WLAN hizmetinin listesinde şu anda "
+                            "RSSI ölçümü yok. Bu işlem yeni tarama başlatmaz; daha sonra tekrar deneyin."
                         )
         else:
             st.info(

@@ -87,9 +87,9 @@ A Streamlit floor-plan editor now creates floors, rectangular zones, and manual 
 
 Leave-one-out validation is now available in the UI. It excludes each tested sample from its own reference set and reports accuracy separately from prediction coverage; zones with fewer than two samples are skipped. This is an initial internal check, not independent validation.
 
-**Windows RSSI collection (initial read-only implementation):** the app can query the Windows Native WLAN API BSS list and read driver-reported RSSI in dBm. It does not call WlanScan, connect to an AP, or change adapter settings. Raw SSID/BSSID values are used only in memory to derive stable installation-local HMAC aliases; the key is stored under the ignored local data directory. Freshness depends on the Windows WLAN service and adapter driver.
+**Windows RSSI collection (initial read-only implementation):** the app can query the Windows Native WLAN API BSS list and read driver-reported RSSI in dBm. It does not call WlanScan, connect to an AP, or change adapter settings. Raw SSID/BSSID values are used only in memory to derive stable installation-local HMAC aliases; the key is stored under the ignored local data directory. Freshness depends on the Windows WLAN service and adapter driver. The collector distinguishes no Wi-Fi interface, an empty BSS list, access/service/driver errors, and partial results across multiple interfaces.
 
-Linux and macOS retain the common app functionality, but their native RSSI collectors are not implemented yet. The platform capability report must show this as not implemented rather than implying the hardware is unsupported.
+Linux and macOS retain the common app functionality, but their native RSSI collectors are not implemented yet. The platform capability report must show this as not implemented rather than implying the hardware is unsupported. On Windows, the capability audit reports the RSSI backend as implemented but driver-dependent; it does not claim that every adapter will return BSS measurements.
 
 **Still pending:** repeated surveys across time/orientation, independent held-out validation, a reliable error bound, and native RSSI collectors for Linux/macOS.
 
