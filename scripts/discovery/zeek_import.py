@@ -12,6 +12,8 @@ from scripts.discovery.identity_signals import (
 ZEEK_DHCP_FIELDS = [
     "imported_at", "observed_at", "source", "client_ip", "assigned_ip",
     "requested_ip", "server_ip", "mac", "hostname", "client_fqdn",
+    "domain", "client_software", "server_software",
+    "relay_circuit_id", "relay_agent_remote_id",
     "lease_time_seconds", "duration_seconds", "message_types",
     "mac_address_type", "evidence_status",
 ]
@@ -50,6 +52,14 @@ def _timestamp(value):
     except (OverflowError, OSError, ValueError):
         return ""
     return parsed.isoformat(timespec="microseconds").replace("+00:00", "Z")
+
+
+def _text(value, limit=256):
+    """Keep optional Zeek text fields bounded and free of control characters."""
+    if value is None:
+        return ""
+    text = "".join(char for char in str(value) if char.isprintable()).strip()
+    return text[:limit]
 
 
 def _number(value):
@@ -120,8 +130,14 @@ def normalize_zeek_dhcp_export(content, imported_at=""):
         requested_ip = _ip(record.get("requested_addr"))
         server_ip = _ip(record.get("server_addr"))
         hostname = str(record.get("host_name") or "").strip()
-        client_fqdn = str(record.get("client_fqdn") or "").strip()
-        if not any((mac, client_ip, assigned_ip, hostname, client_fqdn)):
+        client_fqdn = _text(record.get("client_fqdn"))
+        domain = _text(record.get("domain"))
+        client_software = _text(record.get("client_software"))
+        server_software = _text(record.get("server_software"))
+        relay_circuit_id = _text(record.get("circuit_id"))
+        relay_agent_remote_id = _text(record.get("agent_remote_id"))
+        if not any((mac, client_ip, assigned_ip, hostname, client_fqdn,
+                    relay_circuit_id, relay_agent_remote_id)):
             continue
 
         if isinstance(record.get("msg_types"), list):
@@ -141,6 +157,14 @@ def normalize_zeek_dhcp_export(content, imported_at=""):
             evidence.append("dhcp_client_mac_observed")
         if hostname or client_fqdn:
             evidence.append("dhcp_client_hostname_reported")
+        if relay_circuit_id:
+            evidence.append("dhcp_relay_circuit_id_observed")
+        if relay_agent_remote_id:
+            evidence.append("dhcp_relay_remote_id_observed")
+        if client_software:
+            evidence.append("dhcp_client_software_reported")
+        if server_software:
+            evidence.append("dhcp_server_software_reported")
         if local_mac:
             evidence.append("locally_administered_mac")
 
@@ -155,6 +179,11 @@ def normalize_zeek_dhcp_export(content, imported_at=""):
             "mac": mac,
             "hostname": hostname,
             "client_fqdn": client_fqdn,
+            "domain": domain,
+            "client_software": client_software,
+            "server_software": server_software,
+            "relay_circuit_id": relay_circuit_id,
+            "relay_agent_remote_id": relay_agent_remote_id,
             "lease_time_seconds": _number(record.get("lease_time")),
             "duration_seconds": _number(record.get("duration")),
             "message_types": message_types,
