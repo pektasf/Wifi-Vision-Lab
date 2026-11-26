@@ -61,13 +61,14 @@ def _same_subnet(ip_value, subnet_value):
 
 def build_topology(inventory, profiles=None, intelligence=None,
                    classifications=None, ap_relationships=None,
-                   network_context=None):
+                   network_context=None, neighbor_relationships=None):
     """Return topology nodes/edges with explicit evidence provenance."""
     profiles = profiles if profiles is not None else pd.DataFrame()
     intelligence = intelligence if intelligence is not None else pd.DataFrame()
     classifications = classifications if classifications is not None else pd.DataFrame()
     ap_relationships = ap_relationships if ap_relationships is not None else pd.DataFrame()
     network_context = network_context if network_context is not None else pd.DataFrame()
+    neighbor_relationships = neighbor_relationships if neighbor_relationships is not None else pd.DataFrame()
 
     if inventory.empty or "ip" not in inventory.columns:
         return [], []
@@ -395,6 +396,34 @@ def build_topology(inventory, profiles=None, intelligence=None,
             "details": "Latest recorded direct association reported by the local Windows WLAN interface; this is not a continuous live-state guarantee.",
         })
 
+
+    # Direct neighbor advertisements from local exports; no subnet-based inference.
+    from scripts.topology_evidence import prepare_verified_neighbor_edges
+    for relationship in prepare_verified_neighbor_edges(neighbor_relationships):
+        local_mac, neighbor_mac = relationship["local_mac"], relationship["neighbor_mac"]
+        local_id = mac_to_node.get(local_mac, f"MAC:{local_mac}")
+        neighbor_id = mac_to_node.get(neighbor_mac, f"MAC:{neighbor_mac}")
+        for mac, node_id in ((local_mac, local_id), (neighbor_mac, neighbor_id)):
+            if node_id not in nodes_by_id:
+                nodes_by_id[node_id] = {
+                    "id": node_id, "label": "Advertised network neighbor",
+                    "node_type": "network_neighbor", "ip": "", "mac": mac,
+                    "vendor": "", "status": "neighbor_advertised",
+                    "classification": "Neighbor from direct protocol evidence",
+                    "evidence_type": relationship["evidence_type"],
+                    "evidence_source": relationship["evidence_source"],
+                    "confidence": "verified",
+                    "details": "MAC is present in a verified neighbor advertisement; management IP and full role may be unknown."
+                }
+        edges.append({
+            "source": local_id, "target": neighbor_id,
+            "relation": relationship["relation"], "confidence": "verified",
+            "evidence_type": relationship["evidence_type"],
+            "evidence_source": relationship["evidence_source"],
+            "observed_at": relationship["observed_at"],
+            "details": f"Verified {relationship['protocol'].upper()} or trusted mesh-controller relationship. Local port: {relationship['local_port'] or 'unknown'}; neighbor port: {relationship['neighbor_port'] or 'unknown'}.",
+        })
+
     return list(nodes_by_id.values()), edges
 
 
@@ -405,10 +434,11 @@ def run():
     classifications = read_data("device_classification.csv")
     ap_relationships = read_data("ap_client_relationships.csv")
     network_context = read_data("network_context.csv")
+    neighbor_relationships = read_data("neighbor_relationships.csv")
 
     nodes, edges = build_topology(
         inventory, profiles, intelligence, classifications, ap_relationships,
-        network_context
+        network_context, neighbor_relationships
     )
     overwrite_rows(DATA / "topology_nodes.csv", nodes, NODE_FIELDS)
     overwrite_rows(DATA / "topology_edges.csv", edges, EDGE_FIELDS)
