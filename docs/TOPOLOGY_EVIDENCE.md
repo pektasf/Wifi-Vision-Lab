@@ -73,3 +73,13 @@ relationships. Device labels are shown on maps with up to 120 devices; larger
 maps keep hover details and reduce always-visible text to avoid visual and
 rendering overload. The map exposes Plotly zoom, pan, scroll zoom and autoscale
 controls, and preserves the current viewport across Streamlit reruns.
+
+
+### DHCP server configuration context
+
+When the selected Windows adapter reports DHCP enabled and a valid DHCP server
+IPv4 address, the topology may include a configured_dhcp_server edge from the
+adapter's subnet context to that address. This edge is always context_only and
+uses network_context.csv as its local source. It does not prove server identity,
+a physical link, or provide the router's DHCP client lease table. Disabled,
+unknown, or invalid DHCP values do not create a DHCP server node or edge.
