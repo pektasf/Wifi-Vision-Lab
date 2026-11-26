@@ -351,6 +351,25 @@ def dashboard_page():
         else:
             st.caption("Henüz zaman damgalı bir gözlem kaydedilmedi.")
 
+    if summary["total"] == 0:
+        with st.container(border=True):
+            st.markdown("### İlk ağ görünümünü oluşturalım")
+            st.write(
+                "Henüz yerel cihaz envanteri bulunmuyor. İlk tarama tamamlandığında "
+                "cihaz sayısı, durum dağılımı ve ağ olayları bu ekranda otomatik görünür."
+            )
+            guide_left, guide_mid, guide_right = st.columns(3)
+            with guide_left:
+                st.markdown("**1 · Taramayı başlat**")
+                st.caption("Yeni tarama düğmesini kullanarak kendi ağını gözlemle.")
+            with guide_mid:
+                st.markdown("**2 · Envanteri incele**")
+                st.caption("Bulunan cihazları, IP/MAC bilgilerini ve durumlarını kontrol et.")
+            with guide_right:
+                st.markdown("**3 · İlişkileri doğrula**")
+                st.caption("Topoloji ekranında doğrulanmış bağlantıları tahminlerden ayır.")
+        st.caption("Gizlilik: keşif ve kayıtlar bu bilgisayarda tutulur; ağ verileri dışarı gönderilmez.")
+
     st.markdown("### Ağın mevcut görünümü")
     metrics = st.columns(4)
     metrics[0].metric("Bilinen cihaz", f"{summary['total']:,}")
