@@ -17,16 +17,32 @@ def list_network_interfaces():
         raise RuntimeError("Bu ağ adaptörü şu anda Windows içindir.")
 
     ps = (
+        "$dhcp=@{}; "
+        "Get-CimInstance Win32_NetworkAdapterConfiguration -Filter "
+        "\"IPEnabled=True\" | ForEach-Object { "
+        "$dhcp[[int]$_.InterfaceIndex]=$_ }; "
         "$items = @(Get-NetIPConfiguration | "
         "Where-Object {$_.IPv4Address} | ForEach-Object { "
         "$gateway = ''; "
         "if($_.IPv4DefaultGateway){$gateway=$_.IPv4DefaultGateway.NextHop}; "
+        "$cfg=$dhcp[[int]$_.InterfaceIndex]; "
+        "$dhcpEnabled=''; $dhcpServer=''; $leaseObtained=''; $leaseExpires=''; "
+        "if($cfg){ "
+        "$dhcpEnabled=[string][bool]$cfg.DHCPEnabled; "
+        "$dhcpServer=[string]$cfg.DHCPServer; "
+        "if($cfg.DHCPLeaseObtained){$leaseObtained=$cfg.DHCPLeaseObtained.ToUniversalTime().ToString('o')}; "
+        "if($cfg.DHCPLeaseExpires){$leaseExpires=$cfg.DHCPLeaseExpires.ToUniversalTime().ToString('o')} "
+        "}; "
         "[pscustomobject]@{"
         "IP=$_.IPv4Address[0].IPAddress; "
         "Prefix=$_.IPv4Address[0].PrefixLength; "
         "Gateway=$gateway; "
         "Adapter=$_.InterfaceAlias; "
-        "InterfaceIndex=$_.InterfaceIndex"
+        "InterfaceIndex=$_.InterfaceIndex; "
+        "DHCPEnabled=$dhcpEnabled; "
+        "DHCPServer=$dhcpServer; "
+        "DHCPLeaseObtained=$leaseObtained; "
+        "DHCPLeaseExpires=$leaseExpires"
         "} }); "
         "if($items.Count -gt 0){$items | ConvertTo-Json -Compress}"
     )
@@ -63,6 +79,10 @@ def list_network_interfaces():
                 "interface_index": int(row.get("InterfaceIndex") or 0),
                 "network": str(interface.network),
                 "has_default_gateway": bool(gateway),
+                "dhcp_enabled": str(row.get("DHCPEnabled") or "").strip().casefold() == "true",
+                "dhcp_server": str(row.get("DHCPServer") or "").strip(),
+                "dhcp_lease_obtained": str(row.get("DHCPLeaseObtained") or "").strip(),
+                "dhcp_lease_expires": str(row.get("DHCPLeaseExpires") or "").strip(),
             })
     except (KeyError, ValueError, json.JSONDecodeError, TypeError) as exc:
         raise RuntimeError("Windows IPv4 arayüz bilgisi okunamadı.") from exc
@@ -98,6 +118,10 @@ def get_network(interface_alias=None):
         "network": selected["network"],
         "interface_index": selected["interface_index"],
         "has_default_gateway": selected["has_default_gateway"],
+        "dhcp_enabled": selected.get("dhcp_enabled", False),
+        "dhcp_server": selected.get("dhcp_server", ""),
+        "dhcp_lease_obtained": selected.get("dhcp_lease_obtained", ""),
+        "dhcp_lease_expires": selected.get("dhcp_lease_expires", ""),
     }
 
 def ping_one(ip, timeout_ms=600):
@@ -199,7 +223,11 @@ def format_network_diagnostics(net):
         f"IPv4={str(net.get('ip') or 'bilinmiyor')}; "
         f"alt ağ={str(net.get('network') or 'bilinmiyor')}; "
         f"ağ geçidi={gateway}; "
-        f"arayüz indeksi={str(net.get('interface_index') or 'bilinmiyor')}"
+        f"arayüz indeksi={str(net.get('interface_index') or 'bilinmiyor')}; "
+        f"DHCP={'etkin' if net.get('dhcp_enabled') else 'devre dışı/bilinmiyor'}; "
+        f"DHCP sunucusu={str(net.get('dhcp_server') or 'bilinmiyor')}; "
+        f"kira başlangıcı={str(net.get('dhcp_lease_obtained') or 'bilinmiyor')}; "
+        f"kira bitişi={str(net.get('dhcp_lease_expires') or 'bilinmiyor')}"
     )
 
 
