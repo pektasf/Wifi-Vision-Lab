@@ -121,3 +121,27 @@ def test_severity_mapping_matches_event_names_emitted_by_project_modules():
         "PING_RESPONDING": "info",
         "PING_NOT_RESPONDING": "warning",
     }
+
+
+
+def test_summarize_event_severity_counts_known_and_custom_levels():
+    from scripts.event_timeline import summarize_event_severity
+
+    frame = pd.DataFrame({
+        "severity": ["warning", "warning", "critical", "review", "info", "custom", None, ""]
+    })
+
+    assert summarize_event_severity(frame) == {
+        "warning": 2,
+        "critical": 1,
+        "review": 1,
+        "info": 1,
+        "custom": 1,
+    }
+
+
+def test_summarize_event_severity_handles_empty_or_missing_column():
+    from scripts.event_timeline import summarize_event_severity
+
+    assert summarize_event_severity(pd.DataFrame()) == {}
+    assert summarize_event_severity(pd.DataFrame({"event_type": ["up"]})) == {}
