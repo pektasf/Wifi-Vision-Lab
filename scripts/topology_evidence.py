@@ -189,3 +189,20 @@ def prepare_verified_neighbor_edges(records):
             "neighbor_port": str(row.get("neighbor_port", "")),
         })
     return prepared
+
+
+def topology_node_lane(node_type):
+    """Return a stable visual lane for topology node types."""
+    lanes = {
+        "gateway_address": ("Gateway adresi", 3, "diamond", "#8A5A12"),
+        "access_point_device": ("Fiziksel erişim noktası", 2, "square", "#087F78"),
+        "access_point_radio": ("AP radyosu", 2, "hexagon", "#087F78"),
+        "network_neighbor": ("Switch / Mesh komşusu", 1, "square", "#426C8C"),
+        "network_device_candidate": ("Ağ ekipmanı adayı", 1, "square", "#426C8C"),
+        "endpoint": ("Uç cihaz", 0, "circle", "#73827F"),
+        "wifi_client": ("Uç cihaz", 0, "circle", "#73827F"),
+    }
+    return lanes.get(
+        str(node_type or "unknown").strip().lower(),
+        ("Diğer / sınıflandırılmamış", -1, "circle", "#73827F"),
+    )
