@@ -539,6 +539,50 @@ def filter_event_review_assignment(
     return result.reset_index(drop=True)
 
 
+
+def summarize_event_review_workload(frame: pd.DataFrame | None) -> pd.DataFrame:
+    """Summarize persisted review workload by assignee without inventing SLA or risk scores."""
+    columns = [
+        "assignee", "total_events", "open_events", "new_events",
+        "action_required_events", "high_priority_open", "resolved_events",
+    ]
+    if frame is None or frame.empty:
+        return pd.DataFrame(columns=columns)
+
+    data = frame.copy()
+    data["_assignee"] = (
+        data["review_assignee"].fillna("").astype(str).str.strip()
+        if "review_assignee" in data.columns else ""
+    )
+    data["_assignee"] = data["_assignee"].replace("", "Atanmamış")
+    data["_status"] = (
+        data["review_status"].fillna("new").astype(str)
+        if "review_status" in data.columns else "new"
+    )
+    data["_priority"] = (
+        data["review_priority"].fillna("normal").astype(str)
+        if "review_priority" in data.columns else "normal"
+    )
+    data["_open"] = data["_status"].ne("resolved")
+    data["_high_open"] = data["_open"] & data["_priority"].isin(("high", "critical"))
+
+    rows = []
+    for assignee, group in data.groupby("_assignee", sort=True, dropna=False):
+        rows.append({
+            "assignee": str(assignee),
+            "total_events": int(len(group)),
+            "open_events": int(group["_open"].sum()),
+            "new_events": int(group["_status"].eq("new").sum()),
+            "action_required_events": int(group["_status"].eq("action_required").sum()),
+            "high_priority_open": int(group["_high_open"].sum()),
+            "resolved_events": int(group["_status"].eq("resolved").sum()),
+        })
+    result = pd.DataFrame(rows, columns=columns)
+    return result.sort_values(
+        ["open_events", "high_priority_open", "assignee"],
+        ascending=[False, False, True], kind="stable",
+    ).reset_index(drop=True)
+
 def filter_event_review_status(
     frame: pd.DataFrame,
     status: str = "",

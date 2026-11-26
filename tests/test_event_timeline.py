@@ -665,3 +665,36 @@ def test_bulk_event_review_handles_empty_selection_and_rejects_invalid_updates()
         bulk_update_event_review(pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), updated_at="now", status="closed")
     with pytest.raises(ValueError):
         bulk_update_event_review(pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), updated_at="now", priority="urgent")
+
+
+
+def test_summarize_event_review_workload_groups_assignees_and_open_priorities():
+    from scripts.event_timeline import summarize_event_review_workload
+
+    frame = pd.DataFrame([
+        {"review_assignee": "Ağ ekibi", "review_status": "action_required", "review_priority": "critical"},
+        {"review_assignee": "Ağ ekibi", "review_status": "reviewed", "review_priority": "normal"},
+        {"review_assignee": "", "review_status": "new", "review_priority": "high"},
+        {"review_assignee": "Ağ ekibi", "review_status": "resolved", "review_priority": "critical"},
+    ])
+    result = summarize_event_review_workload(frame).set_index("assignee")
+    assert result.loc["Ağ ekibi", "total_events"] == 3
+    assert result.loc["Ağ ekibi", "open_events"] == 2
+    assert result.loc["Ağ ekibi", "action_required_events"] == 1
+    assert result.loc["Ağ ekibi", "high_priority_open"] == 1
+    assert result.loc["Atanmamış", "new_events"] == 1
+    assert result.loc["Atanmamış", "high_priority_open"] == 1
+
+
+def test_summarize_event_review_workload_defaults_missing_fields_and_handles_empty_data():
+    from scripts.event_timeline import summarize_event_review_workload
+
+    assert summarize_event_review_workload(None).empty
+    assert summarize_event_review_workload(pd.DataFrame()).empty
+    result = summarize_event_review_workload(pd.DataFrame([{"event_type": "legacy"}]))
+    assert len(result) == 1
+    assert result.iloc[0]["assignee"] == "Atanmamış"
+    assert result.iloc[0]["total_events"] == 1
+    assert result.iloc[0]["open_events"] == 1
+    assert result.iloc[0]["new_events"] == 1
+    assert result.iloc[0]["high_priority_open"] == 0
