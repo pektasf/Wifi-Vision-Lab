@@ -57,3 +57,58 @@ def test_split_ap_client_records_never_promotes_missing_evidence():
     empty = split_ap_client_records(pd.DataFrame())
     assert empty["verified"].empty
     assert empty["unverified"].empty
+
+
+
+def test_build_network_context_summary_formats_latest_local_adapter_snapshot():
+    from scripts.infrastructure_ui import build_network_context_summary
+
+    frame = pd.DataFrame([
+        {
+            "captured_at": "2026-11-26T10:00:00+03:00",
+            "adapter": "Wi-Fi",
+            "interface_index": "7",
+            "local_ipv4": "192.0.2.10",
+            "network_cidr": "192.0.2.0/24",
+            "gateway": "192.0.2.1",
+            "dhcp_enabled": "enabled",
+            "dhcp_server": "192.0.2.1",
+            "dhcp_lease_obtained": "2026-11-26T06:00:00Z",
+            "dhcp_lease_expires": "2026-11-27T06:00:00Z",
+        },
+        {
+            "captured_at": "2026-11-26T11:00:00+03:00",
+            "adapter": "Local Area Connection* 12",
+            "interface_index": "19",
+            "local_ipv4": "192.168.137.1",
+            "network_cidr": "192.168.137.0/24",
+            "gateway": "",
+            "dhcp_enabled": "disabled",
+            "dhcp_server": "",
+            "dhcp_lease_obtained": "",
+            "dhcp_lease_expires": "",
+        },
+    ])
+
+    summary = build_network_context_summary(frame)
+
+    assert summary["adapter"] == "Local Area Connection* 12"
+    assert summary["local_ipv4"] == "192.168.137.1"
+    assert summary["network_cidr"] == "192.168.137.0/24"
+    assert summary["gateway"] == "Yok"
+    assert summary["dhcp_status"] == "Devre dışı"
+    assert summary["dhcp_server"] == "Bilinmiyor"
+    assert summary["interface_index"] == "19"
+
+
+def test_build_network_context_summary_handles_missing_and_unknown_state():
+    from scripts.infrastructure_ui import build_network_context_summary
+
+    assert build_network_context_summary(pd.DataFrame()) is None
+    summary = build_network_context_summary(pd.DataFrame([{
+        "dhcp_enabled": "unknown",
+    }]))
+
+    assert summary["dhcp_status"] == "Bilinmiyor"
+    assert summary["adapter"] == "Bilinmiyor"
+    assert summary["gateway"] == "Yok"
