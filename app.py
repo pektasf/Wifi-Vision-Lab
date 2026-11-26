@@ -1409,7 +1409,12 @@ def events_page():
     )
     queue_sort_col, queue_unassigned_col = st.columns([1.4, 1])
     with queue_sort_col:
-        queue_sort_labels = {"priority": "Öncelik: kritik / yüksek önce", "newest": "En yeni olay önce", "open": "Açık incelemeler önce"}
+        queue_sort_labels = {
+            "priority": "Öncelik: kritik / yüksek önce",
+            "open": "İşlem gerekli → yeni → incelendi",
+            "oldest": "En eski açık olay önce",
+            "newest": "En yeni olay önce",
+        }
         queue_sort = st.selectbox("İnceleme kuyruğu sıralaması", options=list(queue_sort_labels), format_func=lambda value: queue_sort_labels[value], key="event_review_queue_sort")
     with queue_unassigned_col:
         queue_unassigned_first = st.checkbox("Atanmamış olayları öne al", value=True, key="event_review_queue_unassigned_first")

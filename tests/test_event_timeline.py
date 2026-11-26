@@ -724,7 +724,7 @@ def test_sort_event_review_queue_handles_newest_open_and_invalid_modes():
         {"event_key": "new-resolved", "event_time": "2026-11-27T10:00:00Z", "review_status": "resolved"},
     ])
     assert sort_event_review_queue(frame, "newest")["event_key"].tolist() == ["new-open", "old-open", "new-resolved"]
-    assert sort_event_review_queue(frame, "open")["event_key"].tolist() == ["new-open", "old-open", "new-resolved"]
+    assert sort_event_review_queue(frame, "open")["event_key"].tolist() == ["old-open", "new-open", "new-resolved"]
     with pytest.raises(ValueError): sort_event_review_queue(frame, "random")
     assert sort_event_review_queue(None).empty
 
@@ -750,3 +750,21 @@ def test_add_event_review_history_summary_handles_missing_or_empty_history():
     assert add_event_review_history_summary(events, None).iloc[0]["review_history_count"] == 0
     assert add_event_review_history_summary(events, pd.DataFrame()).iloc[0]["review_last_updated"] == ""
     assert add_event_review_history_summary(None, None).empty
+
+
+
+def test_sort_event_review_queue_oldest_open_and_action_required_modes():
+    from scripts.event_timeline import sort_event_review_queue
+
+    frame = pd.DataFrame([
+        {"event_key": "newer-new", "event_time": "2026-11-26T10:00:00Z", "review_status": "new", "review_priority": "critical"},
+        {"event_key": "older-action", "event_time": "2026-11-24T10:00:00Z", "review_status": "action_required", "review_priority": "normal"},
+        {"event_key": "oldest-reviewed", "event_time": "2026-11-23T10:00:00Z", "review_status": "reviewed", "review_priority": "high"},
+        {"event_key": "resolved-old", "event_time": "2026-11-20T10:00:00Z", "review_status": "resolved", "review_priority": "critical"},
+    ])
+    assert sort_event_review_queue(frame, "oldest")["event_key"].tolist() == [
+        "oldest-reviewed", "older-action", "newer-new", "resolved-old"
+    ]
+    assert sort_event_review_queue(frame, "open")["event_key"].tolist() == [
+        "older-action", "newer-new", "oldest-reviewed", "resolved-old"
+    ]

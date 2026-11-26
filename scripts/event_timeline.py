@@ -589,7 +589,7 @@ def sort_event_review_queue(frame: pd.DataFrame | None, sort_by: str = "priority
     if frame is None: return pd.DataFrame()
     result = frame.copy()
     if result.empty: return result
-    if sort_by not in {"priority", "newest", "open"}: raise ValueError(f"Unsupported event review queue sort: {sort_by}")
+    if sort_by not in {"priority", "newest", "open", "oldest"}: raise ValueError(f"Unsupported event review queue sort: {sort_by}")
     status = result.get("review_status", pd.Series("new", index=result.index)).fillna("new").astype(str)
     priority = result.get("review_priority", pd.Series("normal", index=result.index)).fillna("normal").astype(str)
     assignee = result.get("review_assignee", pd.Series("", index=result.index)).fillna("").astype(str).str.strip()
@@ -600,6 +600,12 @@ def sort_event_review_queue(frame: pd.DataFrame | None, sort_by: str = "priority
     result["_queue_time"] = pd.to_datetime(result[time_col], utc=True, errors="coerce") if time_col else pd.NaT
     if sort_by == "newest":
         cols, asc = ["_queue_resolved", "_queue_time"], [True, False]
+    elif sort_by == "oldest":
+        cols, asc = ["_queue_resolved", "_queue_time"], [True, True]
+    elif sort_by == "open":
+        status_rank = status.map({"action_required": 0, "new": 1, "reviewed": 2, "resolved": 3}).fillna(4)
+        result["_queue_status"] = status_rank
+        cols, asc = ["_queue_resolved", "_queue_status", "_queue_priority", "_queue_time"], [True, True, True, True]
     else:
         cols, asc = ["_queue_resolved", "_queue_priority", "_queue_time"], [True, True, False]
     if unassigned_first:
