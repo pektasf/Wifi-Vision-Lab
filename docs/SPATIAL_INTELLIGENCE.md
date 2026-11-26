@@ -134,8 +134,24 @@ Do not infer the position of every other network client from the laptop's own RS
 
 ## Current status
 
-SI-0 provides a safe capability inventory. SI-2 now has an initial Windows
-read-only BSS RSSI collector, but this is not calibrated positioning and does
+SI-0 provides a safe capability inventory. SI-2 now has Windows and Linux read-only cached-BSS RSSI collectors, but this is not calibrated positioning and does
 not prove every adapter/driver will return measurements. Linux/macOS RSSI
 collectors, calibrated device coordinates, CSI capture, and passive
 human/object sensing remain future phases gated by platform and hardware support.
+
+
+### SI-2.2 — Time-ordered holdout validation
+
+The validation UI now offers two different views:
+
+- Leave-one-out validation: each sample is tested after removing itself from
+  the reference set. Useful as a basic internal consistency check, but optimistic
+  when repeat measurements are very similar.
+- Time-ordered holdout validation: the latest 25% of samples in each eligible
+  zone are held out and evaluated only against earlier samples. A zone needs at
+  least three samples; at least two remain in the reference set.
+
+Accuracy and prediction coverage are reported separately. This remains local,
+dataset-specific validation, not an independent real-world performance claim.
+Collect repeat measurements at different times and orientations before relying
+on the estimate.
