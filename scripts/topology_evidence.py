@@ -82,3 +82,21 @@ def prepare_verified_edge_options(edges, edge_from, edge_to):
             "label": f"{position}. {source} → {target} | {relation} | {observed_at}",
         })
     return options
+
+
+
+def extract_selected_node_id(selection):
+    """Read a selected Plotly node ID without depending on Streamlit internals."""
+    def read(value, key, default=None):
+        if hasattr(value, "get"):
+            return value.get(key, default)
+        return getattr(value, key, default)
+
+    selection_data = read(selection, "selection", selection)
+    points = read(selection_data, "points", []) or []
+    if not points:
+        return ""
+    customdata = read(points[0], "customdata", "")
+    if isinstance(customdata, (list, tuple)):
+        customdata = customdata[0] if customdata else ""
+    return str(customdata or "").strip()

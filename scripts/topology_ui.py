@@ -3,6 +3,7 @@ import pandas as pd
 import streamlit as st
 
 from scripts.topology_evidence import (
+    extract_selected_node_id,
     prepare_association_history,
     prepare_verified_edge_options,
     split_topology_edges,
@@ -227,9 +228,11 @@ def render():
                         f"Durum: {html.escape(str(row.get('_status', '')))}<br>"
                         f"MAC: {html.escape(str(row.get(mac_col, '')))}"
                     )
+                node_ids = [item[0] for item in members]
                 figure.add_trace(go.Scatter(
                     x=x_values,
                     y=y_values,
+                    customdata=node_ids,
                     mode="markers+text",
                     text=labels,
                     textposition="top center",
@@ -274,9 +277,35 @@ def render():
                 },
                 hoverlabel={"bgcolor": "#FFFFFF", "font": {"color": "#182B2A"}},
             )
-            st.plotly_chart(
-                figure, width="stretch", config={"displayModeBar": False}
+            chart_selection = st.plotly_chart(
+                figure,
+                width="stretch",
+                config={"displayModeBar": False},
+                on_select="rerun",
+                selection_mode="points",
+                key="topology_relationship_map",
             )
+            selected_node_id = extract_selected_node_id(chart_selection)
+            if selected_node_id:
+                selected_rows = device_nodes[
+                    device_nodes[ids_col].astype(str).str.strip() == selected_node_id
+                ]
+                if not selected_rows.empty:
+                    selected_node = selected_rows.iloc[0]
+                    st.markdown("#### Haritada seçilen cihaz")
+                    detail_left, detail_right = st.columns(2)
+                    with detail_left:
+                        st.markdown("**Cihaz / IP**")
+                        st.write(str(selected_node.get("_label", "Bilinmiyor")))
+                        st.write(str(selected_node.get("_ip", "IP yok")))
+                        st.markdown("**Rol / durum**")
+                        st.write(str(selected_node.get("_type", "Bilinmiyor")))
+                        st.write(str(selected_node.get("_status", "Bilinmiyor")))
+                    with detail_right:
+                        st.markdown("**Üretici / MAC**")
+                        st.write(str(selected_node.get(vendor_col, "") or "Bilinmiyor"))
+                        st.write(str(selected_node.get(mac_col, "") or "Bilinmiyor"))
+                        st.caption("Bu panel, haritada seçilen cihazın mevcut yerel envanter kaydını gösterir.")
         except ImportError:
             st.info("Grafik kütüphanesi bulunamadı. Doğrulanmış bağlantılar tablo olarak gösteriliyor.")
             if not verified_edges.empty:
