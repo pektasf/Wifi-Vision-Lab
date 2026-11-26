@@ -631,6 +631,8 @@ def render():
             "exact_mac": "MAC birebir",
             "exact_ip": "IP birebir · daha zayıf",
             "unmatched": "Envanter eşleşmesi yok",
+            "ip_scope_unknown": "IP eşleşmedi · ağ kapsamı bilinmiyor",
+            "network_mismatch": "Eşleşmedi · farklı ağ kapsamı",
         }).fillna("Bilinmiyor")
         matched_count = int(
             timeline_frame["correlation_method"].ne("Envanter eşleşmesi yok").sum()
