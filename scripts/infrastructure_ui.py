@@ -426,10 +426,35 @@ def render():
     if not nmap_evidence.empty:
         up_count = int(nmap_evidence["host_state"].eq("up").sum())
         mac_count = int(nmap_evidence["mac"].astype(str).str.strip().ne("").sum())
-        nmap_metrics = st.columns(3)
+        local_mac_count = int(
+            nmap_evidence["mac_address_type"].eq("locally_administered").sum()
+        )
+        inventory_macs = set(
+            inventory.get("mac", pd.Series(dtype=str)).astype(str)
+            .str.upper().str.replace("-", ":", regex=False)
+        ) if not inventory.empty else set()
+        inventory_ips = set(
+            inventory.get("ip", pd.Series(dtype=str)).astype(str)
+        ) if not inventory.empty else set()
+        nmap_evidence["inventory_match"] = nmap_evidence.apply(
+            lambda row: (
+                "Eşleşti"
+                if (
+                    str(row.get("mac", "")).upper() in inventory_macs
+                    and str(row.get("mac", "")).strip()
+                ) or (
+                    str(row.get("ip", "")) in inventory_ips
+                    and str(row.get("ip", "")).strip()
+                )
+                else "Eşleşme yok"
+            ),
+            axis=1,
+        )
+        nmap_metrics = st.columns(4)
         nmap_metrics[0].metric("Nmap host kaydı", len(nmap_evidence))
         nmap_metrics[1].metric("Yanıt veren host", up_count)
         nmap_metrics[2].metric("MAC gözlemi", mac_count)
+        nmap_metrics[3].metric("Yerel yönetimli MAC", local_mac_count)
         st.dataframe(
             nmap_evidence,
             width="stretch",
