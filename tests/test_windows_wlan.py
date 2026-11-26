@@ -10,6 +10,8 @@ from scripts.windows_wlan import (
     collect_windows_rssi_measurements,
     normalise_bss_entries,
     describe_wlan_error,
+    _decode_interface_description,
+    _interface_state_name,
 )
 
 
@@ -80,6 +82,13 @@ def test_collector_report_privacy_and_measurements(tmp_path):
             "interfaces_queried": 1,
             "interfaces_with_entries": 1,
             "interface_error_codes": [],
+            "interfaces": [{
+                "name": "Intel(R) Wi-Fi 6E AX211",
+                "state": "connected",
+                "status": "available",
+                "bss_entries": 3,
+                "error_code": None,
+            }],
         }
         report = collect_windows_rssi_measurements(
             key_path=tmp_path / "local.key",
@@ -95,6 +104,8 @@ def test_collector_report_privacy_and_measurements(tmp_path):
     assert report["privacy"]["raw_bssid_returned"] is False
     assert "AABBCCDDEEFF" not in str(report)
     assert next(iter(report["measurements"].values())) == -63
+    assert report["interfaces"][0]["name"] == "Intel(R) Wi-Fi 6E AX211"
+    assert report["interfaces"][0]["status"] == "available"
 
 
 def test_platform_availability_is_explicit():
@@ -186,3 +197,48 @@ def test_collector_converts_top_level_wlan_api_errors_to_actionable_status(tmp_p
     assert report["status"] == "unavailable"
     assert report["error_code"] == 1062
     assert "WLAN AutoConfig" in report["errors"][0]["message"]
+
+
+
+def test_windows_interface_description_uses_fixed_width_utf16():
+    chars = "Intel(R) Wi-Fi 6E AX211"
+    value = (ctypes.c_uint16 * 256)()
+    for index, character in enumerate(chars):
+        value[index] = ord(character)
+
+    assert _decode_interface_description(value) == chars
+    assert _interface_state_name(1) == "connected"
+    assert _interface_state_name(4) == "disconnected"
+    assert _interface_state_name(999) == "unknown"
+
+
+def test_collector_exposes_adapter_specific_errors_without_network_identifiers(tmp_path, monkeypatch):
+    from scripts import windows_wlan
+
+    monkeypatch.setattr(
+        windows_wlan,
+        "_query_bss_entries",
+        lambda _api: {
+            "entries": [],
+            "interfaces_seen": 1,
+            "interfaces_queried": 0,
+            "interfaces_with_entries": 0,
+            "interface_error_codes": [1062],
+            "interfaces": [{
+                "name": "Intel(R) Wi-Fi 6E AX211",
+                "state": "disconnected",
+                "status": "error",
+                "bss_entries": 0,
+                "error_code": 1062,
+            }],
+        },
+    )
+    report = collect_windows_rssi_measurements(
+        key_path=tmp_path / "adapter-error.key", api=object()
+    )
+
+    assert report["status"] == "unavailable"
+    assert report["interfaces"][0]["name"] == "Intel(R) Wi-Fi 6E AX211"
+    assert report["interfaces"][0]["error_code"] == 1062
+    assert "ssid" not in str(report["interfaces"]).casefold()
+    assert "bssid" not in str(report["interfaces"]).casefold()
