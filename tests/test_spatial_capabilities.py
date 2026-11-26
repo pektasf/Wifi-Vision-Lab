@@ -108,3 +108,14 @@ def test_non_windows_report_does_not_execute_commands():
     assert report["operating_system"] == "Linux"
     assert report["physical_adapters"] == []
     assert report["commands"]["netsh_drivers"]["available"] is False
+    assert report["capabilities"]["rssi_dbm"]["status"] == "not_implemented"
+
+
+
+def test_windows_capability_report_distinguishes_rssi_backend_from_netsh_percent():
+    report = collect_capabilities(
+        command_runner=lambda _args: SimpleNamespace(returncode=1, stdout="", stderr=""),
+        system_name="Windows",
+    )
+    assert report["capabilities"]["rssi_dbm"]["status"] == "collector_available_driver_dependent"
+    assert "not converted to dBm" in report["capabilities"]["rssi_dbm"]["detail"]
