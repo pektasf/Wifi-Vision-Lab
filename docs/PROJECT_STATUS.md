@@ -13,7 +13,7 @@ Laptop-only Spatial Intelligence work has started.
 - SI-1 Streamlit floor-plan editor is implemented for manual floor, zone, and anchor placement.
 - SI-2 manual RSSI fingerprint survey, experimental zone matching, and leave-one-out validation metrics are implemented locally (schema v4).
 - Windows RSSI collection has an initial read-only Native WLAN API BSS-list backend; it does not call WlanScan and pseudonymises BSSIDs locally.
-- Linux/macOS native RSSI collectors are not implemented; core app features remain platform-independent where their dependencies permit.
+- Linux has an initial read-only `iw` cached-BSS RSSI collector; macOS native RSSI collection is not implemented. Core app features remain platform-independent where their dependencies permit.
 - Passive human/object sensing remains unimplemented and hardware-gated.
 - The audit reads Windows Wi-Fi driver/interface metadata and physical adapter details.
 - The audit is read-only: it does not scan nearby networks, capture packets, alter adapter settings, or store SSID/BSSID.
@@ -22,6 +22,6 @@ Laptop-only Spatial Intelligence work has started.
 - The Windows BSS collector is driver-dependent; the UI distinguishes missing interfaces, empty BSS results, permission/service/driver errors, and partial results rather than fabricating measurements.
 - Per-adapter diagnostics show each local Wi-Fi interface description, Windows state, BSS-list status, and error code; adapter descriptions are not persisted with measurements.
 - The app is not tied to one laptop model. Windows devices are evaluated at runtime; actual RSSI availability varies by Wi-Fi chipset, driver, Windows WLAN service, and cached BSS data.
-- Capability reporting distinguishes a Windows RSSI backend being implemented from a specific adapter successfully returning measurements; Linux/macOS RSSI is explicitly marked not implemented.
+- Capability reporting distinguishes backend implementation from per-device results. Windows and Linux have driver/tool-dependent RSSI backends; macOS is explicitly marked not implemented.
 
 Roadmap: see SPATIAL_INTELLIGENCE.md.
