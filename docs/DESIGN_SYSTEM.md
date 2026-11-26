@@ -1,6 +1,6 @@
 # WiFi Vision Lab — Signal Atlas Design System
 
-Status: approved design direction, implementation in progress  
+Status: proposed design direction, implementation in progress  
 Scope: local-first network observation and Wi-Fi intelligence desktop web UI  
 Primary platform: Windows 11 laptop, Streamlit application  
 Theme: light only
