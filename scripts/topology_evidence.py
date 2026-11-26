@@ -100,3 +100,37 @@ def extract_selected_node_id(selection):
     if isinstance(customdata, (list, tuple)):
         customdata = customdata[0] if customdata else ""
     return str(customdata or "").strip()
+
+
+def prepare_relationship_history(edges, source, target, edge_from, edge_to):
+    """Return every recorded relationship for a selected device pair, newest first.
+
+    Direction is preserved in the returned rows. Matching either direction lets
+    the UI show the complete pair history without implying the relationship is
+    physically symmetric.
+    """
+    if edges.empty or not edge_from or not edge_to:
+        return edges.iloc[0:0].copy()
+    source = str(source or "").strip()
+    target = str(target or "").strip()
+    if not source or not target:
+        return edges.iloc[0:0].copy()
+
+    left = edges[edge_from].astype(str).str.strip()
+    right = edges[edge_to].astype(str).str.strip()
+    result = edges[
+        ((left == source) & (right == target))
+        | ((left == target) & (right == source))
+    ].copy()
+    if result.empty:
+        return result
+
+    if "observed_at" in result.columns:
+        parsed = pd.to_datetime(result["observed_at"], utc=True, errors="coerce")
+        result = result.assign(_history_sort_time=parsed)
+        result = result.sort_values(
+            "_history_sort_time", ascending=False, na_position="last", kind="stable"
+        ).drop(columns=["_history_sort_time"])
+    else:
+        result = result.iloc[::-1]
+    return result.reset_index(drop=True)
