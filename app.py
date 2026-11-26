@@ -1243,6 +1243,7 @@ def events_page():
         summarize_event_severity,
         filter_event_review_status,
         filter_event_review_assignment,
+        summarize_event_review_workload,
         merge_event_review_states,
         upsert_event_review_state,
         bulk_update_event_review,
@@ -1289,6 +1290,31 @@ def events_page():
     }
     for column, status in zip(review_metrics, EVENT_REVIEW_STATUSES):
         column.metric(review_labels[status], f"{int(review_counts.get(status, 0)):,}")
+
+    open_reviews = data["review_status"].fillna("new").astype(str).ne("resolved")
+    unassigned_open = open_reviews & data["review_assignee"].fillna("").astype(str).str.strip().eq("")
+    high_priority_open = open_reviews & data["review_priority"].fillna("normal").astype(str).isin(("high", "critical"))
+    workload_metrics = st.columns(3)
+    workload_metrics[0].metric("Açık inceleme", f"{int(open_reviews.sum()):,}")
+    workload_metrics[1].metric("Atanmamış açık", f"{int(unassigned_open.sum()):,}")
+    workload_metrics[2].metric("Yüksek / kritik açık", f"{int(high_priority_open.sum()):,}")
+    with st.expander("Sorumlu bazında inceleme yükü", expanded=False):
+        workload = summarize_event_review_workload(data)
+        if workload.empty:
+            st.info("İnceleme yükü özeti için olay bulunmuyor.")
+        else:
+            workload_display = workload.rename(columns={
+                "assignee": "Sorumlu", "total_events": "Toplam olay",
+                "open_events": "Açık", "new_events": "Yeni",
+                "action_required_events": "İşlem gerekli",
+                "high_priority_open": "Yüksek / kritik açık",
+                "resolved_events": "Çözüldü",
+            })
+            st.dataframe(workload_display, width="stretch", hide_index=True)
+            st.caption(
+                "Açık; çözümlenmemiş incelemeleri ifade eder. Yüksek / kritik sayımı yalnızca "
+                "inceleme önceliğine dayanır; otomatik tehdit veya risk puanı değildir."
+            )
 
     severity_counts = summarize_event_severity(data)
     metrics = st.columns(4)
