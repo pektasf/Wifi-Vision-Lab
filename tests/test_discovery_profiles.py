@@ -287,3 +287,23 @@ def test_profile_and_inventory_include_identity_signals():
     assert profiles[0]["identity_assessment"] == "indicator"
     assert "locally_administered_mac" in profiles[0]["identity_signals"]
     assert inventory[0]["identity_assessment"] == "indicator"
+
+
+
+def test_identity_history_is_bounded_and_deduplicated(tmp_path):
+    from scripts.discovery.identity_signals import (
+        load_identity_history, save_identity_history,
+    )
+    path = tmp_path / "identity_history.csv"
+    rows = [{
+        "observed_at": "2026-11-26T10:00:00+03:00",
+        "network_id": "192.168.1.0/24",
+        "ip": "192.168.1.20",
+        "mac": "02:11:22:33:44:55",
+        "hostname": "phone",
+        "source": "windows_arp_cache",
+    }]
+    saved = save_identity_history(rows, history=[], path=path)
+    saved = save_identity_history(rows, history=saved, path=path)
+    assert len(saved) == 1
+    assert load_identity_history(path) == saved
