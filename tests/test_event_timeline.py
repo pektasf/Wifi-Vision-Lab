@@ -61,7 +61,7 @@ def test_empty_event_sources_return_expected_columns():
 
     assert result.empty
     assert result.columns.tolist() == [
-        "event_time", "event_type", "subject", "severity",
+        "event_time", "event_type", "subject", "identity_key", "ip", "severity",
         "old_value", "new_value", "details", "source",
     ]
 
@@ -163,3 +163,23 @@ def test_network_timeline_uses_stable_identity_and_ip_transition_values():
     assert result.iloc[0]["subject"] == "AA:BB:CC:DD:EE:FF"
     assert result.iloc[0]["old_value"] == "192.168.1.20"
     assert result.iloc[0]["new_value"] == "192.168.1.35"
+
+
+
+def test_live_ping_timeline_keeps_mac_identity_and_ip_separately():
+    result = normalize_event_frames({
+        "live_events.csv": pd.DataFrame([{
+            "timestamp": "2026-11-26T09:00:00+03:00",
+            "ip": "192.0.2.8",
+            "event": "PING_NOT_RESPONDING",
+            "identity_key": "AA:BB:CC:DD:EE:FF",
+            "old_value": "responding",
+            "new_value": "not_responding",
+        }])
+    })
+
+    assert result.iloc[0]["subject"] == "AA:BB:CC:DD:EE:FF"
+    assert result.iloc[0]["identity_key"] == "AA:BB:CC:DD:EE:FF"
+    assert result.iloc[0]["ip"] == "192.0.2.8"
+    assert result.iloc[0]["old_value"] == "responding"
+    assert result.iloc[0]["new_value"] == "not_responding"

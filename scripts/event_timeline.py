@@ -64,6 +64,8 @@ def normalize_event_frames(frames: dict[str, pd.DataFrame]) -> pd.DataFrame:
                 "event_time": _value(row, TIME_FIELDS),
                 "event_type": _value(row, TYPE_FIELDS, "unknown_event"),
                 "subject": subject,
+                "identity_key": _value(row, ("identity_key",)),
+                "ip": _value(row, ("ip", "client_ip")),
                 "severity": _severity(row, _value(row, TYPE_FIELDS, "unknown_event")),
                 "old_value": _value(row, ("old_value",)),
                 "new_value": _value(row, ("new_value",)),
@@ -72,7 +74,7 @@ def normalize_event_frames(frames: dict[str, pd.DataFrame]) -> pd.DataFrame:
             })
 
     columns = [
-        "event_time", "event_type", "subject", "severity",
+        "event_time", "event_type", "subject", "identity_key", "ip", "severity",
         "old_value", "new_value", "details", "source",
     ]
     if not records:
