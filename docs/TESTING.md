@@ -45,3 +45,13 @@ See [SCAN_SAFETY.md](SCAN_SAFETY.md) for configuration and authorization notes.
 See [BACKGROUND_SCANS.md](BACKGROUND_SCANS.md) for job lifecycle and current limitations.
 
 See [SCAN_EVENTS.md](SCAN_EVENTS.md) for the stdout progress-event contract.
+
+
+## Spatial Intelligence capability audit
+
+- English and Turkish Windows WLAN driver/interface parsing.
+- SSID/BSSID exclusion from the capability report.
+- Mocked command execution proving the audit does not launch network scans.
+- Non-Windows behavior without command execution.
+
+The capability-audit tests are offline and do not inspect the user's live adapter.
