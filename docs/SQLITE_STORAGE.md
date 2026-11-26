@@ -82,3 +82,12 @@ note, and local update timestamp. The original event source rows are not
 modified. The dataset uses the same SQLite snapshot and CSV compatibility
 export path as other application datasets. Review metadata remains local and
 must not be committed or shared with network observation data.
+
+
+Review metadata now includes priority (`low`, `normal`, `high`, `critical`)
+and a free-text assignee. Existing `event_review_states.csv` rows remain
+compatible: missing priority defaults to `normal`, and missing assignee stays
+blank. Changes are appended to the separate local SQLite dataset
+`event_review_history.csv`; history entries are not overwritten when the
+current review state changes. These fields are operator-entered local workflow
+metadata, not authenticated identities or access-control assignments.
