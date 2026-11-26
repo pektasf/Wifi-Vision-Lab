@@ -330,6 +330,12 @@ def bulk_update_event_review(
         new_status = status if status is not None else old_status
         new_priority = priority if priority is not None else old_priority
         new_assignee = str(assignee).strip() if assignee is not None else old_assignee
+        if (
+            new_status == old_status
+            and new_priority == old_priority
+            and new_assignee == old_assignee
+        ):
+            continue
 
         updated = upsert_event_review_state(
             current_states, event, new_status, old_note, updated_at,
