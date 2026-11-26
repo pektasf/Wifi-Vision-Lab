@@ -23,7 +23,7 @@ def test_initialize_database_is_idempotent_and_versioned(tmp_path):
     initialize_database(db_path)
     initialize_database(db_path)
     with connect(db_path) as connection:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 4
         tables = {
             row["name"] for row in connection.execute(
                 "SELECT name FROM sqlite_master WHERE type='table'"
