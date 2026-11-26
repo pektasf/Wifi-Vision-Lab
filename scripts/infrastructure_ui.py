@@ -303,7 +303,6 @@ def render():
             imported = normalize_kismet_export(
                 kismet_upload.getvalue(),
                 imported_at=pd.Timestamp.now(tz="UTC").isoformat(),
-                network_id=zeek_network_scope.strip(),
             )
             if not imported:
                 st.warning(
@@ -508,6 +507,7 @@ def render():
             imported = normalize_zeek_dhcp_export(
                 zeek_upload.getvalue(),
                 imported_at=pd.Timestamp.now(tz="UTC").isoformat(),
+                network_id=zeek_network_scope.strip(),
             )
             if not imported:
                 st.warning("Dosyada kullanılabilir Zeek DHCP kaydı bulunamadı.")
