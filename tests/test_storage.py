@@ -190,7 +190,7 @@ def test_existing_schema_v1_upgrades_without_losing_rows(tmp_path):
     initialize_database(db_path)
 
     with connect(db_path) as connection:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 4
         row = connection.execute(
             "SELECT current_ip FROM devices WHERE identity_key=?",
             ("AA:BB:CC:DD:EE:FF",),
