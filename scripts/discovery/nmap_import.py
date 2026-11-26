@@ -1,20 +1,41 @@
 """Parse bounded Nmap XML host-discovery exports as local evidence."""
 
+import ipaddress
 from datetime import datetime, timezone
 
 from defusedxml import ElementTree as SafeET
 from defusedxml.common import DefusedXmlException
 
-from scripts.discovery.identity_signals import normalize_mac
-from scripts.discovery.kismet_import import _timestamp
+from scripts.discovery.identity_signals import (
+    normalize_mac, is_locally_administered_mac,
+)
 
 NMAP_DISCOVERY_FIELDS = [
     "imported_at", "scan_started_at", "observed_at", "source",
     "ip", "mac", "hostname", "host_state", "host_reason",
-    "mac_vendor", "evidence_status",
+    "mac_vendor", "mac_address_type", "evidence_status",
 ]
 MAX_NMAP_XML_BYTES = 10 * 1024 * 1024
 MAX_NMAP_HOSTS = 100000
+
+
+def _timestamp(value):
+    if value in (None, ""):
+        return ""
+    try:
+        number = float(value)
+        if number > 0:
+            return datetime.fromtimestamp(number, timezone.utc).isoformat()
+    except (TypeError, ValueError, OverflowError, OSError):
+        pass
+    return str(value).strip()
+
+
+def _normalize_ipv4(value):
+    try:
+        return str(ipaddress.IPv4Address(str(value).strip()))
+    except ValueError:
+        return ""
 
 
 def normalize_nmap_xml(content, imported_at=""):
@@ -65,7 +86,7 @@ def normalize_nmap_xml(content, imported_at=""):
             address_type = str(address.attrib.get("addrtype", "")).casefold()
             value = str(address.attrib.get("addr", "")).strip()
             if address_type == "ipv4" and not ip:
-                ip = value
+                ip = _normalize_ipv4(value)
             elif address_type == "mac" and not mac:
                 mac = normalize_mac(value)
                 mac_vendor = str(address.attrib.get("vendor", "")).strip()
@@ -90,6 +111,12 @@ def normalize_nmap_xml(content, imported_at=""):
                 "nmap_arp_response" if host_reason == "arp-response"
                 else "nmap_mac_observed"
             )
+        mac_address_type = (
+            "locally_administered" if mac and is_locally_administered_mac(mac)
+            else "universally_administered" if mac else "unknown"
+        )
+        if mac and mac_address_type == "locally_administered":
+            evidence.append("locally_administered_mac")
         rows.append({
             "imported_at": imported_at,
             "scan_started_at": scan_started_at,
@@ -101,6 +128,7 @@ def normalize_nmap_xml(content, imported_at=""):
             "host_state": host_state,
             "host_reason": host_reason,
             "mac_vendor": mac_vendor,
+            "mac_address_type": mac_address_type,
             "evidence_status": ";".join(evidence) or "nmap_host_observation",
         })
 
