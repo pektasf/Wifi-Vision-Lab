@@ -1107,108 +1107,259 @@ def live_page():
 
 
 def signal_page():
-    st.title("Wi-Fi Sinyali")
-    st.caption("Aktif bağlantı ölçümü, sinyal kalitesi ve erişim noktası görünümü.")
-
+    page_header(
+        "Wi-Fi sinyal analizi",
+        "Aktif bağlantıyı, zaman içindeki sinyal değişimini ve yakındaki erişim noktalarını ayrı ölçümlerle incele.",
+    )
     connection = load("wifi_connection.csv")
     access_points = load("wifi_access_points.csv")
     signal_history = load("wifi_signal_history.csv")
 
-    st.markdown("### Mevcut bağlantı")
     if not connection.empty:
-        current = connection.iloc[-1]
+        current_connection = connection.copy()
+        if "observed_at" in current_connection.columns:
+            current_connection["_time"] = pd.to_datetime(
+                current_connection["observed_at"], utc=True, errors="coerce"
+            )
+            current_connection = current_connection.sort_values(
+                "_time", na_position="first"
+            )
+        current = current_connection.iloc[-1]
+        st.markdown("### Mevcut bağlantı")
         a, b, c, d = st.columns(4)
-        a.metric("SSID", str(current.get("ssid", "-")) or "-")
-        b.metric("Sinyal", str(current.get("signal", "-")) or "-")
-        c.metric("Kanal", str(current.get("channel", "-")) or "-")
-        d.metric("Radyo tipi", str(current.get("radio_type", "-")) or "-")
-        left, right = st.columns(2)
-        with left:
+        a.metric("SSID", str(current.get("ssid", "") or "Bilinmiyor"))
+        a.caption("Kablosuz ağ adı")
+        b.metric("Sinyal", str(current.get("signal", "") or "Ölçülmedi"))
+        b.caption("Windows bağlantı sinyal yüzdesi")
+        c.metric("Kanal", str(current.get("channel", "") or "Bilinmiyor"))
+        d.metric("Radyo tipi", str(current.get("radio_type", "") or "Bilinmiyor"))
+        detail_left, detail_right = st.columns(2)
+        with detail_left:
             st.caption("BSSID")
-            st.code(str(current.get("bssid", "-")) or "-")
-        with right:
-            st.caption("Son keşif zamanı")
-            st.write(str(current.get("observed_at", "-")) or "-")
+            st.code(str(current.get("bssid", "") or "Bilinmiyor"))
+        with detail_right:
+            st.caption("Gözlem zamanı")
+            st.write(str(current.get("observed_at", "") or "Zaman bilgisi yok"))
     else:
-        st.info("Wi-Fi bağlantı kaydı bulunamadı. Önce Wi-Fi keşfini çalıştırın.")
+        st.info(
+            "Mevcut Wi-Fi bağlantı kaydı bulunamadı. Yerel Wi-Fi keşfi çalıştırıldığında "
+            "bağlantı bilgileri burada görünür."
+        )
 
-    st.markdown("---")
-    st.markdown("### Sinyal ölçüm geçmişi")
+    st.markdown("### Sinyal geçmişi")
     if not signal_history.empty and "signal_percent" in signal_history.columns:
         history = signal_history.copy()
         history["signal_percent"] = pd.to_numeric(
-            history["signal_percent"], errors="coerce"
+            history["signal_percent"].astype(str).str.replace("%", "", regex=False),
+            errors="coerce",
         )
-        history = history.dropna(subset=["signal_percent"])
-        if "observed_at" in history.columns:
-            history = history.sort_values("observed_at")
-        if not history.empty:
-            latest = history.iloc[-1]
-            a, b, c = st.columns(3)
-            a.metric("Son ölçüm", f"{int(latest['signal_percent'])}%")
-            b.metric("Kalite", str(latest.get("quality", "-")) or "-")
-            change = latest.get("change_percent", "")
-            c.metric(
-                "Önceki ölçüme göre",
-                f"{int(float(change)):+d} puan"
-                if str(change).strip() else "İlk ölçüm",
+        if "rssi_dbm" in history.columns:
+            history["rssi_dbm"] = pd.to_numeric(
+                history["rssi_dbm"], errors="coerce"
             )
-            if "observed_at" in history.columns:
-                st.line_chart(
-                    history.tail(100).set_index("observed_at")[["signal_percent"]],
+        if "observed_at" in history.columns:
+            history["_parsed_time"] = pd.to_datetime(
+                history["observed_at"], utc=True, errors="coerce"
+            )
+            history = history.sort_values(
+                "_parsed_time", ascending=True, na_position="first"
+            )
+        history = history.dropna(subset=["signal_percent"])
+        if history.empty:
+            st.info("Sinyal geçmişinde çizilebilir sayısal ölçüm bulunamadı.")
+        else:
+            latest = history.iloc[-1]
+            metric_a, metric_b, metric_c = st.columns(3)
+            metric_a.metric("Son sinyal", f"{latest['signal_percent']:.0f}%")
+            rssi = latest.get("rssi_dbm")
+            metric_b.metric(
+                "Son RSSI",
+                f"{float(rssi):.0f} dBm"
+                if pd.notna(rssi) else "Ölçülmedi",
+            )
+            metric_c.metric(
+                "Kalite etiketi",
+                str(latest.get("quality", "") or "Belirtilmedi"),
+            )
+
+            import plotly.graph_objects as go
+
+            x_values = (
+                history["observed_at"].astype(str).tolist()
+                if "observed_at" in history.columns
+                else list(range(len(history)))
+            )
+            signal_figure = go.Figure(go.Scatter(
+                x=x_values,
+                y=history["signal_percent"],
+                mode="lines+markers",
+                line={"color": "#087F78", "width": 2.5},
+                marker={"size": 5, "color": "#087F78"},
+                hovertemplate="%{x}<br>Sinyal: %{y:.0f}%<extra></extra>",
+                name="Sinyal yüzdesi",
+            ))
+            signal_figure.update_layout(
+                height=280,
+                margin={"l": 12, "r": 18, "t": 12, "b": 42},
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="#FFFFFF",
+                showlegend=False,
+                font={"family": "Segoe UI, sans-serif", "color": "#182B2A", "size": 11},
+                xaxis={"title": "Gözlem zamanı", "showgrid": False},
+                yaxis={
+                    "title": "Sinyal (%)", "range": [0, 100],
+                    "showgrid": True, "gridcolor": "#E7EEEA",
+                },
+            )
+            st.plotly_chart(
+                signal_figure, width="stretch", config={"displayModeBar": False}
+            )
+
+            if "rssi_dbm" in history.columns and history["rssi_dbm"].notna().any():
+                rssi_history = history.dropna(subset=["rssi_dbm"])
+                rssi_figure = go.Figure(go.Scatter(
+                    x=(
+                        rssi_history["observed_at"].astype(str).tolist()
+                        if "observed_at" in rssi_history.columns
+                        else list(range(len(rssi_history)))
+                    ),
+                    y=rssi_history["rssi_dbm"],
+                    mode="lines+markers",
+                    line={"color": "#426C8C", "width": 2.2},
+                    marker={"size": 5, "color": "#426C8C"},
+                    hovertemplate="%{x}<br>RSSI: %{y:.0f} dBm<extra></extra>",
+                    name="RSSI",
+                ))
+                rssi_figure.update_layout(
                     height=250,
+                    margin={"l": 12, "r": 18, "t": 10, "b": 42},
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="#FFFFFF",
+                    showlegend=False,
+                    font={"family": "Segoe UI, sans-serif", "color": "#182B2A", "size": 11},
+                    xaxis={"title": "Gözlem zamanı", "showgrid": False},
+                    yaxis={"title": "RSSI (dBm)", "showgrid": True, "gridcolor": "#E7EEEA"},
                 )
+                st.plotly_chart(
+                    rssi_figure, width="stretch", config={"displayModeBar": False}
+                )
+
             detail_columns = [
                 column for column in [
                     "observed_at", "ssid", "signal_percent", "rssi_dbm",
                     "channel", "receive_mbps", "transmit_mbps", "quality",
                 ] if column in history.columns
             ]
+            display = history[detail_columns].tail(30).iloc[::-1].rename(columns={
+                "observed_at": "Gözlem zamanı",
+                "ssid": "SSID",
+                "signal_percent": "Sinyal (%)",
+                "rssi_dbm": "RSSI (dBm)",
+                "channel": "Kanal",
+                "receive_mbps": "Alım (Mbps)",
+                "transmit_mbps": "Gönderim (Mbps)",
+                "quality": "Kalite",
+            })
             st.dataframe(
-                history[detail_columns].tail(20).iloc[::-1],
+                display,
                 width="stretch",
                 hide_index=True,
+                height=min(390, 58 + 35 * len(display)),
             )
     else:
-        st.info("Henüz sinyal geçmişi yok. Bir ağ taraması çalıştırıldığında ölçüm kaydedilir.")
-
-    st.markdown("---")
-    st.markdown("### Yakındaki erişim noktaları")
-    if not access_points.empty:
-        st.metric("Keşfedilen AP kaydı", f"{len(access_points):,}")
-        if "signal" in access_points.columns:
-            signal_values = (
-                access_points["signal"].astype(str)
-                .str.replace("%", "", regex=False)
-            )
-            chart_data = access_points.copy()
-            chart_data["Sinyal (%)"] = pd.to_numeric(
-                signal_values, errors="coerce"
-            )
-            label_col = next(
-                (column for column in ["ssid", "bssid"] if column in chart_data.columns),
-                None,
-            )
-            if label_col:
-                chart_data = chart_data.dropna(subset=["Sinyal (%)"])
-                if not chart_data.empty:
-                    st.bar_chart(
-                        chart_data.set_index(label_col)["Sinyal (%)"],
-                        height=240,
-                    )
-        st.dataframe(
-            access_points, width="stretch", hide_index=True, height=320
+        st.info(
+            "Henüz sinyal geçmişi yok. Bir Wi-Fi keşfi ölçüm kaydettiğinde zaman serisi burada oluşur."
         )
-    else:
+
+    st.markdown("### Yakındaki erişim noktaları")
+    if access_points.empty:
         st.info("Keşfedilmiş erişim noktası kaydı bulunmuyor.")
+    else:
+        aps = access_points.copy()
+        if "signal" in aps.columns:
+            aps["_signal_percent"] = pd.to_numeric(
+                aps["signal"].astype(str).str.replace("%", "", regex=False),
+                errors="coerce",
+            )
+        else:
+            aps["_signal_percent"] = pd.NA
+        label_column = next(
+            (column for column in ["ssid", "bssid"] if column in aps.columns),
+            None,
+        )
+        if label_column:
+            aps["_chart_label"] = aps[label_column].astype(str)
+            if "bssid" in aps.columns and label_column != "bssid":
+                aps["_chart_label"] = (
+                    aps["_chart_label"] + " · " + aps["bssid"].astype(str)
+                )
+        else:
+            aps["_chart_label"] = [
+                f"Erişim noktası {index + 1}" for index in range(len(aps))
+            ]
+        aps = aps.sort_values(
+            "_signal_percent", ascending=False, na_position="last"
+        )
+        st.caption(f"{len(aps):,} erişim noktası kaydı · Sinyal değeri mevcut olanlar üstte")
+        chart_data = aps.dropna(subset=["_signal_percent"]).head(15)
+        if not chart_data.empty:
+            import plotly.graph_objects as go
+
+            ap_figure = go.Figure(go.Bar(
+                x=chart_data["_signal_percent"],
+                y=chart_data["_chart_label"],
+                orientation="h",
+                marker_color="#087F78",
+                text=chart_data["_signal_percent"].map(lambda value: f"{value:.0f}%"),
+                textposition="outside",
+                cliponaxis=False,
+                hovertemplate="%{y}<br>Sinyal: %{x:.0f}%<extra></extra>",
+            ))
+            ap_figure.update_layout(
+                height=max(260, 34 * len(chart_data) + 70),
+                margin={"l": 12, "r": 35, "t": 8, "b": 35},
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="#FFFFFF",
+                showlegend=False,
+                font={"family": "Segoe UI, sans-serif", "color": "#182B2A", "size": 11},
+                xaxis={
+                    "title": "Sinyal (%)", "range": [0, 100],
+                    "showgrid": True, "gridcolor": "#E7EEEA",
+                },
+                yaxis={"title": "", "autorange": "reversed", "automargin": True},
+            )
+            st.plotly_chart(
+                ap_figure, width="stretch", config={"displayModeBar": False}
+            )
+        visible_columns = [
+            column for column in [
+                "ssid", "bssid", "signal", "channel", "frequency",
+                "radio_type", "security", "observed_at",
+            ] if column in aps.columns
+        ]
+        display = aps[visible_columns].head(100).rename(columns={
+            "ssid": "SSID",
+            "bssid": "BSSID",
+            "signal": "Sinyal",
+            "channel": "Kanal",
+            "frequency": "Frekans",
+            "radio_type": "Radyo tipi",
+            "security": "Güvenlik",
+            "observed_at": "Gözlem zamanı",
+        })
+        st.dataframe(
+            display,
+            width="stretch",
+            hide_index=True,
+            height=min(420, 58 + 35 * len(display)),
+        )
 
     st.caption(
-        "Sinyal yüzdesi bağlantı kalitesini gösterir; tek başına fiziksel mesafe "
-        "veya AP-istemci bağlantı topolojisini kanıtlamaz."
+        "Sinyal yüzdesi ve RSSI (dBm) farklı ölçümlerdir; ayrı grafiklerde gösterilir. "
+        "Bunlar tek başına fiziksel mesafe veya doğrulanmış AP-istemci topolojisi kanıtlamaz."
     )
-    if st.button("Wi-Fi verisini yeniden tara", key="wifi_scan_button"):
+    if st.button("Wi-Fi verisini yeniden tara", type="primary", key="wifi_scan_button"):
         run_scan()
-
 
 
 
@@ -1804,49 +1955,255 @@ def spatial_intelligence_page():
 
 
 def reports_page():
-    page_header(
-        "Raporlar",
-        "Envanter ve ag gozlem verilerini disa aktarin"
+    from scripts.dashboard_summary import (
+        inventory_status_summary,
+        latest_observation_timestamp,
+    )
+    from scripts.event_timeline import normalize_event_frames
+    from scripts.reporting import (
+        PERIODS,
+        filter_events_by_period,
+        summarize_report_counts,
     )
 
-    inventory = load("device_inventory.csv")
-    profiles = load("device_profiles.csv")
-    events = load("device_events.csv")
-    history = load("device_history.csv")
+    page_header(
+        "Raporlama ve dışa aktarma",
+        "Yerel ağ gözlemlerini seçilen zaman aralığında özetle; kaynak kayıtları CSV veya JSON olarak dışa aktar.",
+    )
 
-    a, b, c, d = st.columns(4)
-    a.metric("Envanter", len(inventory))
-    b.metric("Profiller", len(profiles))
-    c.metric("Olaylar", len(events))
-    d.metric("Gecmis kaydi", len(history))
+    filenames = [
+        "device_inventory.csv",
+        "device_profiles.csv",
+        "device_events.csv",
+        "network_events.csv",
+        "live_events.csv",
+        "behavior_findings.csv",
+        "device_history.csv",
+        "ap_client_relationships.csv",
+        "wifi_signal_history.csv",
+        "wifi_access_points.csv",
+        "topology_nodes.csv",
+        "topology_edges.csv",
+    ]
+    raw_datasets = {filename: load(filename) for filename in filenames}
+    inventory = raw_datasets["device_inventory.csv"]
+    findings = raw_datasets["behavior_findings.csv"]
+    timeline = normalize_event_frames({
+        filename: raw_datasets[filename]
+        for filename in [
+            "device_events.csv",
+            "network_events.csv",
+            "live_events.csv",
+            "behavior_findings.csv",
+        ]
+    })
 
-    st.divider()
-    st.subheader("Veri disa aktarma")
+    period_col, freshness_col = st.columns([1, 2])
+    with period_col:
+        selected_period = st.selectbox(
+            "Rapor dönemi",
+            list(PERIODS),
+            index=1,
+            key="report_period",
+        )
+    filtered_events = filter_events_by_period(timeline, selected_period)
+    summary = summarize_report_counts(inventory, filtered_events, findings)
+    inventory_summary = inventory_status_summary(inventory)
+    latest = latest_observation_timestamp(inventory, timeline)
 
+    with freshness_col:
+        if latest is not None:
+            local_latest = latest.to_pydatetime().astimezone()
+            st.caption(
+                f"Son kayıtlı gözlem: {local_latest.strftime('%d.%m.%Y %H:%M:%S')}"
+            )
+        else:
+            st.caption("Zaman damgalı gözlem bulunamadı.")
+
+    metrics = st.columns(4)
+    metrics[0].metric("Envanter cihazı", f"{summary['devices']:,}")
+    metrics[1].metric("Yanıt veren", f"{inventory_summary['responding']:,}")
+    metrics[2].metric("Dönemdeki olay", f"{summary['events']:,}")
+    metrics[3].metric("Dikkat seviyesi olayı", f"{summary['attention_events']:,}")
+
+    st.markdown("### Rapor özeti")
+    summary_left, summary_right = st.columns([1.1, 1], gap="large")
+    with summary_left:
+        st.markdown("**Olay kaynaklarına göre dağılım**")
+        if filtered_events.empty:
+            st.info("Seçilen dönemde olay kaydı yok.")
+        else:
+            source_counts = (
+                filtered_events["source"]
+                .value_counts()
+                .rename_axis("Kaynak")
+                .reset_index(name="Olay")
+            )
+            import plotly.graph_objects as go
+
+            source_figure = go.Figure(go.Bar(
+                x=source_counts["Olay"],
+                y=source_counts["Kaynak"],
+                orientation="h",
+                marker_color="#087F78",
+                text=source_counts["Olay"],
+                textposition="outside",
+                cliponaxis=False,
+                hovertemplate="%{y}: %{x} olay<extra></extra>",
+            ))
+            source_figure.update_layout(
+                height=max(220, 40 * len(source_counts) + 65),
+                margin={"l": 8, "r": 30, "t": 8, "b": 35},
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="#FFFFFF",
+                showlegend=False,
+                font={"family": "Segoe UI, sans-serif", "color": "#182B2A", "size": 11},
+                xaxis={"title": "Olay sayısı", "rangemode": "tozero",
+                       "showgrid": True, "gridcolor": "#E7EEEA"},
+                yaxis={"title": "", "automargin": True},
+            )
+            st.plotly_chart(
+                source_figure, width="stretch", config={"displayModeBar": False}
+            )
+    with summary_right:
+        st.markdown("**İnceleme gerektiren son olaylar**")
+        if filtered_events.empty:
+            st.info("Seçilen dönemde raporlanacak olay bulunmuyor.")
+        else:
+            attention = filtered_events[
+                filtered_events["severity"].astype(str).str.casefold().isin(
+                    {"critical", "warning", "review"}
+                )
+            ].head(8)
+            if attention.empty:
+                st.info(
+                    "Seçilen dönemde kritik/uyarı/inceleme seviyesinde olay yok. "
+                    "Bu, ölçülmemiş alanların sağlıklı olduğu anlamına gelmez."
+                )
+            else:
+                display = attention[
+                    [
+                        column for column in [
+                            "event_time", "event_type", "subject", "severity", "source"
+                        ] if column in attention.columns
+                    ]
+                ].rename(columns={
+                    "event_time": "Zaman",
+                    "event_type": "Olay",
+                    "subject": "Cihaz / kimlik",
+                    "severity": "Önem",
+                    "source": "Kaynak",
+                })
+                st.dataframe(
+                    display,
+                    width="stretch",
+                    hide_index=True,
+                    height=min(360, 58 + 35 * len(display)),
+                )
+
+    st.markdown("### Yerel veri kapsamı")
     datasets = {
         "Cihaz envanteri": inventory,
-        "Cihaz profilleri": profiles,
-        "Ag olaylari": events,
-        "Cihaz gecmisi": history
+        "Cihaz profilleri": raw_datasets["device_profiles.csv"],
+        "Cihaz olayları": raw_datasets["device_events.csv"],
+        "Ağ olayları": raw_datasets["network_events.csv"],
+        "Canlı ping olayları": raw_datasets["live_events.csv"],
+        "Davranış bulguları": findings,
+        "Cihaz geçmişi": raw_datasets["device_history.csv"],
+        "AP-istemci geçmişi": raw_datasets["ap_client_relationships.csv"],
+        "Wi-Fi sinyal geçmişi": raw_datasets["wifi_signal_history.csv"],
+        "Yakındaki erişim noktaları": raw_datasets["wifi_access_points.csv"],
+        "Topoloji düğümleri": raw_datasets["topology_nodes.csv"],
+        "Topoloji ilişkileri": raw_datasets["topology_edges.csv"],
+        "Birleşik olay zaman çizelgesi": filtered_events,
     }
+    coverage = pd.DataFrame([
+        {"Veri kümesi": name, "Kayıt": len(frame), "Durum": "Mevcut" if not frame.empty else "Henüz kayıt yok"}
+        for name, frame in datasets.items()
+    ])
+    st.dataframe(coverage, width="stretch", hide_index=True, height=390)
 
-    for label, data in datasets.items():
-        if data.empty:
-            continue
-
-        safe_name = (
-            label.lower()
-            .replace(" ", "_")
-            .replace("ag", "network")
+    st.markdown("### Veri dışa aktarma")
+    selected_dataset = st.selectbox(
+        "Dışa aktarılacak veri",
+        list(datasets),
+        key="report_dataset_select",
+    )
+    selected_frame = datasets[selected_dataset]
+    st.caption(
+        f"{len(selected_frame):,} kayıt · "
+        + ("Seçilen rapor dönemine göre filtrelendi." if selected_dataset == "Birleşik olay zaman çizelgesi" else "Kayıtlı yerel veri kümesinin tamamı.")
+    )
+    if not selected_frame.empty:
+        st.dataframe(
+            selected_frame.head(30),
+            width="stretch",
+            hide_index=True,
+            height=min(360, 58 + 35 * min(len(selected_frame), 9)),
         )
+    else:
+        st.info("Bu veri kümesinde henüz dışa aktarılacak kayıt yok.")
 
+    safe_name = (
+        selected_dataset.casefold()
+        .replace(" ", "_")
+        .replace("-", "_")
+        .replace("ı", "i")
+        .replace("ş", "s")
+        .replace("ğ", "g")
+        .replace("ü", "u")
+        .replace("ö", "o")
+        .replace("ç", "c")
+    )
+    export_csv, export_json = st.columns(2)
+    with export_csv:
         st.download_button(
-            label + " CSV indir",
-            data.to_csv(index=False).encode("utf-8-sig"),
-            file_name=safe_name + ".csv",
+            "CSV indir",
+            selected_frame.to_csv(index=False).encode("utf-8-sig"),
+            file_name=f"{safe_name}.csv",
             mime="text/csv",
-            key="report_" + safe_name
+            key="report_selected_csv",
+            width="stretch",
         )
+    with export_json:
+        st.download_button(
+            "JSON indir",
+            selected_frame.to_json(
+                orient="records", force_ascii=False, indent=2, date_format="iso"
+            ),
+            file_name=f"{safe_name}.json",
+            mime="application/json",
+            key="report_selected_json",
+            width="stretch",
+        )
+
+    report_payload = {
+        "report": "WiFi Vision Lab local network summary",
+        "period": selected_period,
+        "generated_at": pd.Timestamp.now().astimezone().isoformat(),
+        "counts": summary,
+        "inventory_status": {
+            "responding": inventory_summary["responding"],
+            "unresponsive": inventory_summary["unresponsive"],
+            "unknown": inventory_summary["unknown"],
+        },
+        "event_sources": (
+            filtered_events["source"].value_counts().to_dict()
+            if not filtered_events.empty else {}
+        ),
+        "scope_note": (
+            "Counts describe locally recorded observations. They do not imply "
+            "continuous monitoring, complete coverage, or inferred device health."
+        ),
+    }
+    st.download_button(
+        "Rapor özetini JSON indir",
+        json.dumps(report_payload, ensure_ascii=False, indent=2),
+        file_name="wifi_vision_report_summary.json",
+        mime="application/json",
+        key="report_summary_json",
+    )
+
 
 
 def topology_page():
