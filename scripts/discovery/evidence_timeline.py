@@ -147,6 +147,8 @@ def build_identity_evidence_timeline(
         event_material = "|".join([
             source, observed_at, mac, ip,
             str(row.get("device_key") or row.get("server_ip") or ""),
+            str(row.get("relay_circuit_id") or ""),
+            str(row.get("relay_agent_remote_id") or ""),
             str(evidence or ""),
         ])
         event_id = hashlib.sha256(event_material.encode("utf-8")).hexdigest()[:20]
