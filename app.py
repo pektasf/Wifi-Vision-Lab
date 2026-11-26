@@ -1125,7 +1125,11 @@ def behavior_page():
 
 
 def events_page():
-    from scripts.event_timeline import normalize_event_frames, summarize_event_severity
+    from scripts.event_timeline import (
+        filter_event_timeline,
+        normalize_event_frames,
+        summarize_event_severity,
+    )
 
     page_header(
         "Olay merkezi",
@@ -1161,7 +1165,7 @@ def events_page():
     )
 
     st.markdown("### Olayları filtrele")
-    filter_search, filter_source, filter_severity = st.columns([2.1, 1.1, 1])
+    filter_search, filter_source, filter_severity, filter_type = st.columns([2.0, 1.05, 0.9, 1.25])
     with filter_search:
         term = st.text_input(
             "Olay ara",
@@ -1180,20 +1184,21 @@ def events_page():
         selected_severity = st.selectbox(
             "Önem", severity_values, key="unified_event_severity"
         )
+    with filter_type:
+        type_values = ["Tüm olay türleri"] + sorted(
+            data["event_type"].fillna("").astype(str).unique().tolist()
+        )
+        selected_type = st.selectbox(
+            "Olay türü", type_values, key="unified_event_type"
+        )
 
-    filtered = data.copy()
-    if selected_source != "Tüm kaynaklar":
-        filtered = filtered[filtered["source"] == selected_source]
-    if selected_severity != "Tüm seviyeler":
-        filtered = filtered[filtered["severity"] == selected_severity]
-    if term.strip():
-        mask = filtered.astype(str).apply(
-            lambda column: column.str.contains(
-                term.strip(), case=False, na=False, regex=False
-            )
-        ).any(axis=1)
-        filtered = filtered[mask]
-    filtered = filtered.reset_index(drop=True)
+    filtered = filter_event_timeline(
+        data,
+        search=term,
+        source="" if selected_source == "Tüm kaynaklar" else selected_source,
+        severity="" if selected_severity == "Tüm seviyeler" else selected_severity,
+        event_type="" if selected_type == "Tüm olay türleri" else selected_type,
+    )
 
     st.caption(f"{len(filtered):,} olay eşleşti.")
     if filtered.empty:
