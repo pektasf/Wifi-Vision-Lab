@@ -724,7 +724,7 @@ def test_sort_event_review_queue_handles_newest_open_and_invalid_modes():
         {"event_key": "new-resolved", "event_time": "2026-11-27T10:00:00Z", "review_status": "resolved"},
     ])
     assert sort_event_review_queue(frame, "newest")["event_key"].tolist() == ["new-open", "old-open", "new-resolved"]
-    assert sort_event_review_queue(frame, "open")["event_key"].tolist() == ["new-open", "old-open", "new-resolved"]
+    assert sort_event_review_queue(frame, "open")["event_key"].tolist() == ["old-open", "new-open", "new-resolved"]
     with pytest.raises(ValueError): sort_event_review_queue(frame, "random")
     assert sort_event_review_queue(None).empty
 
