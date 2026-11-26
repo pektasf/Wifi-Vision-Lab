@@ -1247,6 +1247,7 @@ def events_page():
         upsert_event_review_state,
         append_event_review_history,
         filter_event_review_history,
+        filter_event_review_history_for_events,
         format_event_review_changes,
         EVENT_REVIEW_STATUSES,
         EVENT_REVIEW_PRIORITIES,
@@ -1641,6 +1642,19 @@ def events_page():
         )
         if len(history_display) > 30:
             st.caption("En son 30 işlem gösteriliyor.")
+
+    audit_export = filter_event_review_history_for_events(
+        review_history, filtered["event_key"].dropna().astype(str).tolist()
+    )
+    st.download_button(
+        "Filtrelenmiş inceleme geçmişini CSV indir",
+        audit_export.to_csv(index=False).encode("utf-8-sig"),
+        file_name="wifi_vision_event_review_history.csv",
+        mime="text/csv",
+        key="unified_event_review_history_export",
+        disabled=audit_export.empty,
+        help="Yalnızca mevcut olay filtreleriyle eşleşen olayların yerel inceleme geçmişini dışa aktarır.",
+    )
 
     st.download_button(
         "Filtrelenmiş olayları CSV indir",
