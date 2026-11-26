@@ -575,3 +575,93 @@ def test_filter_event_review_history_for_events_handles_empty_and_missing_data()
     assert filter_event_review_history_for_events(
         pd.DataFrame([{"status": "new"}]), ["event-a"]
     ).empty
+
+
+
+def test_bulk_event_review_updates_unique_events_and_appends_individual_audit_rows():
+    from scripts.event_timeline import bulk_update_event_review, merge_event_review_states
+
+    events = pd.DataFrame([
+        {"source": "Ağ olayları", "event_time": "2026-11-26T09:00:00Z",
+         "event_type": "IP_CHANGED", "identity_key": "AA:01"},
+        {"source": "Canlı izleme", "event_time": "2026-11-26T09:05:00Z",
+         "event_type": "PING_NOT_RESPONDING", "identity_key": "AA:02"},
+    ])
+    states, history, changed = bulk_update_event_review(
+        pd.DataFrame(), pd.DataFrame(), events,
+        updated_at="2026-11-26T10:00:00Z", status="action_required",
+        priority="high", assignee="Ağ ekibi",
+    )
+    assert changed == 2
+    assert len(states) == 2
+    assert len(history) == 2
+    merged = merge_event_review_states(events, states)
+    assert merged["review_status"].tolist() == ["action_required", "action_required"]
+    assert merged["review_priority"].tolist() == ["high", "high"]
+    assert merged["review_assignee"].tolist() == ["Ağ ekibi", "Ağ ekibi"]
+    assert history["event_key"].nunique() == 2
+
+
+def test_bulk_event_review_preserves_unselected_fields_and_skips_noop_audit():
+    from scripts.event_timeline import bulk_update_event_review, event_review_key
+
+    event = pd.Series({
+        "source": "Ağ olayları", "event_time": "2026-11-26T09:00:00Z",
+        "event_type": "IP_CHANGED", "identity_key": "AA:01",
+    })
+    states = pd.DataFrame([{
+        "event_key": event_review_key(event), "status": "reviewed",
+        "note": "Mevcut not", "updated_at": "old", "priority": "high",
+        "assignee": "Nöbetçi ekip",
+    }])
+    history = pd.DataFrame()
+    updated, audit, changed = bulk_update_event_review(
+        states, history, pd.DataFrame([event]),
+        updated_at="2026-11-26T10:00:00Z", status="reviewed",
+    )
+    assert changed == 0
+    assert len(audit) == 0
+    assert updated.iloc[0]["note"] == "Mevcut not"
+    assert updated.iloc[0]["priority"] == "high"
+    assert updated.iloc[0]["assignee"] == "Nöbetçi ekip"
+    assert updated.iloc[0]["updated_at"] == "2026-11-26T10:00:00Z"
+
+
+def test_bulk_event_review_deduplicates_event_keys_and_can_clear_assignee():
+    from scripts.event_timeline import bulk_update_event_review, event_review_key
+
+    event = pd.Series({
+        "source": "Ağ olayları", "event_time": "2026-11-26T09:00:00Z",
+        "event_type": "IP_CHANGED", "identity_key": "AA:01",
+    })
+    states = pd.DataFrame([{
+        "event_key": event_review_key(event), "status": "new", "note": "Not",
+        "priority": "normal", "assignee": "Eski ekip",
+    }])
+    duplicated = pd.DataFrame([event, event])
+    updated, history, changed = bulk_update_event_review(
+        states, pd.DataFrame(), duplicated,
+        updated_at="2026-11-26T10:00:00Z", assignee="",
+    )
+    assert changed == 1
+    assert len(updated) == 1
+    assert updated.iloc[0]["assignee"] == ""
+    assert updated.iloc[0]["note"] == "Not"
+    assert len(history) == 1
+
+
+def test_bulk_event_review_handles_empty_selection_and_rejects_invalid_updates():
+    import pytest
+    from scripts.event_timeline import bulk_update_event_review
+
+    states, history, changed = bulk_update_event_review(
+        pd.DataFrame(), pd.DataFrame(), pd.DataFrame(),
+        updated_at="2026-11-26T10:00:00Z", status="reviewed",
+    )
+    assert states.empty and history.empty and changed == 0
+    with pytest.raises(ValueError):
+        bulk_update_event_review(pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), updated_at="now")
+    with pytest.raises(ValueError):
+        bulk_update_event_review(pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), updated_at="now", status="closed")
+    with pytest.raises(ValueError):
+        bulk_update_event_review(pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), updated_at="now", priority="urgent")
