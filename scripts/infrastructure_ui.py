@@ -7,6 +7,9 @@ from scripts.common import overwrite_rows
 from scripts.discovery.endpoint_adapter_evidence import (
     ENDPOINT_ADAPTER_FIELDS, normalize_endpoint_adapter_payload,
 )
+from scripts.discovery.kismet_import import (
+    KISMET_WIRELESS_FIELDS, normalize_kismet_export, MAX_KISMET_BYTES,
+)
 
 
 DATA = Path(__file__).resolve().parent.parent / "data" / "processed"
@@ -266,6 +269,100 @@ def render():
             "doğrulanmış cihaz kimliği sayılmaz. Eşleşme, yalnızca IP veya MAC "
             "gözlemiyle ilişki kurar; gerçek kişi kimliğini belirlemez."
         )
+
+    st.markdown("### Kismet kablosuz gözlem içe aktarımı")
+    st.caption(
+        "Kismet ile yetkili olarak topladığınız Wi-Fi cihaz dışa aktarımını JSON veya "
+        "EKJSON biçiminde ekleyin. Bu kayıtlar yerel ağ taramasından ayrı tutulur."
+    )
+    kismet_upload = st.file_uploader(
+        "Kismet JSON / EKJSON dosyası",
+        type=["json", "txt", "ekjson"],
+        key="kismet_wireless_upload",
+    )
+    if kismet_upload and st.button(
+        "Kismet gözlemlerini içe aktar",
+        key="kismet_wireless_import",
+    ):
+        try:
+            if kismet_upload.size > MAX_KISMET_BYTES:
+                raise ValueError("Kismet dosyası 25 MB sınırını aşıyor.")
+            imported = normalize_kismet_export(
+                kismet_upload.getvalue(),
+                imported_at=pd.Timestamp.now(tz="UTC").isoformat(),
+            )
+            if not imported:
+                st.warning(
+                    "Dosyada desteklenen IEEE 802.11 Wi-Fi MAC kaydı bulunamadı. "
+                    "Kismet cihaz dışa aktarımını veya Wi-Fi görünümünü seçin."
+                )
+            else:
+                existing = read_data("wireless_observations.csv")
+                combined = (
+                    existing.to_dict("records") if not existing.empty else []
+                )
+                seen = {
+                    (
+                        row.get("observed_at", ""), row.get("device_key", ""),
+                        row.get("mac", ""), row.get("source", ""),
+                    )
+                    for row in combined
+                }
+                for row in imported:
+                    key = (
+                        row["observed_at"], row["device_key"],
+                        row["mac"], row["source"],
+                    )
+                    if key not in seen:
+                        combined.append(row)
+                        seen.add(key)
+                combined = combined[-50000:]
+                overwrite_rows(
+                    DATA / "wireless_observations.csv",
+                    combined,
+                    KISMET_WIRELESS_FIELDS,
+                )
+                st.success(
+                    f"{len(imported)} Kismet Wi-Fi gözlemi yerel olarak içe aktarıldı."
+                )
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError, OSError) as exc:
+            st.error(f"Kismet dosyası içe aktarılamadı: {exc}")
+
+    wireless_evidence = read_data("wireless_observations.csv")
+    if not wireless_evidence.empty:
+        inventory_macs = set(
+            inventory.get("mac", pd.Series(dtype=str))
+            .astype(str).str.upper().str.replace("-", ":", regex=False)
+        ) if not inventory.empty else set()
+        wireless_evidence["inventory_match"] = wireless_evidence["mac"].apply(
+            lambda value: "Eşleşti" if str(value).upper() in inventory_macs else "Eşleşme yok"
+        )
+        randomized_count = int(
+            wireless_evidence["randomized_mac"].eq("true").sum()
+        )
+        locally_administered_count = int(
+            wireless_evidence["mac_address_type"].eq("locally_administered").sum()
+        )
+        wireless_metrics = st.columns(3)
+        wireless_metrics[0].metric("Wi-Fi gözlemi", len(wireless_evidence))
+        wireless_metrics[1].metric("Randomized MAC bildirimi", randomized_count)
+        wireless_metrics[2].metric("Yerel yönetimli MAC", locally_administered_count)
+        st.dataframe(
+            wireless_evidence,
+            width="stretch",
+            hide_index=True,
+            height=min(460, 58 + 35 * min(len(wireless_evidence), 11)),
+        )
+        st.caption(
+            "Randomized MAC işareti Kismet tarafından bildirilebilir; yerel yönetimli "
+            "MAC biti tek başına spoofing veya kötü niyet kanıtı değildir. Her adres "
+            "ayrı kayıt olarak korunur; otomatik kimlik birleştirmesi yapılmaz."
+        )
+    st.caption(
+        "Kismet'in ham 802.11 istemci yakalaması monitor-mode destekli donanım ve "
+        "uygun sürücü gerektirir. Windows dahili adaptörlerinde bu destek sınırlı "
+        "olabilir; bu içe aktarma için ayrı bir yetkili Linux/Kismet sensörü de kullanılabilir."
+    )
 
     if inventory.empty and nodes.empty and classification.empty:
         st.warning("Altyapi envanteri icin henuz veri bulunamadi.")
