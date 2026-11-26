@@ -281,6 +281,79 @@ def upsert_event_review_state(
     return pd.concat([current, pd.DataFrame([row])], ignore_index=True)
 
 
+
+def bulk_update_event_review(
+    states: pd.DataFrame | None,
+    history: pd.DataFrame | None,
+    events: pd.DataFrame | None,
+    *,
+    updated_at: str,
+    status: str | None = None,
+    priority: str | None = None,
+    assignee: str | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame, int]:
+    """Apply selected review fields to unique events and append per-event audit rows.
+
+    None means leave a field unchanged; an empty assignee string explicitly
+    clears the assignment. Source event rows are read-only throughout this flow.
+    Returns updated state snapshot, append-only history, and changed-event count.
+    """
+    if status is None and priority is None and assignee is None:
+        raise ValueError("At least one review field must be selected for update")
+    if status is not None and status not in EVENT_REVIEW_STATUSES:
+        raise ValueError(f"Unsupported event review status: {status}")
+    if priority is not None and priority not in EVENT_REVIEW_PRIORITIES:
+        raise ValueError(f"Unsupported event review priority: {priority}")
+
+    current_states = states.copy() if states is not None else pd.DataFrame(columns=EVENT_REVIEW_COLUMNS)
+    current_history = history.copy() if history is not None else pd.DataFrame(columns=EVENT_REVIEW_HISTORY_COLUMNS)
+    if events is None or events.empty:
+        return current_states, current_history, 0
+
+    changed_count = 0
+    seen_keys: set[str] = set()
+    for _, event in events.iterrows():
+        key = event_review_key(event)
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+
+        if not current_states.empty and "event_key" in current_states.columns:
+            matches = current_states[current_states["event_key"].fillna("").astype(str).eq(key)]
+            previous = matches.iloc[-1].to_dict() if not matches.empty else {}
+        else:
+            previous = {}
+        old_status = str(previous.get("status", "new") or "new")
+        old_priority = str(previous.get("priority", "normal") or "normal")
+        old_assignee = str(previous.get("assignee", "") or "").strip()
+        old_note = str(previous.get("note", "") or "").strip()
+        new_status = status if status is not None else old_status
+        new_priority = priority if priority is not None else old_priority
+        new_assignee = str(assignee).strip() if assignee is not None else old_assignee
+        if (
+            new_status == old_status
+            and new_priority == old_priority
+            and new_assignee == old_assignee
+        ):
+            continue
+
+        updated = upsert_event_review_state(
+            current_states, event, new_status, old_note, updated_at,
+            priority=new_priority, assignee=new_assignee,
+        )
+        before_history_count = len(current_history)
+        current_history = append_event_review_history(
+            current_history, event, previous,
+            status=new_status, priority=new_priority, assignee=new_assignee,
+            note=old_note, updated_at=updated_at,
+        )
+        if len(current_history) > before_history_count:
+            changed_count += 1
+        current_states = updated
+
+    return current_states, current_history, changed_count
+
+
 def append_event_review_history(
     history: pd.DataFrame | None,
     event: pd.Series | dict,
