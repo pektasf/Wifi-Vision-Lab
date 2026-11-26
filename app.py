@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import os
 import subprocess
 import sys
@@ -985,7 +986,7 @@ def spatial_intelligence_page():
         )
         if st.button("Laptop Wi-Fi yeteneklerini denetle", key="spatial_capability_audit"):
             from scripts.spatial_capabilities import collect_capabilities
-            with st.spinner("Wi-Fi adaptörü ve Windows sürücü bilgileri okunuyor..."):
+            with st.spinner("Yerel Wi-Fi adaptörü ve işletim sistemi bilgileri okunuyor..."):
                 st.session_state["spatial_capability_report"] = collect_capabilities()
 
         report = st.session_state.get("spatial_capability_report")
@@ -1005,6 +1006,16 @@ def spatial_intelligence_page():
                 st.dataframe(pd.DataFrame(adapters), width="stretch", hide_index=True)
             elif driver:
                 st.write(driver)
+            elif report.get("operating_system") == "Linux":
+                st.info(
+                    "Linux için RSSI toplayıcısı mevcut; tam chipset/sürücü envanteri "
+                    "bu denetimde henüz toplanmıyor."
+                )
+            elif report.get("operating_system") == "Darwin":
+                st.info(
+                    "macOS için temel yetenek durumu gösteriliyor; yerel RSSI toplayıcısı "
+                    "henüz uygulanmadı."
+                )
             else:
                 st.warning("Adaptör ayrıntısı alınamadı.")
 
@@ -1036,6 +1047,21 @@ def spatial_intelligence_page():
                 st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
             with st.expander("Denetim komutlarının durumu"):
                 st.json(report.get("commands", {}))
+
+            st.download_button(
+                "Uyumluluk raporunu indir (JSON)",
+                data=json.dumps(report, ensure_ascii=False, indent=2),
+                file_name=(
+                    "wifi-vision-capability-"
+                    f"{str(report.get('operating_system', 'system')).casefold()}.json"
+                ),
+                mime="application/json",
+                key="spatial_capability_report_download",
+            )
+            st.caption(
+                "Paylaşılabilir rapor SSID/BSSID ve ağ adlarını içermez; yalnızca "
+                "işletim sistemi, adaptör/sürücü bilgileri ve yetenek sonuçlarını taşır."
+            )
 
             st.caption(
                 "Bilinmiyor durumu desteklenmiyor anlamına gelmez. CSI, monitor mode ve RTT "
