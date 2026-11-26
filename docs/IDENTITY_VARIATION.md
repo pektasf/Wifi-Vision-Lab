@@ -72,3 +72,15 @@ identity.
 Kismet's explicit randomized-MAC field and the locally-administered MAC bit
 are shown as indicators only. Multiple randomized addresses are never
 automatically grouped by this timeline.
+
+
+## Network-scoped timeline correlation
+
+The unified timeline uses explicit network scope when it is available. An exact
+MAC match is not attached to an inventory row when both records declare
+different network scopes. An IP-only match is accepted only when both sides
+provide the same explicit network scope. If scope is missing, the timeline
+labels the IP correlation as unknown rather than assuming that the address
+belongs to the same LAN. Nmap and other imports that do not carry a reliable
+network scope therefore remain uncorrelated by IP; the application does not
+guess a /24 from an address or treat a DHCP server address as a subnet.
