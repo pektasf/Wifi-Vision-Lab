@@ -1244,6 +1244,8 @@ def events_page():
         filter_event_review_status,
         filter_event_review_assignment,
         summarize_event_review_workload,
+        sort_event_review_queue,
+        add_event_review_history_summary,
         merge_event_review_states,
         upsert_event_review_state,
         bulk_update_event_review,
@@ -1405,6 +1407,14 @@ def events_page():
         priority=selected_priority,
         assignee=assignee_term,
     )
+    queue_sort_col, queue_unassigned_col = st.columns([1.4, 1])
+    with queue_sort_col:
+        queue_sort_labels = {"priority": "Öncelik: kritik / yüksek önce", "newest": "En yeni olay önce", "open": "Açık incelemeler önce"}
+        queue_sort = st.selectbox("İnceleme kuyruğu sıralaması", options=list(queue_sort_labels), format_func=lambda value: queue_sort_labels[value], key="event_review_queue_sort")
+    with queue_unassigned_col:
+        queue_unassigned_first = st.checkbox("Atanmamış olayları öne al", value=True, key="event_review_queue_unassigned_first")
+    filtered = sort_event_review_queue(filtered, queue_sort, unassigned_first=queue_unassigned_first)
+    filtered = add_event_review_history_summary(filtered, review_history)
 
     priority_counts = data["review_priority"].value_counts()
     st.caption(
@@ -1457,6 +1467,8 @@ def events_page():
         "review_status": "İnceleme",
         "review_priority": "Öncelik",
         "review_assignee": "Sorumlu",
+        "review_history_count": "İşlem sayısı",
+        "review_last_updated": "Son inceleme işlemi",
         "old_value": "Önceki değer",
         "new_value": "Yeni değer",
         "details": "Açıklama",
