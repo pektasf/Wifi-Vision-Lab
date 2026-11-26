@@ -50,9 +50,11 @@ def render():
     wifi = read_data("wifi_connection.csv")
     access_points = read_data("wifi_access_points.csv")
 
-    st.title("Ag Altyapisi")
-    st.caption(
-        "Gateway, router, access point, repeater, switch ve diger ag ekipmanlari"
+    st.markdown(
+        '<div class="wv-page-header"><h1>Ağ altyapısı</h1>'
+        '<p>Gateway, router, erişim noktası, repeater, switch ve controller kayıtlarını '
+        'kanıt düzeyleriyle birlikte incele.</p></div>',
+        unsafe_allow_html=True,
     )
 
     if inventory.empty and nodes.empty and classification.empty:
@@ -205,42 +207,69 @@ def render():
     st.divider()
 
     overview, inventory_tab, wifi_tab, evidence_tab = st.tabs([
-        "Genel Bakis",
-        "Cihaz Envanteri",
-        "Wi-Fi Baglantisi",
-        "KanIt ve Kaynaklar"
+        "Genel bakış",
+        "Cihaz envanteri",
+        "Wi-Fi bağlantısı",
+        "Kanıt ve kaynaklar",
     ])
 
     with overview:
-        st.subheader("Altyapi dagilimi")
+        st.markdown("### Altyapı rol dağılımı")
         counts = (
             devices["Altyapi rolu"]
             .value_counts()
             .rename_axis("Rol")
-            .reset_index(name="Cihaz sayisi")
+            .reset_index(name="Cihaz sayısı")
         )
-
-        left, right = st.columns([1, 1])
+        left, right = st.columns([1.15, 1])
         with left:
-            st.dataframe(counts, width="stretch", hide_index=True)
+            try:
+                import plotly.graph_objects as go
+
+                figure = go.Figure(go.Bar(
+                    x=counts["Cihaz sayısı"].astype(int),
+                    y=counts["Rol"].astype(str),
+                    orientation="h",
+                    marker_color="#087F78",
+                    text=counts["Cihaz sayısı"].astype(int),
+                    textposition="outside",
+                    cliponaxis=False,
+                    hovertemplate="%{y}: %{x} cihaz<extra></extra>",
+                ))
+                figure.update_layout(
+                    height=max(250, 42 * len(counts) + 70),
+                    margin={"l": 8, "r": 32, "t": 8, "b": 35},
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    showlegend=False,
+                    font={"family": "Segoe UI, sans-serif", "color": "#182B2A", "size": 12},
+                    xaxis={"title": "Cihaz sayısı", "rangemode": "tozero",
+                           "showgrid": True, "gridcolor": "#E7EEEA"},
+                    yaxis={"title": "", "automargin": True},
+                )
+                st.plotly_chart(
+                    figure, width="stretch", config={"displayModeBar": False}
+                )
+            except ImportError:
+                st.dataframe(counts, width="stretch", hide_index=True)
         with right:
-            st.markdown("**Veri kalitesi**")
+            st.markdown("### Kanıt dağılımı")
             evidence_counts = (
                 devices["KanIt durumu"]
                 .value_counts()
-                .rename_axis("KanIt")
-                .reset_index(name="Kayit")
+                .rename_axis("Kanıt seviyesi")
+                .reset_index(name="Kayıt")
             )
             st.dataframe(
                 evidence_counts,
                 width="stretch",
-                hide_index=True
+                hide_index=True,
+                height=min(360, 58 + 38 * len(evidence_counts)),
             )
 
         st.info(
-            "Ayni agda gorunen cihazlar otomatik olarak birbirine bagli kabul edilmez. "
-            "AP-istemci iliskisi ancak cihaz yonetim arayuzu, SNMP veya desteklenen "
-            "bir yonetim API'sinden alinan veriyle dogrulanabilir."
+            "Aynı ağda görünmek fiziksel bağlantı kanıtı değildir. AP-istemci ilişkisi "
+            "yalnızca doğrudan ve doğrulanmış kaynaklardan geldiğinde doğrulanmış sayılır."
         )
 
     with inventory_tab:
