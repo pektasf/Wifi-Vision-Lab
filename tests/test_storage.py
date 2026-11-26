@@ -262,7 +262,7 @@ def test_sqlite_backup_and_restore_preserve_runtime_data(tmp_path):
 
     with connect(restored) as connection:
         assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
 
 
 def test_backup_and_restore_refuse_to_overwrite_existing_files(tmp_path):
