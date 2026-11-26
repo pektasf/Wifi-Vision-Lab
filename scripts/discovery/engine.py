@@ -21,7 +21,7 @@ DEVICE_FIELDS = [
 
 
 def build_observation_identity_keys(observations):
-    """Resolve IP-only observations only when one MAC is unambiguous on that network."""
+    """Link IP-only observations only when one MAC is unambiguous on that network."""
     macs_by_network_ip = {}
 
     for observation in observations:
@@ -41,7 +41,9 @@ def build_observation_identity_keys(observations):
             identity_keys.append(f"{network}|mac|{mac}")
             continue
 
-        matching_macs = macs_by_network_ip.get((network, ip), set()) if ip else set()
+        matching_macs = (
+            macs_by_network_ip.get((network, ip), set()) if ip else set()
+        )
         if len(matching_macs) == 1:
             identity_keys.append(f"{network}|mac|{next(iter(matching_macs))}")
         elif ip:
@@ -58,7 +60,6 @@ def build_device_profiles(observations):
 
     for observation, identity in zip(observations, identity_keys):
         network = str(observation.get("network_id", "")).strip()
-        mac = str(observation.get("mac", "")).strip().upper()
         ip = str(observation.get("ip", "")).strip()
 
         if not identity:
