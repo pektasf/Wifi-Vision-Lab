@@ -11,7 +11,7 @@ import hashlib
 import hmac
 import os
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Mapping
 
@@ -174,11 +174,14 @@ def _alias_for_bssid(bssid: bytes, key: bytes) -> str:
 
 
 def normalise_bss_entries(
-    entries: list[tuple[bytes, int]], key: bytes
+    entries: list[tuple[bytes, int] | tuple[bytes, int, int]], key: bytes
 ) -> dict[str, int]:
     """Convert raw API tuples to stable local aliases without exposing BSSIDs."""
     measurements: dict[str, int] = {}
-    for bssid, rssi in entries:
+    for item in entries:
+        if len(item) < 2:
+            continue
+        bssid, rssi = item[0], item[1]
         if not isinstance(bssid, (bytes, bytearray)) or len(bssid) != 6:
             continue
         try:
@@ -203,7 +206,7 @@ def _query_bss_entries(api) -> dict[str, object]:
         raise OSError(result, "WlanOpenHandle failed.")
 
     interface_list = ctypes.POINTER(_WLAN_INTERFACE_INFO_LIST)()
-    collected: list[tuple[bytes, int]] = []
+    collected: list[tuple[bytes, int, int]] = []
     diagnostics = {
         "interfaces_seen": 0,
         "interfaces_queried": 0,
@@ -276,6 +279,7 @@ def _query_bss_entries(api) -> dict[str, object]:
                     collected.append((
                         bytes(entry.dot11Bssid),
                         int(entry.lRssi),
+                        int(entry.ullHostTimestamp),
                     ))
             finally:
                 api.WlanFreeMemory(ctypes.cast(bss_list, _VOID_P))
@@ -303,6 +307,22 @@ def describe_wlan_error(code: int) -> str:
         numeric_code,
         f"Windows WLAN API returned error {numeric_code} (0x{numeric_code & 0xFFFFFFFF:08X}).",
     )
+
+
+def _windows_filetime_age_seconds(
+    filetime: int, now: datetime | None = None
+) -> float | None:
+    """Convert WLAN_BSS_ENTRY host FILETIME into age seconds."""
+    if not filetime:
+        return None
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    received = datetime(1601, 1, 1, tzinfo=timezone.utc) + timedelta(
+        microseconds=int(filetime) / 10
+    )
+    age = (current.astimezone(timezone.utc) - received).total_seconds()
+    return round(max(0.0, age), 1)
 
 
 def collect_windows_rssi_measurements(
@@ -339,9 +359,17 @@ def collect_windows_rssi_measurements(
             "collection_mode": "read_only_bss_list_no_wlan_scan_call",
         }
 
-    measurements = normalise_bss_entries(
-        query["entries"], _load_local_alias_key(key_path)
-    )
+    alias_key = _load_local_alias_key(key_path)
+    measurements = normalise_bss_entries(query["entries"], alias_key)
+    measurement_ages = {}
+    for item in query["entries"]:
+        if len(item) < 3:
+            continue
+        age = _windows_filetime_age_seconds(item[2], now)
+        if age is None:
+            continue
+        alias = _alias_for_bssid(item[0], alias_key)
+        measurement_ages[alias] = min(age, measurement_ages.get(alias, age))
     errors = [
         {"code": code, "message": describe_wlan_error(code)}
         for code in query["interface_error_codes"]
@@ -363,6 +391,7 @@ def collect_windows_rssi_measurements(
         "observed_at": (now or datetime.now().astimezone()).isoformat(timespec="seconds"),
         "measurements": measurements,
         "measurement_count": len(measurements),
+        "measurement_ages_seconds": dict(sorted(measurement_ages.items())),
         "interfaces_seen": query["interfaces_seen"],
         "interfaces_queried": query["interfaces_queried"],
         "interfaces_with_entries": query["interfaces_with_entries"],

@@ -38,8 +38,8 @@ phy#1
 def test_parse_iw_scan_dump_extracts_only_valid_rssi_and_bssid():
     entries = parse_iw_scan_dump(SAMPLE_SCAN)
     assert entries == [
-        (bytes.fromhex("001122334455"), -62),
-        (bytes.fromhex("AABBCCDDEEFF"), -71),
+        (bytes.fromhex("001122334455"), -62, 10.0),
+        (bytes.fromhex("AABBCCDDEEFF"), -71, None),
     ]
 
 
@@ -62,6 +62,7 @@ def test_linux_collector_reads_cached_results_and_pseudonymises(tmp_path):
 
     assert report["status"] == "available"
     assert report["measurement_count"] == 2
+    assert next(iter(report["measurement_ages_seconds"].values())) == 10.0
     assert report["interfaces"][0]["name"] == "wlan0"
     assert report["collection_mode"] == "read_only_cached_bss_list_no_scan"
     assert report["privacy"]["raw_bssid_returned"] is False

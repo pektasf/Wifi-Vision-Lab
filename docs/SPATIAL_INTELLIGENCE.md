@@ -122,7 +122,7 @@ Do not infer the position of every other network client from the laptop's own RS
 
 - No cloud processing or external telemetry.
 - No automatic network scan as part of the capability audit.
-- The Windows RSSI query does not call WlanScan; freshness depends on the WLAN service/driver BSS list. Linux reads the kernel's cached BSS list using `iw ... scan dump` and does not trigger a new scan. The result includes a per-interface diagnostic (adapter description, Windows interface state, BSS-list availability, and API error code) so different laptop Wi-Fi adapters can be evaluated independently. Adapter descriptions are shown locally and are not persisted with RSSI fingerprints.
+- The Windows RSSI query does not call WlanScan; freshness depends on the WLAN service/driver BSS list. Windows host timestamps are converted from FILETIME into observation ages. Linux reads the kernel's cached BSS list using `iw ... scan dump` and reports the driver's "last seen" age when present. The UI warns when timestamped observations are older than 120 seconds; age is shown as metadata and is not a calibrated position confidence score. The result includes a per-interface diagnostic (adapter description, Windows interface state, BSS-list availability, and API error code) so different laptop Wi-Fi adapters can be evaluated independently. Adapter descriptions are shown locally and are not persisted with RSSI fingerprints.
 - Never persist or display raw SSID/BSSID from the native BSS list; use installation-local pseudonymous AP aliases.
 - No packet injection, deauthentication, or disruption.
 - No SSID/BSSID in the capability report.
