@@ -9,7 +9,7 @@ LIGHT_PALETTE = {
     "sidebar": "#FBFCFB", "sidebar_muted": "#73827F", "hover": "#EDF4F1",
     "input": "#FFFFFF", "header": "rgba(242, 245, 243, .94)",
     "shadow": "rgba(24, 43, 42, .045)", "success": "#167A55",
-    "success_soft": "#E8F4ED", "warning": "#A96B16", "warning_soft": "#FBF2E3",
+    "success_soft": "#E8F4ED", "warning": "#8A5A12", "warning_soft": "#FBF2E3",
     "danger": "#B84040", "danger_soft": "#F9EAEA", "info": "#426C8C",
     "info_soft": "#EAF1F6",
 }
