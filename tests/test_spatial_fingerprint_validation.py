@@ -134,11 +134,20 @@ def test_holdout_validation_skips_zones_with_too_few_samples(tmp_path):
         {"AP-01": -46, "AP-02": -69, "AP-03": -80},
         sample_id="a-4", db_path=db_path,
     )
-    # Room B has three samples; Room A has four. No zone is skipped here.
+    save_zone(
+        "floor-holdout", "Room C", 10, 0, 2, 2,
+        zone_id="zone-c", db_path=db_path,
+    )
+    for sample_id in ("c-1", "c-2"):
+        save_fingerprint(
+            "floor-holdout", "zone-c", sample_id,
+            {"AP-01": -50, "AP-02": -50, "AP-03": -50},
+            sample_id=sample_id, db_path=db_path,
+        )
     report = evaluate_holdout_fingerprints("floor-holdout", db_path=db_path)
-    assert report["skipped_zone_count"] == 0
+    assert report["skipped_zone_count"] == 1
     assert report["training_count"] == 5
-    assert report["holdout_count"] == 3
+    assert report["holdout_count"] == 2
 
 
 def test_holdout_validation_requires_three_samples_per_zone(tmp_path):
