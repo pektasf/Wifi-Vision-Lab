@@ -52,3 +52,12 @@ def test_attention_events_empty_input_preserves_columns():
     result = select_attention_events(empty)
     assert result.empty
     assert list(result.columns) == ["event_time", "severity"]
+
+
+
+def test_localized_unknown_status_is_counted_as_unknown():
+    result = inventory_status_summary(pd.DataFrame({
+        "status": ["Bilinmiyor", "responding"]
+    }))
+    assert result["unknown"] == 1
+    assert result["responding"] == 1
