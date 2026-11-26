@@ -1241,6 +1241,9 @@ def events_page():
         filter_event_timeline,
         normalize_event_frames,
         summarize_event_severity,
+        merge_event_review_states,
+        upsert_event_review_state,
+        EVENT_REVIEW_STATUSES,
     )
 
     page_header(
@@ -1255,6 +1258,8 @@ def events_page():
     ]
     frames = {filename: load(filename) for filename in filenames}
     data = normalize_event_frames(frames)
+    review_states = load("event_review_states.csv")
+    data = merge_event_review_states(data, review_states)
 
     if data.empty:
         st.info(
@@ -1264,6 +1269,17 @@ def events_page():
         if st.button("Ağ taramasını başlat", type="primary", key="events_empty_scan"):
             run_scan()
         return
+
+    review_counts = data["review_status"].value_counts()
+    review_metrics = st.columns(4)
+    review_labels = {
+        "new": "Yeni",
+        "reviewed": "İncelendi",
+        "action_required": "İşlem gerekli",
+        "resolved": "Çözüldü",
+    }
+    for column, status in zip(review_metrics, EVENT_REVIEW_STATUSES):
+        column.metric(review_labels[status], f"{int(review_counts.get(status, 0)):,}")
 
     severity_counts = summarize_event_severity(data)
     metrics = st.columns(4)
@@ -1431,6 +1447,56 @@ def events_page():
             hide_index=True,
             height=min(360, 58 + 35 * min(len(related_display), 8)),
         )
+
+    st.markdown("### İnceleme ve işlem durumu")
+    st.caption(
+        "Durum ve notlar bu bilgisayardaki SQLite veritabanına kaydedilir. "
+        "Olayın kaynak kaydı değiştirilmez; inceleme bilgisi ayrı tutulur."
+    )
+    selected_status = str(selected.get("review_status", "new") or "new")
+    status_options = list(EVENT_REVIEW_STATUSES)
+    status_labels = {
+        "new": "Yeni",
+        "reviewed": "İncelendi",
+        "action_required": "İşlem gerekli",
+        "resolved": "Çözüldü",
+    }
+    review_status = st.selectbox(
+        "İnceleme durumu",
+        options=status_options,
+        index=status_options.index(selected_status)
+        if selected_status in status_options else 0,
+        format_func=lambda value: status_labels[value],
+        key=f"event_review_status_{selected['event_key'][:12]}",
+    )
+    review_note = st.text_area(
+        "İnceleme notu",
+        value=str(selected.get("review_note", "") or ""),
+        max_chars=2000,
+        height=100,
+        placeholder="Yapılan kontrolü, bulguyu veya sonraki adımı yazın.",
+        key=f"event_review_note_{selected['event_key'][:12]}",
+    )
+    if st.button(
+        "İnceleme durumunu kaydet",
+        type="primary",
+        key=f"save_event_review_{selected['event_key'][:12]}",
+    ):
+        from scripts.common import DATA, overwrite_rows
+        updated_states = upsert_event_review_state(
+            review_states,
+            selected,
+            review_status,
+            review_note,
+            datetime.now().astimezone().isoformat(timespec="seconds"),
+        )
+        overwrite_rows(
+            DATA / "event_review_states.csv",
+            updated_states.to_dict("records"),
+            ["event_key", "status", "note", "updated_at"],
+        )
+        st.success("İnceleme durumu yerel veritabanına kaydedildi.")
+        st.rerun()
 
     st.download_button(
         "Filtrelenmiş olayları CSV indir",
