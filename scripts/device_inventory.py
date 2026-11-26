@@ -124,7 +124,7 @@ def get_network(interface_alias=None):
         "network": selected["network"],
         "interface_index": selected["interface_index"],
         "has_default_gateway": selected["has_default_gateway"],
-        "dhcp_enabled": selected.get("dhcp_enabled", False),
+        "dhcp_enabled": selected.get("dhcp_enabled"),
         "dhcp_server": selected.get("dhcp_server", ""),
         "dhcp_lease_obtained": selected.get("dhcp_lease_obtained", ""),
         "dhcp_lease_expires": selected.get("dhcp_lease_expires", ""),
