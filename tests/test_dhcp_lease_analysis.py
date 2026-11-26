@@ -129,3 +129,38 @@ def test_extreme_lease_duration_is_rejected_without_datetime_overflow():
     result = analyze_dhcp_lease_windows([row])[0]
     assert result["lease_analysis"] == "Geçerli kira süresi yok"
     assert result["lease_expiry_estimate"] == ""
+
+
+
+def test_explicit_zeek_import_scope_enables_same_network_lease_comparison():
+    import json
+    from scripts.discovery.zeek_import import normalize_zeek_dhcp_export
+
+    records = [
+        {
+            "ts": "2026-11-26T10:00:00Z",
+            "duration": 1,
+            "server_addr": "192.168.1.1",
+            "assigned_addr": "192.168.1.50",
+            "mac": "00:11:22:33:44:55",
+            "lease_time": 3600,
+            "msg_types": ["DISCOVER", "OFFER", "REQUEST", "ACK"],
+        },
+        {
+            "ts": "2026-11-26T10:30:00Z",
+            "duration": 1,
+            "server_addr": "192.168.1.1",
+            "assigned_addr": "192.168.1.50",
+            "mac": "00:11:22:33:44:66",
+            "lease_time": 3600,
+            "msg_types": ["DISCOVER", "OFFER", "REQUEST", "ACK"],
+        },
+    ]
+    imported = normalize_zeek_dhcp_export(
+        json.dumps(records), network_id="192.168.1.0/24"
+    )
+    results = analyze_dhcp_lease_windows(imported)
+    assert all(row["network_id"] == "192.168.1.0/24" for row in results)
+    assert results[1]["lease_analysis"] == (
+        "Çakışan kira adayı · ağ kapsamı doğrulandı"
+    )
