@@ -11,7 +11,7 @@ from typing import Any, Iterable, Mapping
 
 from scripts.common import DATA, stamp
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 DEFAULT_DB_PATH = DATA / "wifi_vision.db"
 
 MIGRATIONS = {
@@ -137,6 +137,24 @@ MIGRATIONS = {
     );
     CREATE INDEX IF NOT EXISTS idx_spatial_anchors_floor
         ON spatial_anchors(floor_id, anchor_type);
+    """,
+    4: """
+    CREATE TABLE IF NOT EXISTS spatial_fingerprints (
+        sample_id TEXT PRIMARY KEY,
+        floor_id TEXT NOT NULL,
+        zone_id TEXT NOT NULL,
+        label TEXT NOT NULL,
+        measurements_json TEXT NOT NULL,
+        source TEXT NOT NULL DEFAULT 'manual',
+        observed_at TEXT NOT NULL,
+        notes TEXT NOT NULL DEFAULT '',
+        FOREIGN KEY(floor_id) REFERENCES spatial_floors(floor_id)
+            ON UPDATE CASCADE ON DELETE CASCADE,
+        FOREIGN KEY(zone_id) REFERENCES spatial_zones(zone_id)
+            ON UPDATE CASCADE ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_spatial_fingerprints_floor_zone
+        ON spatial_fingerprints(floor_id, zone_id, observed_at);
     """,
 }
 
