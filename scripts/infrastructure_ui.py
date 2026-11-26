@@ -50,9 +50,11 @@ def render():
     wifi = read_data("wifi_connection.csv")
     access_points = read_data("wifi_access_points.csv")
 
-    st.title("Ag Altyapisi")
-    st.caption(
-        "Gateway, router, access point, repeater, switch ve diger ag ekipmanlari"
+    st.markdown(
+        '<div class="wv-page-header"><h1>Ağ altyapısı</h1>'
+        '<p>Gateway, router, erişim noktası, repeater, switch ve controller kayıtlarını '
+        'kanıt düzeyleriyle birlikte incele.</p></div>',
+        unsafe_allow_html=True,
     )
 
     if inventory.empty and nodes.empty and classification.empty:
@@ -126,7 +128,7 @@ def render():
         }:
             return explicit_role
         if explicit_role == "Network equipment candidate":
-            return "Ag ekipmani adayi"
+            return "Ağ ekipmanı adayı"
 
         values = [
             row.get(type_col, ""),
@@ -153,15 +155,15 @@ def render():
             return "Controller"
 
         if "network equipment" in text or "network_device" in text:
-            return "Ag ekipmani adayi"
+            return "Ağ ekipmanı adayı"
 
         vendor = str(row.get(vendor_col, "")).lower()
         if vendor and any(x in vendor for x in [
             "ruijie", "tp-link", "ubiquiti", "mikrotik", "cisco", "huawei"
         ]):
-            return "Ag ekipmani adayi"
+            return "Ağ ekipmanı adayı"
 
-        return "Diger / Belirsiz"
+        return "Diğer / Belirsiz"
 
     devices["Altyapi rolu"] = devices.apply(role_for, axis=1)
 
@@ -172,103 +174,142 @@ def render():
         ).lower()
         classification_value = str(row.get(class_col, "")).lower()
 
-        if role == "Diger / Belirsiz":
-            return "Siniflandirilmamis"
-        if role == "Ag ekipmani adayi":
+        if role == "Diğer / Belirsiz":
+            return "Sınıflandırılmamış"
+        if role == "Ağ ekipmanı adayı":
             if str(row.get("role_evidence_type", "")).strip() == "vendor_only":
-                return "Yalnizca uretici bilgisi; cihaz rolu dogrulanmadi"
-            return "Uretici veya tahmini siniflandirma"
+                return "Yalnızca üretici bilgisi; cihaz rolü doğrulanmadı"
+            return "Üretici veya tahmini sınıflandırma"
         if str(row.get("role_evidence_type", "")).strip() == "hostname_role_hint":
-            return "Hostname ipucuna dayali tahmin"
+            return "Hostname ipucuna dayalı tahmin"
         if str(row.get("role_evidence_type", "")).strip() == "hostname_model_family_inference":
-            return "Model ailesi ipucuna dayali tahmin"
+            return "Model ailesi ipucuna dayalı tahmin"
         if "manufacturer-based inference" in category or "inferred" in classification_value:
-            return "Tahmini siniflandirma"
-        return "Kayitli siniflandirma"
+            return "Tahmini sınıflandırma"
+        return "Kayıtlı sınıflandırma"
 
     devices["KanIt durumu"] = devices.apply(evidence_for, axis=1)
 
     total = len(devices)
     infrastructure = devices[
-        devices["Altyapi rolu"] != "Diger / Belirsiz"
+        devices["Altyapi rolu"] != "Diğer / Belirsiz"
     ]
     candidates = devices[
-        devices["Altyapi rolu"] == "Ag ekipmani adayi"
+        devices["Altyapi rolu"] == "Ağ ekipmanı adayı"
     ]
 
     a, b, c, d = st.columns(4)
     a.metric("Toplam cihaz", f"{total:,}")
-    b.metric("Altyapi kaydi", f"{len(infrastructure):,}")
-    c.metric("Ekipman adayi", f"{len(candidates):,}")
-    d.metric("Wi-Fi AP kaydi", f"{len(access_points):,}")
+    b.metric("Altyapı kaydı", f"{len(infrastructure):,}")
+    c.metric("Ekipman adayı", f"{len(candidates):,}")
+    d.metric("Wi-Fi AP kaydı", f"{len(access_points):,}")
 
     st.divider()
 
     overview, inventory_tab, wifi_tab, evidence_tab = st.tabs([
-        "Genel Bakis",
-        "Cihaz Envanteri",
-        "Wi-Fi Baglantisi",
-        "KanIt ve Kaynaklar"
+        "Genel bakış",
+        "Cihaz envanteri",
+        "Wi-Fi bağlantısı",
+        "Kanıt ve kaynaklar",
     ])
 
     with overview:
-        st.subheader("Altyapi dagilimi")
+        st.markdown("### Altyapı rol dağılımı")
         counts = (
             devices["Altyapi rolu"]
             .value_counts()
             .rename_axis("Rol")
-            .reset_index(name="Cihaz sayisi")
+            .reset_index(name="Cihaz sayısı")
         )
-
-        left, right = st.columns([1, 1])
+        left, right = st.columns([1.15, 1])
         with left:
-            st.dataframe(counts, width="stretch", hide_index=True)
+            try:
+                import plotly.graph_objects as go
+
+                figure = go.Figure(go.Bar(
+                    x=counts["Cihaz sayısı"].astype(int),
+                    y=counts["Rol"].astype(str),
+                    orientation="h",
+                    marker_color="#087F78",
+                    text=counts["Cihaz sayısı"].astype(int),
+                    textposition="outside",
+                    cliponaxis=False,
+                    hovertemplate="%{y}: %{x} cihaz<extra></extra>",
+                ))
+                figure.update_layout(
+                    height=max(250, 42 * len(counts) + 70),
+                    margin={"l": 8, "r": 32, "t": 8, "b": 35},
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    showlegend=False,
+                    font={"family": "Segoe UI, sans-serif", "color": "#182B2A", "size": 12},
+                    xaxis={"title": "Cihaz sayısı", "rangemode": "tozero",
+                           "showgrid": True, "gridcolor": "#E7EEEA"},
+                    yaxis={"title": "", "automargin": True},
+                )
+                st.plotly_chart(
+                    figure, width="stretch", config={"displayModeBar": False}
+                )
+            except ImportError:
+                st.dataframe(counts, width="stretch", hide_index=True)
         with right:
-            st.markdown("**Veri kalitesi**")
+            st.markdown("### Kanıt dağılımı")
             evidence_counts = (
                 devices["KanIt durumu"]
                 .value_counts()
-                .rename_axis("KanIt")
-                .reset_index(name="Kayit")
+                .rename_axis("Kanıt seviyesi")
+                .reset_index(name="Kayıt")
             )
             st.dataframe(
                 evidence_counts,
                 width="stretch",
-                hide_index=True
+                hide_index=True,
+                height=min(360, 58 + 38 * len(evidence_counts)),
             )
 
         st.info(
-            "Ayni agda gorunen cihazlar otomatik olarak birbirine bagli kabul edilmez. "
-            "AP-istemci iliskisi ancak cihaz yonetim arayuzu, SNMP veya desteklenen "
-            "bir yonetim API'sinden alinan veriyle dogrulanabilir."
+            "Aynı ağda görünmek fiziksel bağlantı kanıtı değildir. AP-istemci ilişkisi "
+            "yalnızca doğrudan ve doğrulanmış kaynaklardan geldiğinde doğrulanmış sayılır."
         )
 
     with inventory_tab:
-        st.subheader("Ag ekipmani envanteri")
+        st.subheader("Ağ ekipmanı envanteri")
 
-        search = st.text_input(
-            "Envanterde ara",
-            placeholder="IP, MAC, marka, model veya cihaz adi"
-        )
-
-        role_options = ["Tum roller"] + sorted(
+        filters = st.columns([2, 1, 1])
+        with filters[0]:
+            search = st.text_input(
+                "Envanterde ara",
+                placeholder="IP, MAC, marka, model veya cihaz adı",
+                key="infrastructure_inventory_search",
+            )
+        role_options = ["Tüm roller"] + sorted(
             devices["Altyapi rolu"].dropna().unique().tolist()
         )
-        selected_role = st.selectbox("Altyapi rolu", role_options)
+        with filters[1]:
+            selected_role = st.selectbox(
+                "Altyapı rolü", role_options, key="infrastructure_role_filter"
+            )
+        evidence_options = ["Tüm kanıtlar"] + sorted(
+            devices["KanIt durumu"].dropna().unique().tolist()
+        )
+        with filters[2]:
+            selected_evidence = st.selectbox(
+                "Kanıt durumu", evidence_options,
+                key="infrastructure_evidence_filter",
+            )
 
         filtered = devices.copy()
         if search.strip():
             mask = filtered.astype(str).apply(
                 lambda col: col.str.contains(
-                    search.strip(), case=False, na=False
+                    search.strip(), case=False, na=False, regex=False
                 )
             ).any(axis=1)
             filtered = filtered[mask]
-
-        if selected_role != "Tum roller":
-            filtered = filtered[
-                filtered["Altyapi rolu"] == selected_role
-            ]
+        if selected_role != "Tüm roller":
+            filtered = filtered[filtered["Altyapi rolu"] == selected_role]
+        if selected_evidence != "Tüm kanıtlar":
+            filtered = filtered[filtered["KanIt durumu"] == selected_evidence]
 
         st.caption(f"{len(filtered):,} kayit listeleniyor.")
 
@@ -283,17 +324,35 @@ def render():
                 columns.append(col)
 
         if columns:
-            st.caption(f"{len(filtered):,} cihaz")
-            records = list(filtered.iterrows())
-            for offset in range(0, len(records), 3):
-                card_cols = st.columns(3)
-                for card_col, (idx, row) in zip(card_cols, records[offset:offset + 3]):
-                    with card_col:
-                        with st.container(border=True):
-                            st.markdown(f"**{str(row.get(name_col, '') or 'İsimsiz cihaz')}**")
-                            st.caption(str(row.get(ip_col, '') or 'IP bilinmiyor'))
-                            st.write(str(row.get("Altyapi rolu", "Belirsiz")))
-                            st.caption(str(row.get("KanIt durumu", "Bilinmiyor")))
+            display_names = {
+                name_col: "Cihaz",
+                ip_col: "IP adresi",
+                mac_col: "MAC adresi",
+                vendor_col: "Üretici",
+                "model": "Model",
+                "firmware_version": "Firmware",
+                "model_status": "Model kanıtı",
+                "firmware_status": "Firmware kanıtı",
+                "Altyapi rolu": "Altyapı rolü",
+                status_col: "Durum",
+                "KanIt durumu": "Kanıt durumu",
+            }
+            display = filtered[columns].rename(columns={
+                column: display_names.get(
+                    column, str(column).replace("_", " ").title()
+                )
+                for column in columns
+            })
+            st.dataframe(
+                display.head(200),
+                width="stretch",
+                hide_index=True,
+                height=min(520, 58 + 35 * min(len(display), 12)),
+            )
+            if len(display) > 200:
+                st.caption(
+                    "İlk 200 kayıt gösteriliyor. Arama ve rol filtresiyle daraltabilirsiniz."
+                )
 
         if not filtered.empty:
             @st.dialog("Altyapı cihazı", width="large")
@@ -330,13 +389,13 @@ def render():
             )
 
     with wifi_tab:
-        st.subheader("Mevcut Wi-Fi baglantisi")
+        st.subheader("Mevcut Wi-Fi bağlantısı")
         if wifi.empty:
             st.info("Wi-Fi baglanti verisi bulunamadi.")
         else:
             st.dataframe(wifi, width="stretch", hide_index=True)
 
-        st.subheader("Kesfedilen erisim noktalari")
+        st.subheader("Keşfedilen erişim noktaları")
         if access_points.empty:
             st.info("Kesfedilmis access point kaydi bulunamadi.")
         else:
@@ -353,7 +412,7 @@ def render():
         )
 
     with evidence_tab:
-        st.subheader("KanIt ve veri kaynaklari")
+        st.subheader("Kanıt ve veri kaynakları")
         st.markdown(
             "- **Kayitli siniflandirma:** Kaynak dosyada cihaz turu veya siniflandirma var.\n"
             "- **Uretici bilgisine dayali aday:** Uretici ag ekipmani markasi olarak taniniyor; rol kesin degil.\n"
