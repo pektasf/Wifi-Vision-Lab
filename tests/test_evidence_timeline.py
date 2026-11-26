@@ -273,3 +273,23 @@ def test_zeek_relay_context_is_preserved_in_timeline_details_without_identity_me
     assert "switch-7/port-18" in rows[0]["details"]
     assert "relay-remote-identifier" in rows[0]["details"]
     assert rows[0]["source"] == "Zeek DHCP"
+
+
+
+def test_zeek_timeline_event_ids_distinguish_relay_context():
+    base = {
+        "observed_at": "2026-11-26T10:04:00Z",
+        "mac": "00:11:22:33:44:55",
+        "assigned_ip": "192.168.1.10",
+        "server_ip": "192.168.1.1",
+        "message_types": "DISCOVER;OFFER;REQUEST;ACK",
+        "relay_circuit_id": "switch-7/port-18",
+    }
+    rows = build_identity_evidence_timeline(
+        zeek_observations=[
+            {**base, "relay_agent_remote_id": "relay-A"},
+            {**base, "relay_agent_remote_id": "relay-B"},
+        ],
+    )
+    assert len(rows) == 2
+    assert rows[0]["event_id"] != rows[1]["event_id"]
