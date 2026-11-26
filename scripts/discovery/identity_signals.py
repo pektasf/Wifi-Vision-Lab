@@ -42,6 +42,7 @@ def analyze_identity_variation(observations, history=None):
     history = list(history or [])
     all_rows = [*history, *observations]
     ip_macs = {}
+    mac_ips = {}
     hostname_macs = {}
     current_ip_macs = {}
 
@@ -54,6 +55,7 @@ def analyze_identity_variation(observations, history=None):
             continue
         if ip:
             ip_macs.setdefault((network, ip), set()).add(mac)
+            mac_ips.setdefault((network, mac), set()).add(ip)
         if hostname:
             hostname_macs.setdefault((network, hostname), set()).add(mac)
 
@@ -70,7 +72,12 @@ def analyze_identity_variation(observations, history=None):
         ip = str(row.get("ip", "")).strip()
         hostname = str(row.get("hostname", "")).strip().casefold()
         mac = normalize_mac(row.get("mac"))
-        identity = f"{network}|mac|{mac}" if mac else f"{network}|ip|{ip}" if ip else ""
+        matching_macs = ip_macs.get((network, ip), set()) if ip and not mac else set()
+        resolved_mac = next(iter(matching_macs)) if len(matching_macs) == 1 else mac
+        identity = (
+            f"{network}|mac|{resolved_mac}" if resolved_mac
+            else f"{network}|ip|{ip}" if ip else ""
+        )
         if not identity:
             continue
 
@@ -84,6 +91,8 @@ def analyze_identity_variation(observations, history=None):
                 signals.add("same_ip_multiple_macs")
             if ip and len(ip_macs.get((network, ip), set())) > 1:
                 signals.add("ip_mac_changed_over_time")
+            if len(mac_ips.get((network, mac), set())) > 1:
+                signals.add("mac_seen_with_multiple_ips")
             if hostname and len(hostname_macs.get((network, hostname), set())) > 1:
                 signals.add("hostname_seen_with_multiple_macs")
 

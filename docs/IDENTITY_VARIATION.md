@@ -43,3 +43,14 @@ not expose that endpoint's complete adapter list. To identify remote virtual
 interfaces, the platform needs an authorized endpoint agent or a trusted
 router/AP/controller export. Shared SSID, vendor prefix, IP range, or signal
 strength are not sufficient proof.
+
+
+Additional indicator:
+- \`mac_seen_with_multiple_ips\`: the same MAC was observed at more than one
+  IPv4 address on the same network across the retained history. DHCP renewal,
+  multiple configured addresses, and network changes are common benign causes;
+  this is an informational indicator, not a concealment verdict.
+
+IP-only observations are linked to a MAC profile only when the same network/IP
+maps to exactly one MAC across the available local history. Ambiguous mappings
+remain separate.
