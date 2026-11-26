@@ -1389,6 +1389,49 @@ def events_page():
         st.write(str(selected.get("new_value", "") or "Yeni değer kaydedilmemiş"))
         st.write(str(selected.get("details", "") or "Ek açıklama yok"))
 
+    st.markdown("### Aynı cihazın yakın zamanlı olayları")
+    st.caption(
+        "Yalnızca aynı kararlı cihaz kimliğiyle kaydedilmiş olaylar ilişkilendirilir. "
+        "IP adresi tek başına cihaz kimliği olarak kullanılmaz; kimliksiz eski kayıtlar eşleştirilmez."
+    )
+    context_window = st.selectbox(
+        "Zaman bağlamı",
+        options=[5, 15, 30, 60],
+        index=1,
+        format_func=lambda value: f"±{value} dakika",
+        key="event_context_window",
+    )
+    from scripts.event_timeline import related_event_context
+    related = related_event_context(data, selected, context_window)
+    if related.empty:
+        st.info(
+            "Seçilen olay için aynı cihaz kimliğiyle kaydedilmiş yakın zamanlı başka olay bulunamadı "
+            "veya olayın güvenilir zaman/kimlik bilgisi yok."
+        )
+    else:
+        related_display = related[[
+            column for column in [
+                "event_time", "event_type", "source", "severity",
+                "ip", "old_value", "new_value", "details",
+            ] if column in related.columns
+        ]].rename(columns={
+            "event_time": "Zaman",
+            "event_type": "Olay",
+            "source": "Kaynak",
+            "severity": "Önem",
+            "ip": "IP",
+            "old_value": "Önceki değer",
+            "new_value": "Yeni değer",
+            "details": "Açıklama",
+        })
+        st.caption(f"Aynı kimlik için zaman penceresinde {len(related_display)} kayıt bulundu.")
+        st.dataframe(
+            related_display,
+            width="stretch",
+            hide_index=True,
+            height=min(360, 58 + 35 * min(len(related_display), 8)),
+        )
+
     st.download_button(
         "Filtrelenmiş olayları CSV indir",
         filtered.to_csv(index=False).encode("utf-8-sig"),
