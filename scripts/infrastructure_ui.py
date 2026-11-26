@@ -20,6 +20,7 @@ from scripts.discovery.evidence_timeline import (
     build_identity_evidence_timeline, build_inventory_identity_index,
     correlate_inventory_observation,
 )
+from scripts.discovery.dhcp_lease_analysis import analyze_dhcp_lease_windows
 
 
 DATA = Path(__file__).resolve().parent.parent / "data" / "processed"
@@ -610,6 +611,62 @@ def render():
                     "aynı hostname kullanan birden fazla cihazdan kaynaklanabilir. "
                     "Tek başına kimlik gizleme veya kötü niyet kanıtı değildir."
                 )
+
+        lease_rows = analyze_dhcp_lease_windows(
+            zeek_evidence.to_dict("records")
+        )
+        lease_frame = pd.DataFrame(lease_rows)
+        lease_windows = lease_frame[
+            lease_frame["lease_expiry_estimate"].astype(str).str.strip().ne("")
+        ].copy()
+        if not lease_windows.empty:
+            st.markdown("#### DHCP kira süresi ve IP yeniden kullanım analizi")
+            overlap_labels = {
+                "Çakışan kira adayı · ağ kapsamı doğrulandı",
+                "Olası çakışma · ağ kapsamı bilinmiyor",
+            }
+            overlap_count = int(lease_windows["lease_analysis"].isin(overlap_labels).sum())
+            reuse_count = int(
+                lease_windows["lease_analysis"].astype(str).str.contains(
+                    "sıralı yeniden kullanım", case=False, regex=False
+                ).sum()
+            )
+            lease_metrics = st.columns(3)
+            lease_metrics[0].metric("Hesaplanan kira penceresi", len(lease_windows))
+            lease_metrics[1].metric("Çakışma inceleme adayı", overlap_count)
+            lease_metrics[2].metric("Sıralı IP yeniden kullanımı", reuse_count)
+            lease_columns = {
+                "observed_at": "İlk DHCP mesajı",
+                "server_ip": "DHCP sunucusu",
+                "assigned_ip": "Atanan IP",
+                "mac": "İstemci MAC",
+                "lease_time_seconds": "Kira süresi (sn)",
+                "lease_start_estimate": "Tahmini kira başlangıcı",
+                "lease_expiry_estimate": "Tahmini kira bitişi",
+                "lease_timing_quality": "Zaman tahmini türü",
+                "lease_analysis": "Değerlendirme",
+                "lease_related_observation": "İlişkili farklı MAC",
+            }
+            st.dataframe(
+                lease_windows[
+                    [column for column in lease_columns if column in lease_windows.columns]
+                ].rename(columns=lease_columns),
+                width="stretch",
+                hide_index=True,
+                height=min(420, 58 + 35 * min(len(lease_windows), 10)),
+            )
+            st.caption(
+                "Zeek ts ilk DHCP mesajının zamanıdır; kira başlangıcı ts + "
+                "transaction duration ile tahmin edilir. Kira bitişi bu tahmine "
+                "lease_time eklenerek hesaplanır. Çakışma bir inceleme adayıdır; "
+                "DHCP sunucusunun gerçek kira tablosu veya fiziksel ağ segmenti "
+                "kanıtı değildir. Ağ kapsamı yoksa sonuç özellikle belirsiz işaretlenir."
+            )
+        else:
+            st.caption(
+                "Kira analizi için ACK, atanmış IP, geçerli lease_time ve zaman "
+                "damgası içeren Zeek kayıtları gerekir."
+            )
 
     identity_timeline = build_identity_evidence_timeline(
         inventory=inventory.to_dict("records") if not inventory.empty else [],

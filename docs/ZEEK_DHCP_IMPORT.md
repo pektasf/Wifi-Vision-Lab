@@ -55,3 +55,30 @@ seconds and milliseconds to UTC ISO-8601 values so timeline sorting and display
 use real timestamps; existing ISO-8601 strings are preserved. See the
 [Zeek JSON logging documentation](https://docs.zeek.org/en/current/scripts/base/frameworks/logging/writers/ascii.zeek.html)
 for the timestamp format setting.
+
+
+## DHCP lease window analysis
+
+The Network Infrastructure view estimates a lease start from the Zeek DHCP
+transaction's earliest timestamp plus its transaction duration, then adds
+the reported lease interval to estimate expiry. Zeek documents the timestamp
+as the earliest message and duration as the time from first to last message;
+these values are not a direct read of the DHCP server's current lease table.
+
+The analysis distinguishes:
+- **Overlapping lease candidate:** the same DHCP server and assigned IPv4
+  appear under different MAC addresses with overlapping estimated lease
+  windows and matching explicit network scope.
+- **Possible overlap, scope unknown:** the same server/address and different
+  MACs overlap, but at least one record lacks explicit network scope.
+- **Sequential reuse:** a previous different-MAC lease window ended before
+  the later lease began. This is consistent with normal address reuse.
+
+The analysis only considers transactions containing ACK, a valid assigned
+IPv4, a positive lease interval, and a usable timestamp. Missing transaction
+duration lowers timing precision and uses the first-message timestamp as the
+start estimate. Lease expiry is estimated, not proof that the client remained
+connected until expiry: early release, clock skew, packet loss, relay
+topology, and missing DHCP messages can change the real state. Different
+explicit network scopes are never compared. A DHCP server address alone is
+not treated as a network identifier.
