@@ -145,3 +145,21 @@ def test_summarize_event_severity_handles_empty_or_missing_column():
 
     assert summarize_event_severity(pd.DataFrame()) == {}
     assert summarize_event_severity(pd.DataFrame({"event_type": ["up"]})) == {}
+
+
+
+def test_network_timeline_uses_stable_identity_and_ip_transition_values():
+    result = normalize_event_frames({
+        "network_events.csv": pd.DataFrame([{
+            "timestamp": "2026-11-26T09:00:00+03:00",
+            "event": "IP_CHANGED",
+            "ip": "192.168.1.35",
+            "identity_key": "AA:BB:CC:DD:EE:FF",
+            "old_value": "192.168.1.20",
+            "new_value": "192.168.1.35",
+        }])
+    })
+
+    assert result.iloc[0]["subject"] == "AA:BB:CC:DD:EE:FF"
+    assert result.iloc[0]["old_value"] == "192.168.1.20"
+    assert result.iloc[0]["new_value"] == "192.168.1.35"
