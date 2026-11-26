@@ -1162,7 +1162,7 @@ def signal_page():
                 history["observed_at"], utc=True, errors="coerce"
             )
             history = history.sort_values(
-                "_parsed_time", ascending=True, na_position="last"
+                "_parsed_time", ascending=True, na_position="first"
             )
         history = history.dropna(subset=["signal_percent"])
         if history.empty:
