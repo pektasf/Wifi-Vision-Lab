@@ -376,3 +376,49 @@ def test_topology_render_profile_handles_missing_and_negative_counts():
         "node_count": 0,
         "edge_count": 0,
     }
+
+
+def test_dhcp_server_configuration_adds_context_edge_not_physical_link():
+    inventory = pd.DataFrame([{
+        "timestamp": "2026-11-26T10:00:00+03:00",
+        "ip": "192.168.137.20", "mac": "AA:BB:CC:DD:EE:20",
+        "hostname": "phone", "status": "responding",
+        "subnet": "192.168.137.0/24",
+    }])
+    network_context = pd.DataFrame([{
+        "captured_at": "2026-11-26T10:00:00+03:00",
+        "network_cidr": "192.168.137.0/24",
+        "dhcp_enabled": "enabled",
+        "dhcp_server": "192.168.137.1",
+    }])
+
+    nodes, edges = build_topology(inventory, network_context=network_context)
+    dhcp_edges = [edge for edge in edges if edge["relation"] == "configured_dhcp_server"]
+    server = next(node for node in nodes if node["id"] == "192.168.137.1")
+
+    assert len(dhcp_edges) == 1
+    assert dhcp_edges[0]["confidence"] == "context_only"
+    assert dhcp_edges[0]["evidence_type"] == "dhcp_configuration"
+    assert dhcp_edges[0]["source"] == "NETWORK:192.168.137.0/24"
+    assert server["node_type"] == "dhcp_server_address"
+    assert not any(edge["relation"] in {"connected_to", "physical_link"} for edge in edges)
+
+
+def test_dhcp_server_is_not_added_when_dhcp_is_disabled_or_address_invalid():
+    inventory = pd.DataFrame([{
+        "ip": "192.168.137.20", "mac": "AA:BB:CC:DD:EE:20",
+        "subnet": "192.168.137.0/24",
+    }])
+    disabled = pd.DataFrame([{
+        "network_cidr": "192.168.137.0/24", "dhcp_enabled": "disabled",
+        "dhcp_server": "192.168.137.1",
+    }])
+    invalid = pd.DataFrame([{
+        "network_cidr": "192.168.137.0/24", "dhcp_enabled": "enabled",
+        "dhcp_server": "not-an-ip",
+    }])
+
+    for context in (disabled, invalid):
+        nodes, edges = build_topology(inventory, network_context=context)
+        assert not any(node["node_type"] == "dhcp_server_address" for node in nodes)
+        assert not any(edge["relation"] == "configured_dhcp_server" for edge in edges)
