@@ -219,3 +219,91 @@ def test_device_profile_aggregates_distinct_evidence_types():
     assert profiles[0]["evidence_types"] == (
         "arp_cache_entry;icmp_echo_reply"
     )
+
+
+
+def test_locally_administered_mac_is_reported_as_indicator_not_confirmed_spoofing():
+    from scripts.discovery.identity_signals import (
+        analyze_identity_variation, is_locally_administered_mac,
+    )
+    assert is_locally_administered_mac("02:11:22:33:44:55")
+    assert not is_locally_administered_mac("00:11:22:33:44:55")
+    result = analyze_identity_variation([{
+        "network_id": "192.168.1.0/24",
+        "ip": "192.168.1.22",
+        "mac": "02:11:22:33:44:55",
+    }])
+    item = result["192.168.1.0/24|mac|02:11:22:33:44:55"]
+    assert item["identity_assessment"] == "indicator"
+    assert item["identity_signals"] == "locally_administered_mac"
+
+
+def test_mac_rotation_for_same_ip_is_flagged_for_review():
+    from scripts.discovery.identity_signals import analyze_identity_variation
+    history = [{
+        "network_id": "192.168.1.0/24", "ip": "192.168.1.30",
+        "mac": "00:11:22:33:44:55", "hostname": "phone-a",
+    }]
+    current = [{
+        "network_id": "192.168.1.0/24", "ip": "192.168.1.30",
+        "mac": "02:AA:BB:CC:DD:EE", "hostname": "phone-a",
+    }]
+    result = analyze_identity_variation(current, history)
+    item = result["192.168.1.0/24|mac|02:AA:BB:CC:DD:EE"]
+    assert item["identity_assessment"] == "review"
+    assert "ip_mac_changed_over_time" in item["identity_signals"]
+    assert "hostname_seen_with_multiple_macs" in item["identity_signals"]
+
+
+def test_multiple_macs_claiming_same_ip_in_one_scan_are_flagged():
+    from scripts.discovery.identity_signals import analyze_identity_variation
+    rows = [
+        {"network_id": "192.168.1.0/24", "ip": "192.168.1.40", "mac": "00:11:22:33:44:55"},
+        {"network_id": "192.168.1.0/24", "ip": "192.168.1.40", "mac": "00:11:22:33:44:66"},
+    ]
+    result = analyze_identity_variation(rows)
+    assert all(value["identity_assessment"] == "review" for value in result.values())
+    assert all("same_ip_multiple_macs" in value["identity_signals"] for value in result.values())
+
+
+def test_missing_mac_is_reported_without_inventing_identity():
+    from scripts.discovery.identity_signals import analyze_identity_variation
+    result = analyze_identity_variation([{
+        "network_id": "192.168.1.0/24", "ip": "192.168.1.50", "mac": "",
+    }])
+    item = result["192.168.1.0/24|ip|192.168.1.50"]
+    assert item["identity_assessment"] == "indicator"
+    assert item["identity_signals"] == "mac_not_observed"
+
+
+def test_profile_and_inventory_include_identity_signals():
+    observations = [{
+        "network_id": "192.168.1.0/24", "ip": "192.168.1.60",
+        "mac": "02:11:22:33:44:55", "source": "arp",
+        "observed_at": "2026-11-26T10:00:00+03:00",
+    }]
+    profiles = build_device_profiles(observations)
+    inventory = build_inventory_rows(observations, profiles)
+    assert profiles[0]["identity_assessment"] == "indicator"
+    assert "locally_administered_mac" in profiles[0]["identity_signals"]
+    assert inventory[0]["identity_assessment"] == "indicator"
+
+
+
+def test_identity_history_is_bounded_and_deduplicated(tmp_path):
+    from scripts.discovery.identity_signals import (
+        load_identity_history, save_identity_history,
+    )
+    path = tmp_path / "identity_history.csv"
+    rows = [{
+        "observed_at": "2026-11-26T10:00:00+03:00",
+        "network_id": "192.168.1.0/24",
+        "ip": "192.168.1.20",
+        "mac": "02:11:22:33:44:55",
+        "hostname": "phone",
+        "source": "windows_arp_cache",
+    }]
+    saved = save_identity_history(rows, history=[], path=path)
+    saved = save_identity_history(rows, history=saved, path=path)
+    assert len(saved) == 1
+    assert load_identity_history(path) == saved
