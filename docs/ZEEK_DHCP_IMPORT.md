@@ -114,3 +114,10 @@ the capture scope is unknown. The application does not derive a subnet from
 the DHCP server address, client address, or relay identifiers. A wrong
 operator-supplied CIDR can create misleading comparisons, so the field should
 only be set when the capture's scope is known independently.
+
+
+Records whose assigned (or fallback client/requested) IPv4 address falls
+outside the supplied CIDR are retained but have their network scope cleared
+and receive a network-scope mismatch evidence marker. They are not used for
+same-network lease correlation. The UI reports how many records were excluded
+from scope-based matching.
