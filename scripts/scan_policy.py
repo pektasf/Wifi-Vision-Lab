@@ -77,7 +77,9 @@ def build_scan_targets(
             active_network_cidr or network_cidr, strict=True
         )
         local = ipaddress.ip_address(local_ip)
-        gateway = (\n            ipaddress.ip_address(gateway_ip) if str(gateway_ip or "").strip() else None\n        )
+        gateway = (
+            ipaddress.ip_address(gateway_ip) if str(gateway_ip or "").strip() else None
+        )
     except ValueError as exc:
         raise ValueError(
             "A valid IPv4 target CIDR, active network, local IP and gateway are required."
