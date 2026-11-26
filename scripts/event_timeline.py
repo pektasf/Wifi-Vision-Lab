@@ -1,6 +1,9 @@
 """Normalize local network observations into one searchable event timeline."""
 from __future__ import annotations
 
+import hashlib
+import json
+
 import pandas as pd
 
 EVENT_SOURCES = {
