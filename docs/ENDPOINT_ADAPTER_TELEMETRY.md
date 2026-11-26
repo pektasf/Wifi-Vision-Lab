@@ -25,3 +25,13 @@ exact MAC address; if no MAC match exists, it can fall back to an exact IPv4
 address. The UI records which matching method was used. An IP-only match is
 weaker because DHCP reuse is possible, and must not be treated as proof of
 persistent device identity.
+
+
+## Inventory correlation scope
+
+Endpoint adapter evidence can be attached to an inventory row by exact MAC
+when the records do not declare conflicting network scopes. IP-only fallback
+requires the endpoint report and inventory row to carry the same explicit
+network scope. If scope is absent or differs, the importer keeps the endpoint
+evidence separate instead of assuming that a reused private IPv4 address
+identifies the same device.

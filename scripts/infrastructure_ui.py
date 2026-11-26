@@ -16,7 +16,10 @@ from scripts.discovery.nmap_import import (
 from scripts.discovery.zeek_import import (
     ZEEK_DHCP_FIELDS, normalize_zeek_dhcp_export, MAX_ZEEK_BYTES,
 )
-from scripts.discovery.evidence_timeline import build_identity_evidence_timeline
+from scripts.discovery.evidence_timeline import (
+    build_identity_evidence_timeline, build_inventory_identity_index,
+    correlate_inventory_observation,
+)
 
 
 DATA = Path(__file__).resolve().parent.parent / "data" / "processed"
@@ -93,6 +96,9 @@ def build_network_context_summary(frame):
 
 def render():
     inventory = read_data("device_inventory.csv")
+    inventory_index = build_inventory_identity_index(
+        inventory.to_dict("records") if not inventory.empty else []
+    )
     nodes = read_data("topology_nodes.csv")
     classification = read_data("device_classification.csv")
     wifi = read_data("wifi_connection.csv")
@@ -242,25 +248,22 @@ def render():
 
     endpoint_evidence = read_data("endpoint_adapter_evidence.csv")
     if not endpoint_evidence.empty:
-        inventory_macs = set(
-            inventory.get("mac", pd.Series(dtype=str)).astype(str).str.upper()
-        ) if not inventory.empty else set()
-        inventory_ips = set(
-            inventory.get("ip", pd.Series(dtype=str)).astype(str)
-        ) if not inventory.empty else set()
+        def endpoint_inventory_match(row):
+            method, _ = correlate_inventory_observation(
+                row, inventory_index,
+                mac_value=row.get("endpoint_mac", ""),
+                ip_value=row.get("endpoint_ip", ""),
+            )
+            return {
+                "exact_mac": "MAC birebir",
+                "exact_ip": "IP birebir · ağ kapsamı doğrulandı",
+                "ip_scope_unknown": "IP eşleşmesi belirsiz · ağ kapsamı yok",
+                "network_mismatch": "Farklı ağ kapsamı",
+                "unmatched": "Eşleşme yok",
+            }.get(method, "Bilinmiyor")
+
         endpoint_evidence["inventory_match"] = endpoint_evidence.apply(
-            lambda row: (
-                "Eşleşti"
-                if (
-                    str(row.get("endpoint_mac", "")).upper() in inventory_macs
-                    and str(row.get("endpoint_mac", "")).strip()
-                ) or (
-                    str(row.get("endpoint_ip", "")) in inventory_ips
-                    and str(row.get("endpoint_ip", "")).strip()
-                )
-                else "Eşleşme yok"
-            ),
-            axis=1,
+            endpoint_inventory_match, axis=1
         )
         remote_virtual_count = int(
             endpoint_evidence["adapter_kind"].eq("virtual_wlan").sum()
@@ -274,8 +277,9 @@ def render():
         )
         st.caption(
             "Endpoint kayıtları endpoint_reported kanıtıdır; kriptografik olarak "
-            "doğrulanmış cihaz kimliği sayılmaz. Eşleşme, yalnızca IP veya MAC "
-            "gözlemiyle ilişki kurar; gerçek kişi kimliğini belirlemez."
+            "doğrulanmış cihaz kimliği sayılmaz. IP eşleşmesi yalnızca iki tarafta "
+            "aynı açık ağ kapsamı varsa yapılır; kapsam yoksa IP eşleşmesi varsayılmaz. "
+            "Bu kayıtlar gerçek kişi kimliğini belirlemez."
         )
 
     st.markdown("### Kismet kablosuz gözlem içe aktarımı")
@@ -546,27 +550,20 @@ def render():
         zeek_metrics[2].metric("Farklı MAC", distinct_mac_count)
         zeek_metrics[3].metric("Yerel yönetimli MAC", local_mac_count)
 
-        inventory_macs = set(
-            inventory.get("mac", pd.Series(dtype=str)).astype(str)
-            .str.upper().str.replace("-", ":", regex=False)
-        ) if not inventory.empty else set()
-        inventory_ips = set(
-            inventory.get("ip", pd.Series(dtype=str)).astype(str)
-        ) if not inventory.empty else set()
         zeek_evidence["inventory_match"] = zeek_evidence.apply(
-            lambda row: (
-                "Eşleşti"
-                if (
-                    str(row.get("mac", "")).upper() in inventory_macs
-                    and str(row.get("mac", "")).strip()
-                ) or (
-                    str(row.get("assigned_ip", "")) in inventory_ips
-                    and str(row.get("assigned_ip", "")).strip()
-                ) or (
-                    str(row.get("client_ip", "")) in inventory_ips
-                    and str(row.get("client_ip", "")).strip()
-                )
-                else "Eşleşme yok"
+            lambda row: {
+                "exact_mac": "MAC birebir",
+                "exact_ip": "IP birebir · ağ kapsamı doğrulandı",
+                "ip_scope_unknown": "IP eşleşmesi belirsiz · ağ kapsamı yok",
+                "network_mismatch": "Farklı ağ kapsamı",
+                "unmatched": "Eşleşme yok",
+            }.get(
+                correlate_inventory_observation(
+                    row, inventory_index,
+                    mac_value=row.get("mac", ""),
+                    ip_value=row.get("assigned_ip") or row.get("client_ip", ""),
+                )[0],
+                "Bilinmiyor",
             ),
             axis=1,
         )

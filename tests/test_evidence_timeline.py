@@ -1,4 +1,7 @@
-from scripts.discovery.evidence_timeline import build_identity_evidence_timeline
+from scripts.discovery.evidence_timeline import (
+    build_identity_evidence_timeline, build_inventory_identity_index,
+    correlate_inventory_observation,
+)
 
 
 def test_timeline_prefers_exact_mac_over_conflicting_ip_match():
@@ -211,3 +214,43 @@ def test_timeline_sorts_timestamps_by_instant_not_timezone_string():
     )
     assert rows[0]["ip"] == "192.168.1.11"
     assert rows[1]["ip"] == "192.168.1.10"
+
+
+
+def test_shared_inventory_matcher_rejects_ip_only_match_without_scope():
+    index = build_inventory_identity_index([{
+        "ip": "192.168.1.10", "mac": "00:11:22:33:44:55",
+        "subnet": "192.168.1.0/24",
+    }])
+    method, matches = correlate_inventory_observation(
+        {"assigned_ip": "192.168.1.10"}, index,
+        mac_value="", ip_value="192.168.1.10",
+    )
+    assert method == "ip_scope_unknown"
+    assert matches == []
+
+
+def test_shared_inventory_matcher_allows_exact_mac_without_network_scope():
+    index = build_inventory_identity_index([{
+        "ip": "192.168.1.10", "mac": "00:11:22:33:44:55",
+        "subnet": "192.168.1.0/24",
+    }])
+    method, matches = correlate_inventory_observation(
+        {"endpoint_ip": "192.168.1.10"}, index,
+        mac_value="00:11:22:33:44:55", ip_value="192.168.1.10",
+    )
+    assert method == "exact_mac"
+    assert len(matches) == 1
+
+
+def test_shared_inventory_matcher_uses_ip_only_with_equal_explicit_scope():
+    index = build_inventory_identity_index([{
+        "ip": "192.168.1.10", "mac": "00:11:22:33:44:55",
+        "subnet": "192.168.1.0/24",
+    }])
+    method, matches = correlate_inventory_observation(
+        {"network_id": "192.168.1.0/24"}, index,
+        mac_value="", ip_value="192.168.1.10",
+    )
+    assert method == "exact_ip"
+    assert len(matches) == 1

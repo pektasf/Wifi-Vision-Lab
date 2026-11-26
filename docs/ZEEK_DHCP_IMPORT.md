@@ -37,3 +37,11 @@ they are not inferred.
   \`data/processed/zeek_dhcp_observations.csv\`.
 - No Zeek process is installed, configured, or started by WiFi Vision Lab.
 - A locally administered MAC is not proof of spoofing or a malicious device.
+
+
+## Inventory matching safeguard
+
+A Zeek DHCP record's server address is not a subnet identifier. Therefore,
+the import view does not claim an IP-only inventory match unless both records
+carry the same explicit network scope. An exact MAC observation may still be
+shown as a MAC correlation, but it is not proof of a physical device or person.
