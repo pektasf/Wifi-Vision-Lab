@@ -7,7 +7,7 @@ from scripts.storage import (
     MIGRATIONS,
     add_event, add_observation, backup_database, connect, import_legacy_csvs,
     initialize_database, read_dataset, restore_database, upsert_device,
-    write_dataset_snapshot, MIGRATIONS,
+    write_dataset_snapshot,
 )
 
 
