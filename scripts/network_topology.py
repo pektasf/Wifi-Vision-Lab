@@ -350,6 +350,40 @@ def build_topology(inventory, profiles=None, intelligence=None,
                 "details": "BSSID from the latest recorded WLAN association; this identifies a radio interface, not necessarily the whole AP device.",
             }
 
+        # A physical AP grouping is allowed only when a source explicitly
+        # supplies its base/device MAC and marks that identity as verified.
+        # SSID, vendor OUI, and BSSID similarity are never sufficient.
+        ap_device_mac = _valid_mac(row.get("ap_device_mac", ""))
+        has_verified_device_identity = (
+            str(row.get("device_identity_verification", "")).strip().lower() == "verified"
+            and str(row.get("device_identity_evidence", "")).strip().lower() == "direct_ap_device_identity"
+        )
+        if ap_device_mac and has_verified_device_identity:
+            device_id = f"AP_DEVICE:{ap_device_mac}"
+            if device_id not in nodes_by_id:
+                nodes_by_id[device_id] = {
+                    "id": device_id,
+                    "label": "Verified physical access point",
+                    "node_type": "access_point_device",
+                    "ip": "", "mac": ap_device_mac, "vendor": "",
+                    "status": "device_identity_verified",
+                    "classification": "Physical AP identity from direct evidence",
+                    "evidence_type": "direct_ap_device_identity",
+                    "evidence_source": str(row.get("device_identity_source", "") or row.get("source", "") or "unspecified"),
+                    "confidence": "verified",
+                    "details": "Physical AP identity is explicitly supplied and verified; associated BSSIDs are radio interfaces."
+                }
+            edges.append({
+                "source": device_id,
+                "target": ap_id,
+                "relation": "radio_of",
+                "confidence": "verified",
+                "evidence_type": "direct_ap_device_identity",
+                "evidence_source": str(row.get("device_identity_source", "") or row.get("source", "") or "unspecified"),
+                "observed_at": str(row.get("observed_at", "")),
+                "details": "BSSID radio grouped under a physical AP only by explicit verified device identity."
+            })
+
         edges.append({
             "source": ap_id,
             "target": client_id,
