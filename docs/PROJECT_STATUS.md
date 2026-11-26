@@ -27,3 +27,6 @@ Laptop-only Spatial Intelligence work has started.
 - Capability reporting distinguishes backend implementation from per-device results. Windows and Linux have driver/tool-dependent RSSI backends; macOS is explicitly marked not implemented.
 
 Roadmap: see SPATIAL_INTELLIGENCE.md.
+
+
+- SI-2.2 adds time-ordered holdout validation alongside leave-one-out; later samples are evaluated only against earlier reference samples, with a minimum of three samples per zone.
