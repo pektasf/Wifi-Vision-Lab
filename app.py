@@ -307,7 +307,6 @@ def dashboard_page():
     from scripts.event_timeline import normalize_event_frames
 
     inventory = load("device_inventory.csv")
-    profiles = load("device_profiles.csv")
     findings = load("behavior_findings.csv")
     profiles = load("device_profiles.csv")
     event_frames = {
@@ -1013,6 +1012,7 @@ def behavior_page():
         "Mevcut envanterdeki adres eşleşmelerini ve inceleme gerektiren tutarsızlıkları kanıtlarıyla gözden geçir.",
     )
     inventory = load("device_inventory.csv")
+    profiles = load("device_profiles.csv")
     findings = load("behavior_findings.csv")
 
     action_col, note_col = st.columns([1, 2.2])
