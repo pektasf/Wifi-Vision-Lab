@@ -302,6 +302,7 @@ def dashboard_page():
         inventory_status_summary,
         latest_observation_timestamp,
         select_attention_events,
+        summarize_observation_posture,
     )
     from scripts.event_timeline import normalize_event_frames
 
@@ -318,6 +319,7 @@ def dashboard_page():
     }
     timeline = normalize_event_frames(event_frames)
     summary = inventory_status_summary(inventory)
+    posture = summarize_observation_posture(inventory, timeline)
     latest = latest_observation_timestamp(inventory, timeline)
 
     page_header(
@@ -372,10 +374,20 @@ def dashboard_page():
 
     st.markdown("### Ağın mevcut görünümü")
     metrics = st.columns(4)
-    metrics[0].metric("Bilinen cihaz", f"{summary['total']:,}")
-    metrics[1].metric("Yanıt veren", f"{summary['responding']:,}")
-    metrics[2].metric("Olay kaydı", f"{len(timeline):,}")
-    metrics[3].metric("Davranış bulgusu", f"{len(findings):,}")
+    metrics[0].metric("Envanter cihazı", f"{posture['devices']:,}")
+    metrics[1].metric("Yanıt veren", f"{posture['responding']:,}")
+    metrics[2].metric("İnceleme sinyali", f"{posture['attention']:,}")
+    metrics[3].metric("Durumu bilinmiyor", f"{posture['unknown']:,}")
+    st.caption(
+        f"{posture['events']:,} olay kaydı · "
+        f"{posture['critical']:,} kritik · {posture['warning']:,} uyarı · "
+        f"{posture['review']:,} inceleme"
+    )
+    if posture["attention"]:
+        st.info(
+            "İnceleme sinyalleri kayıtlı gözlemlere dayanır; tek başına saldırı veya "
+            "cihaz ihlali kanıtı değildir."
+        )
 
     chart_col, attention_col = st.columns([1.05, 1.15], gap="large")
     with chart_col:
@@ -2549,9 +2561,18 @@ PAGES = [
 ]
 
 NAV_ICONS = {
-    PAGES[0]: "⌂", PAGES[1]: "▦", PAGES[2]: "◷", PAGES[3]: "◉",
-    PAGES[4]: "≋", PAGES[5]: "⌁", PAGES[6]: "⌘", PAGES[7]: "◌",
-    PAGES[8]: "◈", PAGES[9]: "⌖", PAGES[10]: "▤", PAGES[11]: "↗",
+    PAGES[0]: "dashboard",
+    PAGES[1]: "devices",
+    PAGES[2]: "history",
+    PAGES[3]: "manage_search",
+    PAGES[4]: "timeline",
+    PAGES[5]: "troubleshoot",
+    PAGES[6]: "hub",
+    PAGES[7]: "monitor_heart",
+    PAGES[8]: "wifi",
+    PAGES[9]: "location_on",
+    PAGES[10]: "router",
+    PAGES[11]: "description",
 }
 
 NAV_GROUPS = [
@@ -2592,9 +2613,10 @@ with st.sidebar:
         for item_index, item in enumerate(items):
             active = st.session_state.active_page == item
             if st.button(
-                f"{NAV_ICONS[item]}  {item}",
+                item,
                 key=f"fixed_nav_{group_index}_{item_index}",
                 type="primary" if active else "secondary",
+                icon=f":material/{NAV_ICONS[item]}:",
                 width="stretch"
             ):
                 st.session_state.active_page = item
