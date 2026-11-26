@@ -238,3 +238,55 @@ def test_filter_event_timeline_handles_missing_columns_and_empty_input():
     assert filter_event_timeline(frame, source="Ağ olayları").empty
     assert filter_event_timeline(pd.DataFrame()).empty
     assert filter_event_timeline(None).empty
+
+
+def test_related_event_context_correlates_same_stable_identity_across_ip_changes():
+    from scripts.event_timeline import related_event_context
+
+    frame = pd.DataFrame([
+        {"event_time": "2026-11-26T09:00:00Z", "identity_key": "AA:01",
+         "event_type": "ip_changed", "ip": "192.0.2.2"},
+        {"event_time": "2026-11-26T08:52:00Z", "identity_key": "AA:01",
+         "event_type": "ping_not_responding", "ip": "192.0.2.1"},
+        {"event_time": "2026-11-26T08:40:00Z", "identity_key": "AA:01",
+         "event_type": "seen_again", "ip": "192.0.2.2"},
+        {"event_time": "2026-11-26T08:58:00Z", "identity_key": "AA:02",
+         "event_type": "new_device", "ip": "192.0.2.8"},
+    ])
+    result = related_event_context(frame, frame.iloc[0], window_minutes=10)
+    assert result["event_type"].tolist() == ["ip_changed", "ping_not_responding"]
+    assert result["identity_key"].unique().tolist() == ["AA:01"]
+
+
+def test_related_event_context_handles_invalid_times_and_missing_identity():
+    from scripts.event_timeline import related_event_context
+
+    frame = pd.DataFrame([
+        {"event_time": "bad", "identity_key": "AA:01", "event_type": "bad_time"},
+        {"event_time": "2026-11-26T09:00:00Z", "identity_key": "", "event_type": "legacy"},
+    ])
+    assert related_event_context(frame, frame.iloc[0]).empty
+    assert related_event_context(frame, pd.Series({
+        "event_time": "2026-11-26T09:00:00Z", "identity_key": ""
+    })).empty
+
+
+def test_related_event_context_returns_empty_when_required_fields_are_missing():
+    from scripts.event_timeline import related_event_context
+
+    frame = pd.DataFrame([{"event_time": "2026-11-26T09:00:00Z"}])
+    selected = pd.Series({"event_time": "2026-11-26T09:00:00Z", "identity_key": "AA:01"})
+    assert related_event_context(frame, selected).empty
+
+
+def test_related_event_context_rejects_negative_or_invalid_window():
+    import pytest
+    from scripts.event_timeline import related_event_context
+
+    frame = pd.DataFrame([{
+        "event_time": "2026-11-26T09:00:00Z", "identity_key": "AA:01"
+    }])
+    with pytest.raises(ValueError):
+        related_event_context(frame, frame.iloc[0], window_minutes=-1)
+    with pytest.raises(ValueError):
+        related_event_context(frame, frame.iloc[0], window_minutes="invalid")
