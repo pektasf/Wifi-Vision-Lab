@@ -522,3 +522,32 @@ def test_filter_event_review_assignment_supports_all_empty_missing_and_invalid_v
         pd.DataFrame([{"event_type": "legacy"}]), priority="high"
     ).empty
     assert filter_event_review_assignment(None).empty
+
+
+def test_format_event_review_changes_localizes_known_fields_and_values():
+    import json
+    from scripts.event_timeline import format_event_review_changes
+
+    changes = {
+        "status": {"from": "new", "to": "action_required"},
+        "priority": {"from": "normal", "to": "high"},
+        "assignee": {"from": "", "to": "Ağ ekibi"},
+    }
+    result = format_event_review_changes(json.dumps(changes, ensure_ascii=False))
+    assert result == (
+        "Durum: Yeni → İşlem gerekli · "
+        "Öncelik: Normal → Yüksek · Sorumlu: — → Ağ ekibi"
+    )
+
+
+def test_format_event_review_changes_handles_empty_malformed_and_unknown_fields():
+    import json
+    from scripts.event_timeline import format_event_review_changes
+
+    assert format_event_review_changes("") == ""
+    assert format_event_review_changes(None) == ""
+    assert format_event_review_changes("{not-json") == "{not-json"
+    unknown = {"custom_field": {"from": "before", "to": "after"}}
+    assert format_event_review_changes(json.dumps(unknown)) == "Custom Field: before → after"
+    malformed_shape = {"status": "not-a-transition"}
+    assert format_event_review_changes(json.dumps(malformed_shape)) == json.dumps(malformed_shape)

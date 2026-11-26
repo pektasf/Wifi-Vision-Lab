@@ -366,6 +366,50 @@ def filter_event_review_history(
     return result.reset_index(drop=True)
 
 
+
+def format_event_review_changes(value: object) -> str:
+    """Render stored audit JSON as concise, readable Turkish change summaries."""
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return ""
+    raw = str(value).strip()
+    if not raw:
+        return ""
+    try:
+        changes = json.loads(raw)
+    except (TypeError, ValueError):
+        return raw
+    if not isinstance(changes, dict):
+        return raw
+
+    field_labels = {
+        "status": "Durum", "priority": "Öncelik",
+        "assignee": "Sorumlu", "note": "Not",
+    }
+    status_labels = {
+        "new": "Yeni", "reviewed": "İncelendi",
+        "action_required": "İşlem gerekli", "resolved": "Çözüldü",
+    }
+    priority_labels = {
+        "low": "Düşük", "normal": "Normal",
+        "high": "Yüksek", "critical": "Kritik",
+    }
+    summaries = []
+    for field, transition in changes.items():
+        if not isinstance(transition, dict) or not {"from", "to"}.issubset(transition):
+            continue
+        old_value = str(transition.get("from", "") or "").strip()
+        new_value = str(transition.get("to", "") or "").strip()
+        if field == "status":
+            old_value = status_labels.get(old_value, old_value)
+            new_value = status_labels.get(new_value, new_value)
+        elif field == "priority":
+            old_value = priority_labels.get(old_value, old_value)
+            new_value = priority_labels.get(new_value, new_value)
+        label = field_labels.get(str(field), str(field).replace("_", " ").title())
+        summaries.append(f"{label}: {old_value or '—'} → {new_value or '—'}")
+    return " · ".join(summaries) if summaries else raw
+
+
 def filter_event_review_assignment(
     frame: pd.DataFrame,
     *,
